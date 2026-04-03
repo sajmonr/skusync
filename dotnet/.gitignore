@@ -1,0 +1,53 @@
+*.swp
+*.*~
+project.lock.json
+.DS_Store
+*.pyc
+
+# Visual Studio Code
+.vscode
+
+# User-specific files
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+logs/
+x64/
+x86/
+build/
+publish/
+bld/
+[Bb]in/
+[Oo]bj/
+msbuild.log
+msbuild.err
+msbuild.wrn
+.config
+build_output/
+
+# dotCover coverage output
+**/dotCover.Output.html
+dotCover.Output/
+
+# Visual Studio
+.vs/
+
+# Local-only settings for source files
+# Keeps settings for tests
+src/**/appsettings.json
+src/**/appsettings.example.json
+src/**/appsettings.local.json
+**/NLog/nlog.local.config
+
+# Junie AI files
+**/.output.txt
+**/.junie/**
+!**/.junie/guidelines.md
+.ai

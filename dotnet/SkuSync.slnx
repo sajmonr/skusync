@@ -1,0 +1,8 @@
+<Solution>
+  <Project Path="src/Application/Application.csproj" />
+  <Project Path="src/Infrastructure/Infrastructure.csproj" />
+  <Project Path="src/Integration/Integration.csproj" />
+  <Project Path="src/Web.Api/Web.Api.csproj" />
+  <Project Path="src\SharedKernel\SharedKernel.csproj" />
+  <Project Path="test/ArchitectureTests/ArchitectureTests.csproj" />
+</Solution>
