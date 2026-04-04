@@ -5,4 +5,5 @@
   <Project Path="src/Web.Api/Web.Api.csproj" />
   <Project Path="src\SharedKernel\SharedKernel.csproj" />
   <Project Path="test/ArchitectureTests/ArchitectureTests.csproj" />
+  <Project Path="test/Tests.Integration/Tests.Integration.csproj" />
 </Solution>

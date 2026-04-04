@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace Integration.Shopify.Options;
+namespace Integration.Shopify.GraphQl;
 
 /// <summary>
 /// Represents configuration options required to connect to a Shopify store.

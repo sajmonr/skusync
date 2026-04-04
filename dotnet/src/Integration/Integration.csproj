@@ -8,6 +8,8 @@
 
     <ItemGroup>
         <PackageReference Include="Microsoft.Extensions.Http" />
+        <PackageReference Include="ShopifySharp" />
+        <PackageReference Include="ShopifySharp.Extensions.DependencyInjection" />
     </ItemGroup>
 
     <ItemGroup>

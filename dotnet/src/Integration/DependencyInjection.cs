@@ -1,9 +1,11 @@
-﻿using Integration.Shopify.Options;
+﻿using Integration.Shopify.GraphQl;
+using Integration.Shopify.Products;
 using Integration.Skulabs.Items;
 using Integration.Skulabs.Options;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using SharedKernel.Options;
+using ShopifySharp.Extensions.DependencyInjection;
 
 namespace Integration;
 
@@ -21,6 +23,10 @@ public static class DependencyInjection
             
             // Shopify
             builder.AddOptionsFromConfiguration<ShopifyOptions>(ShopifyOptions.SectionKey);
+            builder.Services.AddTransient<IShopifyGraphQlService, ShopifyGraphQlService>();
+            builder.Services.AddTransient<IShopifyProductService, ShopifyProductService>();
+            
+            builder.Services.AddShopifySharpServiceFactories();
             
             return builder;
         }
