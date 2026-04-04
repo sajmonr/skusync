@@ -20,5 +20,13 @@ public class ShopifyProductVariantConfiguration : IEntityTypeConfiguration<Shopi
 
         builder.Property(x => x.ProductId).IsRequired();
         builder.Property(x => x.VariantId).IsRequired();
+
+        builder.Property(x => x.CreatedOnUtc)
+            .IsRequired()
+            .HasDefaultValueDateTimeNowUtcSql();
+        
+        builder.Property(x => x.UpdatedOnUtc)
+            .IsRequired()
+            .HasDefaultValueDateTimeNowUtcSql();
     }
 }

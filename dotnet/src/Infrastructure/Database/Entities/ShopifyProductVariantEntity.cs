@@ -19,4 +19,8 @@ public class ShopifyProductVariantEntity
     
     public string Barcode { get; set; } = "";
 
+    public DateTime CreatedOnUtc { get; set; } = DateTime.UtcNow;
+
+    public DateTime UpdatedOnUtc { get; set; } = DateTime.UtcNow;
+    
 }
