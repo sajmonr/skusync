@@ -3,6 +3,8 @@ namespace Infrastructure.Database.Entities;
 public class ShopifyProductVariantEntity
 {
 
+    private string _fullTitle = "";
+    
     public Guid ShopifyProductVariantId { get; set; }
 
     public string GlobalProductId { get; set; } = "";
@@ -13,8 +15,32 @@ public class ShopifyProductVariantEntity
 
     public long VariantId { get; set; }
 
-    public string Title { get; set; } = "";
-    
+    public string ProductTitle
+    {
+        get;
+        set
+        {
+            field = value;
+            GenerateFullTitle();
+        }
+    } = "";
+
+    public string VariantTitle
+    {
+        get;
+        set
+        {
+            field = value;
+            GenerateFullTitle();
+        }
+    } = "";
+
+    public string FullTitle
+    {
+        get => _fullTitle;
+        init => _fullTitle = value;
+    }
+
     public string Sku { get; set; } = "";
     
     public string Barcode { get; set; } = "";
@@ -22,5 +48,10 @@ public class ShopifyProductVariantEntity
     public DateTime CreatedOnUtc { get; set; } = DateTime.UtcNow;
 
     public DateTime UpdatedOnUtc { get; set; } = DateTime.UtcNow;
+ 
+    private void GenerateFullTitle()
+    {
+        _fullTitle = string.IsNullOrWhiteSpace(VariantTitle) ? ProductTitle : $"{ProductTitle} ({VariantTitle})";
+    }
     
 }

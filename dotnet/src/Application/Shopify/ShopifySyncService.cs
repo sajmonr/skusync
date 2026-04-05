@@ -61,7 +61,8 @@ public class ShopifySyncService(
                     ProductId = shopifyVariant.ProductId,
                     GlobalVariantId = shopifyVariant.GlobalVariantId,
                     VariantId = shopifyVariant.VariantId,
-                    Title = shopifyVariant.Title,
+                    ProductTitle = shopifyVariant.ProductTitle,
+                    VariantTitle = shopifyVariant.VariantTitle,
                     Sku = shopifyVariant.Sku,
                     Barcode = shopifyVariant.Barcode
                 };
@@ -81,9 +82,27 @@ public class ShopifySyncService(
     {
         var changed = false;
 
-        if (existing.Title != shopifyVariant.Title)
+        if (existing.ProductTitle != shopifyVariant.ProductTitle)
         {
-            existing.Title = shopifyVariant.Title;
+            existing.ProductTitle = shopifyVariant.ProductTitle;
+            changed = true;
+        }
+
+        if (existing.VariantTitle != shopifyVariant.VariantTitle)
+        {
+            existing.VariantTitle = shopifyVariant.VariantTitle;
+            changed = true;
+        }
+        
+        if(string.IsNullOrWhiteSpace(existing.Sku))
+        {
+            existing.Sku = shopifyVariant.Sku;
+            changed = true;
+        }
+        
+        if(string.IsNullOrWhiteSpace(existing.Barcode))
+        {
+            existing.Barcode = shopifyVariant.Barcode;
             changed = true;
         }
         

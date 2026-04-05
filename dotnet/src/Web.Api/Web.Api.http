@@ -1,6 +1,6 @@
 @Web.Api_HostAddress = http://localhost:5257
 
-GET {{Web.Api_HostAddress}}/weatherforecast/
+GET http://localhost:5257/shopifysync/
 Accept: application/json
 
 ###

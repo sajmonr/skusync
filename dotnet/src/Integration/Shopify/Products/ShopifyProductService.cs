@@ -59,6 +59,7 @@ internal class ShopifyProductService(IShopifyGraphQlService graphQlService, ILog
             new ShopifyProductVariant(
                 product.id ?? string.Empty,
                 variant!.id ?? string.Empty,
+                product.title ?? string.Empty,
                 GetVariantTitle(variant),
                 variant.sku ?? string.Empty,
                 variant.barcode ?? string.Empty));
@@ -67,7 +68,7 @@ internal class ShopifyProductService(IShopifyGraphQlService graphQlService, ILog
         {
             if (string.IsNullOrWhiteSpace(variant.title) || variant.title == "Default Title")
             {
-                return product.title ?? string.Empty;
+                return string.Empty;
             }
 
             return variant.title;

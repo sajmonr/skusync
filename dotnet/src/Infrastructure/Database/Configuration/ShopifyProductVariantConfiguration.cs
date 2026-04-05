@@ -16,7 +16,10 @@ public class ShopifyProductVariantConfiguration : IEntityTypeConfiguration<Shopi
             .IsRequired()
             .HasMaxLength(255);
         builder.Property(x => x.GlobalVariantId).IsRequired().HasMaxLength(255);
-        builder.Property(x => x.Title).IsRequired().HasMaxLength(400);
+        
+        builder.Property(x => x.ProductTitle).IsRequired().HasMaxLength(400);
+        builder.Property(x => x.VariantTitle).IsRequired().HasMaxLength(200);
+        builder.Property(x => x.FullTitle).IsRequired().HasMaxLength(1000);
 
         builder.Property(x => x.ProductId).IsRequired();
         builder.Property(x => x.VariantId).IsRequired();
@@ -28,5 +31,10 @@ public class ShopifyProductVariantConfiguration : IEntityTypeConfiguration<Shopi
         builder.Property(x => x.UpdatedOnUtc)
             .IsRequired()
             .HasDefaultValueDateTimeNowUtcSql();
+        
+        builder.Property(x => x.Barcode).IsRequired()
+            .HasMaxLength(50);
+        builder.Property(x => x.Barcode).IsRequired()
+            .HasMaxLength(100);
     }
 }

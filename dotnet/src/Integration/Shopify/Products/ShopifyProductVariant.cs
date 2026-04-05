@@ -3,7 +3,8 @@ namespace Integration.Shopify.Products;
 public readonly record struct ShopifyProductVariant(
     string GlobalProductId,
     string GlobalVariantId,
-    string Title,
+    string ProductTitle,
+    string VariantTitle,
     string Sku,
     string Barcode)
 {

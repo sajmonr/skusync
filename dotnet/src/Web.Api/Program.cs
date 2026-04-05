@@ -1,4 +1,5 @@
 using Application;
+using Application.Shopify;
 using HealthChecks.UI.Client;
 using Infrastructure;
 using Infrastructure.Database;
@@ -36,6 +37,13 @@ app.ApplyDatabaseMigrations();
 app.MapHealthChecks("_health", new HealthCheckOptions
 {
     ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
+});
+
+app.MapGet("/shopifysync", async (IShopifySyncService syncService) =>
+{
+    await syncService.SynchronizeProducts();
+    
+    return Results.Ok();
 });
 
 app.UseSerilogRequestLogging();
