@@ -10,6 +10,7 @@ internal class ShopifyGraphQlService(IOptionsMonitor<ShopifyOptions> options, IG
 {
     public async Task<TResult> ExecuteAsync<TResult>([StringSyntax("graphql")] string query,
         IDictionary<string, object?>? variables = null)
+    where TResult : class
     {
         var client = factory.Create(options.CurrentValue.ShopUrl, options.CurrentValue.ApiKey);
 

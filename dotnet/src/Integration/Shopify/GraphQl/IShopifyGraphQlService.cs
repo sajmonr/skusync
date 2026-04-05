@@ -17,5 +17,6 @@ public interface IShopifyGraphQlService
     /// <exception cref="InvalidOperationException">Thrown if the Shopify client cannot be created.</exception>
     /// <exception cref="ArgumentNullException">Thrown if <paramref name="query"/> is null or empty.</exception>
     Task<TResult> ExecuteAsync<TResult>([StringSyntax("graphql")] string query,
-        IDictionary<string, object?>? variables = null);
+        IDictionary<string, object?>? variables = null)
+        where TResult : class;
 }
