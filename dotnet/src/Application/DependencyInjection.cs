@@ -1,4 +1,6 @@
-﻿using Microsoft.Extensions.Hosting;
+﻿using Application.Shopify;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 namespace Application;
 
@@ -9,6 +11,7 @@ public static class DependencyInjection
     {
         public T AddApplication()
         {
+            builder.Services.AddTransient<IShopifySyncService, ShopifySyncService>();
             return builder;
         }
     }
