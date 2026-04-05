@@ -85,7 +85,7 @@ public class ShopifySyncServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task SynchronizeProducts_ShouldUpdateSku_WhenSkuDiffersFromDatabase()
+    public async Task SynchronizeProducts_ShouldNotUpdateSku_WhenSkuDiffersFromDatabase()
     {
         SeedVariant("gid://shopify/ProductVariant/200", title: "T-Shirt", sku: "OLD-SKU", barcode: "BAR-1");
         await _dbContext.SaveChangesAsync();
@@ -106,11 +106,11 @@ public class ShopifySyncServiceTests : IDisposable
 
         var updated = await _dbContext.Set<ShopifyProductVariantEntity>()
             .SingleAsync(v => v.GlobalVariantId == "gid://shopify/ProductVariant/200");
-        updated.Sku.ShouldBe("NEW-SKU");
+        updated.Sku.ShouldBe("OLD-SKU");
     }
 
     [Fact]
-    public async Task SynchronizeProducts_ShouldUpdateBarcode_WhenBarcodeDiffersFromDatabase()
+    public async Task SynchronizeProducts_ShouldNotUpdateBarcode_WhenBarcodeDiffersFromDatabase()
     {
         SeedVariant("gid://shopify/ProductVariant/200", title: "T-Shirt", sku: "SKU-1", barcode: "OLD-BAR");
         await _dbContext.SaveChangesAsync();
@@ -131,7 +131,7 @@ public class ShopifySyncServiceTests : IDisposable
 
         var updated = await _dbContext.Set<ShopifyProductVariantEntity>()
             .SingleAsync(v => v.GlobalVariantId == "gid://shopify/ProductVariant/200");
-        updated.Barcode.ShouldBe("NEW-BAR");
+        updated.Barcode.ShouldBe("OLD-BAR");
     }
 
     [Fact]

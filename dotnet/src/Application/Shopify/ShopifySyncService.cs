@@ -86,18 +86,6 @@ public class ShopifySyncService(
             existing.Title = shopifyVariant.Title;
             changed = true;
         }
-
-        if (existing.Sku != shopifyVariant.Sku)
-        {
-            existing.Sku = shopifyVariant.Sku;
-            changed = true;
-        }
-
-        if (existing.Barcode != shopifyVariant.Barcode)
-        {
-            existing.Barcode = shopifyVariant.Barcode;
-            changed = true;
-        }
         
         return changed;
     }
