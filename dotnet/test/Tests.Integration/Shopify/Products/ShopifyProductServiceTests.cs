@@ -230,12 +230,16 @@ public class ShopifyProductServiceTests
     }
 
     [Fact]
-    public async Task UpdateVariants_ShouldThrow_WhenVariantsIsEmpty()
+    public async Task UpdateVariants_ShouldReturnTrue_AndNotCallGraphQl_WhenVariantsIsEmpty()
     {
         var sut = new ShopifyProductService(_graphQlService, _logger);
 
-        await Should.ThrowAsync<ArgumentOutOfRangeException>(() =>
-            sut.UpdateVariants("gid://shopify/Product/100", []));
+        var result = await sut.UpdateVariants("gid://shopify/Product/100", []);
+
+        result.ShouldBeTrue();
+        await _graphQlService.DidNotReceive().ExecuteAsync<UpdateVariantsGraphResponse>(
+            Arg.Any<string>(),
+            Arg.Any<IDictionary<string, object?>?>());
     }
 
     [Fact]
