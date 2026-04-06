@@ -1,0 +1,126 @@
+using Infrastructure.Database;
+using Infrastructure.Database.Entities;
+using Integration.Aws.Sqs;
+using Integration.Shopify.Products;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+
+namespace Application.Queue.ShopifyProductUpdate;
+
+public class ShopifyProductUpdateWebhookHandler(
+    ApplicationDbContext dbContext,
+    IShopifyProductService productService,
+    ILogger<ShopifyProductUpdateWebhookHandler> logger)
+    : IShopifyWebhookHandler
+{
+    public string TopicName => "products/update";
+
+    public async Task Handle(SqsShopEventProduct product)
+    {
+        var existingVariants = await dbContext.ShopifyProductVariants.Where(variant => variant.ProductId == product.Id)
+            .ToArrayAsync();
+        var toUpdateInShopify = new List<ShopifyProductVariantEntity>();
+
+        logger.LogDebug(
+            "Loaded {Count} variants for product {ProductId} [{ProductTitle}]. We currently have {ExistingCount} variants.",
+            product.Variants.Count, product.Id, product.Title, existingVariants.Length);
+
+        // update entities
+        foreach (var variant in product.Variants)
+        {
+            var entity = existingVariants.FirstOrDefault(e => e.VariantId == variant.Id);
+
+            if (entity is null)
+            {
+                var newEntity = CreateEntity(product, variant);
+
+                dbContext.ShopifyProductVariants.Add(newEntity);
+                toUpdateInShopify.Add(newEntity);
+            }
+            else
+            {
+                // Update it
+                UpdateEntity(entity, product, variant);
+
+                if (RequiresUpdateInShopify(entity, product, variant))
+                {
+                    toUpdateInShopify.Add(entity);
+                }
+            }
+        }
+
+        await dbContext.SaveChangesAsync();
+
+        await UpdateEntitiesInShopify(product.AdminGraphqlApiId, toUpdateInShopify);
+    }
+
+    private async Task UpdateEntitiesInShopify(string productId, IEnumerable<ShopifyProductVariantEntity> entities)
+    {
+        var entitiesToUpdate = entities
+            .Select(e => new ShopifyUpdateProductVariant(e.GlobalVariantId, e.Sku, e.Barcode)).ToArray();
+
+        logger.LogDebug("Updating {Count} variants in Shopify from {TopicName} webhook.", entitiesToUpdate.Length,
+            TopicName);
+
+        await productService.UpdateVariants(productId,
+            entitiesToUpdate);
+    }
+
+    private void UpdateEntity(ShopifyProductVariantEntity entity, SqsShopEventProduct product,
+        SqsShopEventVariant variant)
+    {
+        if (entity.ProductTitle != product.Title)
+        {
+            logger.LogDebug("Updating product title for variant {VariantId}: [{OldTitle}] -> [{NewTitle}].",
+                variant.Id, entity.ProductTitle, product.Title);
+            entity.ProductTitle = product.Title;
+        }
+
+        if (entity.VariantTitle != variant.Title)
+        {
+            logger.LogDebug("Updating variant title for variant {VariantId}: [{OldTitle}] -> [{NewTitle}].",
+                variant.Id, entity.VariantTitle, variant.Title);
+            entity.VariantTitle = variant.Title;
+        }
+    }
+
+    private bool RequiresUpdateInShopify(ShopifyProductVariantEntity entity, SqsShopEventProduct product,
+        SqsShopEventVariant variant)
+    {
+        if (entity.Barcode != variant.Barcode)
+        {
+            logger.LogDebug("Barcode for variant {VariantId} does not match in Shopify. Updating it.",
+                variant.Id);
+
+            return true;
+        }
+
+        if (entity.Sku != variant.Sku)
+        {
+            logger.LogDebug("SKU for variant {VariantId} does not match in Shopify. Updating it.",
+                variant.Id);
+        }
+
+        return false;
+    }
+
+    private ShopifyProductVariantEntity CreateEntity(SqsShopEventProduct product, SqsShopEventVariant variant)
+    {
+        logger.LogInformation(
+            "New variant {VariantId} [{VariantTitle} for product {ProductId} [{ProductTitle}] found.",
+            variant.Id, variant.Title, product.Id, product.Title);
+
+        // Create it
+        return new ShopifyProductVariantEntity
+        {
+            GlobalProductId = product.AdminGraphqlApiId,
+            ProductId = product.Id,
+            GlobalVariantId = variant.AdminGraphqlApiId,
+            VariantId = variant.Id,
+            ProductTitle = product.Title,
+            VariantTitle = variant.Title,
+            Sku = variant.Id.ToString(),
+            Barcode = variant.Id.ToString()
+        };
+    }
+}

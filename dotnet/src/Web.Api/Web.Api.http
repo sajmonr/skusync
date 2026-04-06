@@ -4,3 +4,7 @@ GET http://localhost:5257/shopifysync/
 Accept: application/json
 
 ###
+POST http://localhost:5257/update/
+Accept: application/json
+
+###

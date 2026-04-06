@@ -1,4 +1,7 @@
-﻿using Integration.Shopify.GraphQl;
+﻿using AWS.Messaging.Configuration;
+using Integration.Aws;
+using Integration.Aws.Sqs;
+using Integration.Shopify.GraphQl;
 using Integration.Shopify.Products;
 using Integration.Skulabs.Items;
 using Integration.Skulabs.Options;
@@ -28,8 +31,27 @@ public static class DependencyInjection
             
             builder.Services.AddShopifySharpServiceFactories();
             
+            // AWS SQS
+            var awsAuthConfig = builder.GetRequiredConfigValue<AwsAuthOptions>(AwsAuthOptions.OptionsKey);
+            var sqsOptions = builder.GetRequiredConfigValue<SqsOptions>(SqsOptions.OptionsKey);
+
+            builder.Services.AddDefaultAWSOptions(awsAuthConfig.GetSetupOptions());
+            builder.Services.AddAWSMessageBus(busBuilder =>
+            {
+                // The poller is tied to a single message type and expects raw JSON.
+                // This is a good fit for a queue dedicated to a single AWS service event.
+                busBuilder.AddSQSPoller<SqsShopEventProductMessage>(
+                    sqsOptions.QueueUrl,
+                    messageEnvelopeMode: MessageEnvelopeMode.NotSupported, options: options => {
+                        options.MaxNumberOfConcurrentMessages = 1;
+                    });
+    
+                busBuilder.AddMessageHandler<SqsShopEventProductHandler, SqsShopEventProductMessage>();
+            });
+            
             return builder;
         }
+
     }
     
 }

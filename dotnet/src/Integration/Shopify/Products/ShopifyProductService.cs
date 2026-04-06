@@ -50,10 +50,15 @@ internal class ShopifyProductService(IShopifyGraphQlService graphQlService, ILog
 
     public async Task<bool> UpdateVariants(string productId, IEnumerable<ShopifyUpdateProductVariant> variants)
     {
-        var shopifyProductVariants = variants as ShopifyUpdateProductVariant[] ?? variants.ToArray();
-        
         ArgumentException.ThrowIfNullOrWhiteSpace(productId);
-        ArgumentOutOfRangeException.ThrowIfZero(shopifyProductVariants.Length);
+        
+        var shopifyProductVariants = variants as ShopifyUpdateProductVariant[] ?? variants.ToArray();
+
+        if (shopifyProductVariants.Length == 0)
+        {
+            logger.LogDebug("No variants to update for product ID [{ProductId}].", productId);
+            return true;
+        }
         
         try
         {

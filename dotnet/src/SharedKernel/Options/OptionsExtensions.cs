@@ -36,24 +36,15 @@ public static class OptionsExtensions
             return builder;
         }
 
-        /// <summary>
-        /// Retrieves a configuration section by the specified key or throws an exception if the section does not exist.
-        /// </summary>
-        /// <param name="sectionKey">The key of the configuration section to retrieve.</param>
-        /// <returns>The configuration section associated with the specified key.</returns>
-        /// <exception cref="OptionsConfigurationSectionNotFoundException">
-        /// Thrown when the configuration section with the specified key is not found.
-        /// </exception>
-        public IConfigurationSection GetConfigurationSectionOrThrow(string sectionKey)
+        public T GetRequiredConfigValue<T>(string sectionKey)
+            where T : new()
         {
-            var section = builder.Configuration.GetSection(sectionKey);
-
-            if (section.Exists())
-            {
-                return section;
-            }
+            var section = builder.Configuration.GetRequiredSection(sectionKey);
+            var instance = new T();
             
-            throw new OptionsConfigurationSectionNotFoundException(sectionKey);
+            section.Bind(instance);
+
+            return instance;
         }
 
         /// <summary>

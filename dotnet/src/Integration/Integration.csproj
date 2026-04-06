@@ -7,6 +7,8 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="AWS.Messaging" />
+        <PackageReference Include="AWSSDK.Extensions.NETCore.Setup" />
         <PackageReference Include="Microsoft.Extensions.Http" />
         <PackageReference Include="ShopifySharp" />
         <PackageReference Include="ShopifySharp.Extensions.DependencyInjection" />
@@ -14,6 +16,10 @@
 
     <ItemGroup>
       <ProjectReference Include="..\SharedKernel\SharedKernel.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Folder Include="Shopify\Naming\" />
     </ItemGroup>
     
 </Project>

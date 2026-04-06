@@ -1,5 +1,6 @@
 using Integration.Shopify.GraphQl;
 using Integration.Shopify.Products;
+using Integration.Shopify.Responses;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using ShopifySharp.GraphQL;
@@ -50,15 +51,18 @@ public class ShopifyProductServiceTests
             "gid://shopify/Product/100",
             "gid://shopify/ProductVariant/200",
             "Basic Tee",
+            string.Empty,
             "SKU-1",
             "BAR-1"));
         result[1].ShouldBe(new ShopifyProductVariant(
             "gid://shopify/Product/100",
             "gid://shopify/ProductVariant/201",
+            "Basic Tee",
             "Large",
             string.Empty,
             string.Empty));
         result[2].ShouldBe(new ShopifyProductVariant(
+            string.Empty,
             string.Empty,
             string.Empty,
             string.Empty,
@@ -137,6 +141,122 @@ public class ShopifyProductServiceTests
         errorLogs.Length.ShouldBe(1);
         errorLogs[0].Message.ShouldBe("Failed to fetch products from Shopify.");
         errorLogs[0].Exception.ShouldBeSameAs(exception);
+    }
+
+    [Fact]
+    public async Task UpdateVariants_ShouldReturnTrue_WhenUpdateSucceeds()
+    {
+        _graphQlService.ExecuteAsync<UpdateVariantsGraphResponse>(Arg.Any<string>(), Arg.Any<IDictionary<string, object?>?>())
+            .Returns(new UpdateVariantsGraphResponse(UserErrors: null));
+
+        var sut = new ShopifyProductService(_graphQlService, _logger);
+
+        var result = await sut.UpdateVariants("gid://shopify/Product/100",
+        [
+            new ShopifyUpdateProductVariant("gid://shopify/ProductVariant/200", "SKU-1", "BAR-1")
+        ]);
+
+        result.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task UpdateVariants_ShouldLogDebug_WhenUpdateSucceeds()
+    {
+        _graphQlService.ExecuteAsync<UpdateVariantsGraphResponse>(Arg.Any<string>(), Arg.Any<IDictionary<string, object?>?>())
+            .Returns(new UpdateVariantsGraphResponse(UserErrors: null));
+
+        var sut = new ShopifyProductService(_graphQlService, _logger);
+
+        await sut.UpdateVariants("gid://shopify/Product/100",
+        [
+            new ShopifyUpdateProductVariant("gid://shopify/ProductVariant/200", "SKU-1", "BAR-1")
+        ]);
+
+        _logger.Entries.Where(e => e.LogLevel == LogLevel.Debug).ShouldNotBeEmpty();
+    }
+
+    [Fact]
+    public async Task UpdateVariants_ShouldReturnFalse_AndLogError_WhenUserErrorsArePresent()
+    {
+        _graphQlService.ExecuteAsync<UpdateVariantsGraphResponse>(Arg.Any<string>(), Arg.Any<IDictionary<string, object?>?>())
+            .Returns(new UpdateVariantsGraphResponse(UserErrors:
+            [
+                new UserErrorsResponse("Invalid SKU", "sku")
+            ]));
+
+        var sut = new ShopifyProductService(_graphQlService, _logger);
+
+        var result = await sut.UpdateVariants("gid://shopify/Product/100",
+        [
+            new ShopifyUpdateProductVariant("gid://shopify/ProductVariant/200", "SKU-1", "BAR-1")
+        ]);
+
+        result.ShouldBeFalse();
+        var errorLogs = _logger.Entries.Where(e => e.LogLevel == LogLevel.Error).ToArray();
+        errorLogs.Length.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task UpdateVariants_ShouldReturnFalse_AndLogError_WhenGraphQlThrows()
+    {
+        var exception = new InvalidOperationException("GraphQL error");
+        _graphQlService.ExecuteAsync<UpdateVariantsGraphResponse>(Arg.Any<string>(), Arg.Any<IDictionary<string, object?>?>())
+            .Returns<Task<UpdateVariantsGraphResponse>>(_ => throw exception);
+
+        var sut = new ShopifyProductService(_graphQlService, _logger);
+
+        var result = await sut.UpdateVariants("gid://shopify/Product/100",
+        [
+            new ShopifyUpdateProductVariant("gid://shopify/ProductVariant/200", "SKU-1", "BAR-1")
+        ]);
+
+        result.ShouldBeFalse();
+        var errorLogs = _logger.Entries.Where(e => e.LogLevel == LogLevel.Error).ToArray();
+        errorLogs.Length.ShouldBe(1);
+        errorLogs[0].Exception.ShouldBeSameAs(exception);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task UpdateVariants_ShouldThrow_WhenProductIdIsNullOrWhitespace(string productId)
+    {
+        var sut = new ShopifyProductService(_graphQlService, _logger);
+
+        await Should.ThrowAsync<ArgumentException>(() => sut.UpdateVariants(productId,
+        [
+            new ShopifyUpdateProductVariant("gid://shopify/ProductVariant/200", "SKU-1", "BAR-1")
+        ]));
+    }
+
+    [Fact]
+    public async Task UpdateVariants_ShouldThrow_WhenVariantsIsEmpty()
+    {
+        var sut = new ShopifyProductService(_graphQlService, _logger);
+
+        await Should.ThrowAsync<ArgumentOutOfRangeException>(() =>
+            sut.UpdateVariants("gid://shopify/Product/100", []));
+    }
+
+    [Fact]
+    public async Task UpdateVariants_ShouldPassCorrectProductId_ToGraphQl()
+    {
+        _graphQlService.ExecuteAsync<UpdateVariantsGraphResponse>(Arg.Any<string>(), Arg.Any<IDictionary<string, object?>?>())
+            .Returns(new UpdateVariantsGraphResponse(UserErrors: null));
+
+        var sut = new ShopifyProductService(_graphQlService, _logger);
+
+        await sut.UpdateVariants("gid://shopify/Product/100",
+        [
+            new ShopifyUpdateProductVariant("gid://shopify/ProductVariant/200", "SKU-1", "BAR-1"),
+            new ShopifyUpdateProductVariant("gid://shopify/ProductVariant/201", "SKU-2", "BAR-2")
+        ]);
+
+        await _graphQlService.Received(1).ExecuteAsync<UpdateVariantsGraphResponse>(
+            Arg.Any<string>(),
+            Arg.Is<IDictionary<string, object?>?>(variables =>
+                variables != null &&
+                (string?)variables["productId"] == "gid://shopify/Product/100"));
     }
 
     private static GetAllProductsGraphResponse CreateResponse(bool hasNextPage, string? endCursor, params Product[] products)
