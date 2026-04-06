@@ -5,7 +5,7 @@ public class ShopifyProductVariantEntity
 
     private string _fullTitle = "";
     
-    public Guid ShopifyProductVariantId { get; set; }
+    public Guid ShopifyProductVariantId { get; set; } = Guid.CreateVersion7();
 
     public string GlobalProductId { get; set; } = "";
 
@@ -30,6 +30,12 @@ public class ShopifyProductVariantEntity
         get;
         set
         {
+            if (value == "Default Title")
+            {
+                field = "";
+                return;
+            }
+            
             field = value;
             GenerateFullTitle();
         }

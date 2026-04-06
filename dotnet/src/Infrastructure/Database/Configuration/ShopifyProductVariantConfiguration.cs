@@ -34,7 +34,9 @@ public class ShopifyProductVariantConfiguration : IEntityTypeConfiguration<Shopi
         
         builder.Property(x => x.Barcode).IsRequired()
             .HasMaxLength(50);
-        builder.Property(x => x.Barcode).IsRequired()
+        builder.Property(x => x.Sku).IsRequired()
             .HasMaxLength(100);
+
+        builder.HasIndex(x => x.GlobalVariantId).IsUnique();
     }
 }
