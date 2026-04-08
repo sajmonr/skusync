@@ -10,13 +10,13 @@ using Shouldly;
 
 namespace Tests.Application.Shopify;
 
-public class ShopifySyncServiceTests : IDisposable
+public class ShopifyImportServiceTests : IDisposable
 {
     private readonly IShopifyProductService _shopifyProductService = Substitute.For<IShopifyProductService>();
     private readonly ApplicationDbContext _dbContext;
-    private readonly TestLogger<ShopifySyncService> _logger = new();
+    private readonly TestLogger<ShopifyImportService> _logger = new();
 
-    public ShopifySyncServiceTests()
+    public ShopifyImportServiceTests()
     {
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
@@ -31,7 +31,7 @@ public class ShopifySyncServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task SynchronizeProducts_ShouldCreateVariant_WhenVariantNotInDatabase()
+    public async Task ImportProducts_ShouldCreateVariant_WhenVariantNotInDatabase()
     {
         _shopifyProductService.GetProducts().Returns(
         [
@@ -46,7 +46,7 @@ public class ShopifySyncServiceTests : IDisposable
 
         var sut = CreateSut();
 
-        await sut.SynchronizeProducts();
+        await sut.ImportProducts();
 
         var variants = await _dbContext.Set<ShopifyProductVariantEntity>().ToListAsync();
         variants.Count.ShouldBe(1);
@@ -61,7 +61,7 @@ public class ShopifySyncServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task SynchronizeProducts_ShouldUpdateTitle_WhenTitleDiffersFromDatabase()
+    public async Task ImportProducts_ShouldUpdateTitle_WhenTitleDiffersFromDatabase()
     {
         var existingVariant = SeedVariant("gid://shopify/ProductVariant/200", title: "Old Title", sku: "SKU-1", barcode: "BAR-1");
         await _dbContext.SaveChangesAsync();
@@ -79,7 +79,7 @@ public class ShopifySyncServiceTests : IDisposable
 
         var sut = CreateSut();
 
-        await sut.SynchronizeProducts();
+        await sut.ImportProducts();
 
         var updated = await _dbContext.Set<ShopifyProductVariantEntity>()
             .SingleAsync(v => v.GlobalVariantId == "gid://shopify/ProductVariant/200");
@@ -88,7 +88,7 @@ public class ShopifySyncServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task SynchronizeProducts_ShouldUpdateVariantTitle_WhenVariantTitleDiffersFromDatabase()
+    public async Task ImportProducts_ShouldUpdateVariantTitle_WhenVariantTitleDiffersFromDatabase()
     {
         SeedVariant("gid://shopify/ProductVariant/200", title: "T-Shirt", variantTitle: "Small", sku: "SKU-1", barcode: "BAR-1");
         await _dbContext.SaveChangesAsync();
@@ -106,7 +106,7 @@ public class ShopifySyncServiceTests : IDisposable
 
         var sut = CreateSut();
 
-        await sut.SynchronizeProducts();
+        await sut.ImportProducts();
 
         var updated = await _dbContext.Set<ShopifyProductVariantEntity>()
             .SingleAsync(v => v.GlobalVariantId == "gid://shopify/ProductVariant/200");
@@ -114,7 +114,7 @@ public class ShopifySyncServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task SynchronizeProducts_ShouldNotUpdateSku_WhenSkuAlreadySetInDatabase()
+    public async Task ImportProducts_ShouldNotUpdateSku_WhenSkuAlreadySetInDatabase()
     {
         SeedVariant("gid://shopify/ProductVariant/200", title: "T-Shirt", sku: "OLD-SKU", barcode: "BAR-1");
         await _dbContext.SaveChangesAsync();
@@ -132,7 +132,7 @@ public class ShopifySyncServiceTests : IDisposable
 
         var sut = CreateSut();
 
-        await sut.SynchronizeProducts();
+        await sut.ImportProducts();
 
         var updated = await _dbContext.Set<ShopifyProductVariantEntity>()
             .SingleAsync(v => v.GlobalVariantId == "gid://shopify/ProductVariant/200");
@@ -140,7 +140,7 @@ public class ShopifySyncServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task SynchronizeProducts_ShouldUpdateSku_WhenSkuIsEmptyInDatabase()
+    public async Task ImportProducts_ShouldUpdateSku_WhenSkuIsEmptyInDatabase()
     {
         SeedVariant("gid://shopify/ProductVariant/200", title: "T-Shirt", sku: "", barcode: "BAR-1");
         await _dbContext.SaveChangesAsync();
@@ -158,7 +158,7 @@ public class ShopifySyncServiceTests : IDisposable
 
         var sut = CreateSut();
 
-        await sut.SynchronizeProducts();
+        await sut.ImportProducts();
 
         var updated = await _dbContext.Set<ShopifyProductVariantEntity>()
             .SingleAsync(v => v.GlobalVariantId == "gid://shopify/ProductVariant/200");
@@ -166,7 +166,7 @@ public class ShopifySyncServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task SynchronizeProducts_ShouldNotUpdateBarcode_WhenBarcodeAlreadySetInDatabase()
+    public async Task ImportProducts_ShouldNotUpdateBarcode_WhenBarcodeAlreadySetInDatabase()
     {
         SeedVariant("gid://shopify/ProductVariant/200", title: "T-Shirt", sku: "SKU-1", barcode: "OLD-BAR");
         await _dbContext.SaveChangesAsync();
@@ -184,7 +184,7 @@ public class ShopifySyncServiceTests : IDisposable
 
         var sut = CreateSut();
 
-        await sut.SynchronizeProducts();
+        await sut.ImportProducts();
 
         var updated = await _dbContext.Set<ShopifyProductVariantEntity>()
             .SingleAsync(v => v.GlobalVariantId == "gid://shopify/ProductVariant/200");
@@ -192,7 +192,7 @@ public class ShopifySyncServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task SynchronizeProducts_ShouldUpdateBarcode_WhenBarcodeIsEmptyInDatabase()
+    public async Task ImportProducts_ShouldUpdateBarcode_WhenBarcodeIsEmptyInDatabase()
     {
         SeedVariant("gid://shopify/ProductVariant/200", title: "T-Shirt", sku: "SKU-1", barcode: "");
         await _dbContext.SaveChangesAsync();
@@ -210,7 +210,7 @@ public class ShopifySyncServiceTests : IDisposable
 
         var sut = CreateSut();
 
-        await sut.SynchronizeProducts();
+        await sut.ImportProducts();
 
         var updated = await _dbContext.Set<ShopifyProductVariantEntity>()
             .SingleAsync(v => v.GlobalVariantId == "gid://shopify/ProductVariant/200");
@@ -218,7 +218,7 @@ public class ShopifySyncServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task SynchronizeProducts_ShouldNotUpdateVariant_WhenAllFieldsMatch()
+    public async Task ImportProducts_ShouldNotUpdateVariant_WhenAllFieldsMatch()
     {
         var existingVariant = SeedVariant("gid://shopify/ProductVariant/200", title: "T-Shirt", variantTitle: "Large", sku: "SKU-1", barcode: "BAR-1");
         var originalUpdatedOn = existingVariant.UpdatedOnUtc;
@@ -237,7 +237,7 @@ public class ShopifySyncServiceTests : IDisposable
 
         var sut = CreateSut();
 
-        await sut.SynchronizeProducts();
+        await sut.ImportProducts();
 
         var variant = await _dbContext.Set<ShopifyProductVariantEntity>()
             .SingleAsync(v => v.GlobalVariantId == "gid://shopify/ProductVariant/200");
@@ -245,7 +245,7 @@ public class ShopifySyncServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task SynchronizeProducts_ShouldSetUpdatedOnUtc_WhenVariantIsUpdated()
+    public async Task ImportProducts_ShouldSetUpdatedOnUtc_WhenVariantIsUpdated()
     {
         var before = DateTime.UtcNow.AddSeconds(-1);
         SeedVariant("gid://shopify/ProductVariant/200", title: "Old Title", sku: "SKU-1", barcode: "BAR-1");
@@ -264,7 +264,7 @@ public class ShopifySyncServiceTests : IDisposable
 
         var sut = CreateSut();
 
-        await sut.SynchronizeProducts();
+        await sut.ImportProducts();
 
         var updated = await _dbContext.Set<ShopifyProductVariantEntity>()
             .SingleAsync(v => v.GlobalVariantId == "gid://shopify/ProductVariant/200");
@@ -272,7 +272,7 @@ public class ShopifySyncServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task SynchronizeProducts_ShouldHandleMixedCreateAndUpdate()
+    public async Task ImportProducts_ShouldHandleMixedCreateAndUpdate()
     {
         SeedVariant("gid://shopify/ProductVariant/100", title: "Existing", sku: "SKU-A", barcode: "BAR-A");
         await _dbContext.SaveChangesAsync();
@@ -297,7 +297,7 @@ public class ShopifySyncServiceTests : IDisposable
 
         var sut = CreateSut();
 
-        await sut.SynchronizeProducts();
+        await sut.ImportProducts();
 
         var variants = await _dbContext.Set<ShopifyProductVariantEntity>().ToListAsync();
         variants.Count.ShouldBe(2);
@@ -312,14 +312,14 @@ public class ShopifySyncServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task SynchronizeProducts_ShouldLogErrorAndRethrow_WhenShopifyCallFails()
+    public async Task ImportProducts_ShouldLogErrorAndRethrow_WhenShopifyCallFails()
     {
         var exception = new InvalidOperationException("Shopify unavailable");
         _shopifyProductService.GetProducts().ThrowsAsync(exception);
 
         var sut = CreateSut();
 
-        var thrown = await Should.ThrowAsync<InvalidOperationException>(() => sut.SynchronizeProducts());
+        var thrown = await Should.ThrowAsync<InvalidOperationException>(() => sut.ImportProducts());
 
         thrown.ShouldBeSameAs(exception);
 
@@ -329,7 +329,7 @@ public class ShopifySyncServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task SynchronizeProducts_ShouldLogDebugStatements_DuringSuccessfulSync()
+    public async Task ImportProducts_ShouldLogDebugStatements_DuringSuccessfulSync()
     {
         _shopifyProductService.GetProducts().Returns(
         [
@@ -344,7 +344,7 @@ public class ShopifySyncServiceTests : IDisposable
 
         var sut = CreateSut();
 
-        await sut.SynchronizeProducts();
+        await sut.ImportProducts();
 
         var debugLogs = _logger.Entries.Where(e => e.LogLevel == LogLevel.Debug).ToArray();
         debugLogs.Length.ShouldBeGreaterThan(0);
@@ -377,7 +377,7 @@ public class ShopifySyncServiceTests : IDisposable
         return entity;
     }
 
-    private ShopifySyncService CreateSut() => new(_shopifyProductService, _dbContext, _logger);
+    private ShopifyImportService CreateSut() => new(_shopifyProductService, _dbContext, _logger);
 
     private sealed class TestLogger<T> : ILogger<T>
     {

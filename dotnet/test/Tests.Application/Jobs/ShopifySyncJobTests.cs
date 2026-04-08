@@ -10,18 +10,18 @@ namespace Tests.Application.Jobs;
 
 public class ShopifySyncJobTests
 {
-    private readonly IShopifySyncService _shopifySyncService = Substitute.For<IShopifySyncService>();
+    private readonly IShopifyImportService _shopifyImportService = Substitute.For<IShopifyImportService>();
     private readonly IJobExecutionContext _context = Substitute.For<IJobExecutionContext>();
     private readonly TestLogger<ShopifySyncJob> _logger = new();
 
     [Fact]
-    public async Task Execute_ShouldCallSynchronizeProducts()
+    public async Task Execute_ShouldCallImportProducts()
     {
         var sut = CreateSut();
 
         await sut.Execute(_context);
 
-        await _shopifySyncService.Received(1).SynchronizeProducts();
+        await _shopifyImportService.Received(1).ImportProducts();
     }
 
     [Fact]
@@ -45,10 +45,10 @@ public class ShopifySyncJobTests
     }
 
     [Fact]
-    public async Task Execute_ShouldThrowJobExecutionException_WhenSynchronizeProductsThrows()
+    public async Task Execute_ShouldThrowJobExecutionException_WhenImportProductsThrows()
     {
         var exception = new InvalidOperationException("Shopify unavailable");
-        _shopifySyncService.SynchronizeProducts().ThrowsAsync(exception);
+        _shopifyImportService.ImportProducts().ThrowsAsync(exception);
         var sut = CreateSut();
 
         var thrown = await Should.ThrowAsync<JobExecutionException>(() => sut.Execute(_context));
@@ -59,7 +59,7 @@ public class ShopifySyncJobTests
     [Fact]
     public async Task Execute_ShouldNotRefireImmediately_WhenJobFails()
     {
-        _shopifySyncService.SynchronizeProducts().ThrowsAsync(new InvalidOperationException());
+        _shopifyImportService.ImportProducts().ThrowsAsync(new InvalidOperationException());
         var sut = CreateSut();
 
         var thrown = await Should.ThrowAsync<JobExecutionException>(() => sut.Execute(_context));
@@ -68,10 +68,10 @@ public class ShopifySyncJobTests
     }
 
     [Fact]
-    public async Task Execute_ShouldLogError_WhenSynchronizeProductsThrows()
+    public async Task Execute_ShouldLogError_WhenImportProductsThrows()
     {
         var exception = new InvalidOperationException("Shopify unavailable");
-        _shopifySyncService.SynchronizeProducts().ThrowsAsync(exception);
+        _shopifyImportService.ImportProducts().ThrowsAsync(exception);
         var sut = CreateSut();
 
         await Should.ThrowAsync<JobExecutionException>(() => sut.Execute(_context));
@@ -81,7 +81,7 @@ public class ShopifySyncJobTests
         errorLogs[0].Exception.ShouldBeSameAs(exception);
     }
 
-    private ShopifySyncJob CreateSut() => new(_shopifySyncService, _logger);
+    private ShopifySyncJob CreateSut() => new(_shopifyImportService, _logger);
 
     private sealed class TestLogger<T> : ILogger<T>
     {

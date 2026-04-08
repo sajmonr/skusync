@@ -6,12 +6,12 @@ using Microsoft.Extensions.Logging;
 
 namespace Application.Shopify;
 
-public class ShopifySyncService(
+public class ShopifyImportService(
     IShopifyProductService shopifyProductService,
     ApplicationDbContext dbContext,
-    ILogger<ShopifySyncService> logger) : IShopifySyncService
+    ILogger<ShopifyImportService> logger) : IShopifyImportService
 {
-    public async Task SynchronizeProducts()
+    public async Task ImportProducts()
     {
         logger.LogDebug("Starting Shopify product synchronization.");
 
@@ -65,7 +65,7 @@ public class ShopifySyncService(
                     Barcode = shopifyVariant.Barcode
                 };
 
-                dbContext.Set<ShopifyProductVariantEntity>().Add(newVariant);
+                dbContext.ShopifyProductVariants.Add(newVariant);
                 logger.LogDebug("Creating new variant with GlobalVariantId {GlobalVariantId}.", shopifyVariant.GlobalVariantId);
                 created++;
             }
@@ -94,7 +94,7 @@ public class ShopifySyncService(
         
         if(string.IsNullOrWhiteSpace(existing.Sku))
         {
-            existing.Sku = shopifyVariant.Sku;
+            existing.Sku = "";
             changed = true;
         }
         

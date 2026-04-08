@@ -1,4 +1,4 @@
-using Application.Jobs;
+﻿using Application.Jobs;
 using Application.Queue.ShopifyProductUpdate;
 using Application.Shopify;
 using Integration.Aws.Sqs;
@@ -21,7 +21,7 @@ public static class DependencyInjection
         /// <returns>The builder instance for further chaining.</returns>
         public T AddApplication()
         {
-            builder.Services.AddTransient<IShopifySyncService, ShopifySyncService>();
+            builder.Services.AddTransient<IShopifyImportService, ShopifyImportService>();
 
             builder.Services.AddTransient<IShopifyWebhookHandler, ShopifyProductUpdateWebhookHandler>();
             builder.Services.AddTransient<IShopifyWebhookHandler, ShopifyProductCreateWebhookHandler>();
