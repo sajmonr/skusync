@@ -113,6 +113,8 @@ public class ShopifyProductUpdateWebhookHandler(
         {
             logger.LogDebug("SKU for variant {VariantId} does not match in Shopify. Updating it.",
                 variant.Id);
+
+            return true;
         }
 
         return false;
