@@ -21,7 +21,7 @@ public static class DependencyInjection
         public T AddIntegration()
         {
             // Skulabs
-            builder.AddOptionsFromConfiguration<SkulabsApiOptions>(SkulabsApiOptions.SectionKey);
+            // builder.AddOptionsFromConfiguration<SkulabsApiOptions>(SkulabsApiOptions.SectionKey);
             builder.Services.AddHttpClient<ItemClient>();
             
             // Shopify

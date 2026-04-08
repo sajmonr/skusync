@@ -74,13 +74,15 @@ public class ShopifyProductUpdateWebhookHandler(
             logger.LogDebug("Updating product title for variant {VariantId}: [{OldTitle}] -> [{NewTitle}].",
                 variant.Id, entity.ProductTitle, product.Title);
             entity.ProductTitle = product.Title;
+            entity.UpdatedOnUtc = DateTime.UtcNow;
         }
 
-        if (entity.VariantTitle != variant.Title)
+        if (variant.Title != "Default Title" && entity.VariantTitle != variant.Title)
         {
             logger.LogDebug("Updating variant title for variant {VariantId}: [{OldTitle}] -> [{NewTitle}].",
                 variant.Id, entity.VariantTitle, variant.Title);
             entity.VariantTitle = variant.Title;
+            entity.UpdatedOnUtc = DateTime.UtcNow;
         }
     }
 

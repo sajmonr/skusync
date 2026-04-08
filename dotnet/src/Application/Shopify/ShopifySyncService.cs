@@ -28,11 +28,9 @@ public class ShopifySyncService(
 
         logger.LogDebug("Fetched {Count} product variants from Shopify.", shopifyVariants.Length);
 
-        var dbVariants = await dbContext.Set<ShopifyProductVariantEntity>().ToListAsync();
+        var dbVariantsByGlobalId = await dbContext.ShopifyProductVariants.ToDictionaryAsync(v => v.GlobalVariantId);
 
-        logger.LogDebug("Found {Count} product variants in the database.", dbVariants.Count);
-
-        var dbVariantsByGlobalId = dbVariants.ToDictionary(v => v.GlobalVariantId);
+        logger.LogDebug("Found {Count} product variants in the database.", dbVariantsByGlobalId.Count);
 
         var created = 0;
         var updated = 0;
