@@ -7,14 +7,26 @@ using Microsoft.Extensions.Logging;
 
 namespace Application.Queue.ShopifyProductUpdate;
 
+/// <summary>
+/// Handles the <c>products/update</c> Shopify webhook topic. Reconciles incoming variant
+/// data with the local database — creating new variant records for any variants not yet
+/// tracked and updating titles for existing ones — then pushes any SKU or barcode
+/// discrepancies back to Shopify.
+/// </summary>
 public class ShopifyProductUpdateWebhookHandler(
     ApplicationDbContext dbContext,
     IShopifyProductService productService,
     ILogger<ShopifyProductUpdateWebhookHandler> logger)
     : IShopifyWebhookHandler
 {
+    /// <inheritdoc/>
     public string TopicName => "products/update";
 
+    /// <summary>
+    /// Reconciles the incoming product payload with local database state, then synchronises
+    /// any changed variants back to Shopify.
+    /// </summary>
+    /// <param name="product">The product payload from the <c>products/update</c> webhook.</param>
     public async Task Handle(SqsShopEventProduct product)
     {
         var existingVariants = await dbContext.ShopifyProductVariants.Where(variant => variant.ProductId == product.Id)

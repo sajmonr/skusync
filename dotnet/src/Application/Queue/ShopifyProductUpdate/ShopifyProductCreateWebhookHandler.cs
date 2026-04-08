@@ -6,14 +6,25 @@ using Microsoft.Extensions.Logging;
 
 namespace Application.Queue.ShopifyProductUpdate;
 
+/// <summary>
+/// Handles the <c>products/create</c> Shopify webhook topic. When a new product is created
+/// in Shopify, this handler persists each of its variants to the local database and then
+/// writes the generated SKU and barcode back to Shopify.
+/// </summary>
 public class ShopifyProductCreateWebhookHandler(
     ApplicationDbContext dbContext,
     IShopifyProductService productService,
     ILogger<ShopifyProductUpdateWebhookHandler> logger)
     : IShopifyWebhookHandler
 {
+    /// <inheritdoc/>
     public string TopicName => "products/create";
 
+    /// <summary>
+    /// Persists all variants of the newly created product and pushes the generated SKU
+    /// and barcode values back to Shopify via the Admin API.
+    /// </summary>
+    /// <param name="product">The product payload from the <c>products/create</c> webhook.</param>
     public async Task Handle(SqsShopEventProduct product)
     {
         var entities = new List<ShopifyProductVariantEntity>();

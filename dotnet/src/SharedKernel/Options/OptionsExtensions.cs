@@ -36,6 +36,19 @@ public static class OptionsExtensions
             return builder;
         }
 
+        /// <summary>
+        /// Reads and binds a configuration section to an instance of <typeparamref name="T"/>
+        /// at registration time (eagerly, before the DI container is built). Use this when
+        /// the bound value is needed inside a <c>builder.Services.Add*</c> lambda where
+        /// <see cref="Microsoft.Extensions.Options.IOptions{TOptions}"/> is not yet available.
+        /// </summary>
+        /// <typeparam name="T">The type to bind the configuration section to.</typeparam>
+        /// <param name="sectionKey">The configuration section key to read from.</param>
+        /// <returns>A new instance of <typeparamref name="T"/> populated from configuration.</returns>
+        /// <exception cref="System.InvalidOperationException">
+        /// Thrown by <see cref="Microsoft.Extensions.Configuration.ConfigurationExtensions.GetRequiredSection"/>
+        /// when the section is absent.
+        /// </exception>
         public T GetRequiredConfigValue<T>(string sectionKey)
             where T : new()
         {

@@ -6,6 +6,11 @@ using Microsoft.Extensions.Options;
 
 namespace Integration.Skulabs.Items;
 
+/// <summary>
+/// HTTP client for the SkuLabs Items API. Retrieves inventory items along with their
+/// Shopify listing associations. Base URL and API key are configured from
+/// <see cref="SkulabsApiOptions"/>.
+/// </summary>
 public class ItemClient
 {
     private readonly HttpClient _client;
@@ -20,6 +25,12 @@ public class ItemClient
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", optionsMonitor.CurrentValue.ApiKey);
     }
     
+    /// <summary>
+    /// Fetches all SkuLabs inventory items that have at least one Shopify channel listing.
+    /// Only the <c>name</c>, <c>sku</c>, <c>upc</c>, and <c>listings</c> fields are
+    /// requested from the API to minimise payload size.
+    /// </summary>
+    /// <returns>An array of <see cref="SkuLabsItem"/> records with Shopify identifiers populated.</returns>
     public async Task<SkuLabsItem[]> GetAllItems()
     {
         const string fields = """

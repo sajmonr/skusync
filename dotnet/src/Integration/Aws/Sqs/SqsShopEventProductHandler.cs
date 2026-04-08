@@ -3,9 +3,23 @@ using Microsoft.Extensions.Logging;
 
 namespace Integration.Aws.Sqs;
 
+/// <summary>
+/// AWS.Messaging handler that receives <see cref="SqsShopEventProductMessage"/> messages
+/// from the configured SQS queue and routes them to the appropriate
+/// <see cref="IShopifyWebhookHandler"/> based on the Shopify webhook topic in the message
+/// metadata. Messages whose topic has no registered handler are silently discarded.
+/// </summary>
 public class SqsShopEventProductHandler(IEnumerable<IShopifyWebhookHandler> handlers, ILogger<SqsShopEventProductHandler> logger)
     : IMessageHandler<SqsShopEventProductMessage>
 {
+    /// <summary>
+    /// Dispatches the incoming SQS message to the matching <see cref="IShopifyWebhookHandler"/>.
+    /// Returns <see cref="MessageProcessStatus.Success"/> on both successful processing and
+    /// unrecognised topics; returns <see cref="MessageProcessStatus.Failed"/> if the handler
+    /// throws an exception, signalling the message should be retried or sent to a dead-letter queue.
+    /// </summary>
+    /// <param name="messageEnvelope">The SQS message envelope containing the Shopify event.</param>
+    /// <param name="token">Cancellation token.</param>
     public async Task<MessageProcessStatus> HandleAsync(MessageEnvelope<SqsShopEventProductMessage> messageEnvelope,
         CancellationToken token = new ())
     {

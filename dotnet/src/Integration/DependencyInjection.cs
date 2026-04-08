@@ -18,6 +18,11 @@ public static class DependencyInjection
     extension<T>(T builder)
         where T : IHostApplicationBuilder
     {
+        /// <summary>
+        /// Registers all Integration-layer services — Shopify GraphQL client, SkuLabs HTTP
+        /// client, and the AWS SQS message bus poller — with the dependency injection container.
+        /// </summary>
+        /// <returns>The builder instance for further chaining.</returns>
         public T AddIntegration()
         {
             // Skulabs

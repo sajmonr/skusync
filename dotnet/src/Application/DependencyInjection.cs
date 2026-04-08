@@ -14,6 +14,11 @@ public static class DependencyInjection
     extension<T>(T builder)
         where T : IHostApplicationBuilder
     {
+        /// <summary>
+        /// Registers all Application-layer services, webhook handlers, and the Quartz.NET
+        /// scheduled job infrastructure with the dependency injection container.
+        /// </summary>
+        /// <returns>The builder instance for further chaining.</returns>
         public T AddApplication()
         {
             builder.Services.AddTransient<IShopifySyncService, ShopifySyncService>();
