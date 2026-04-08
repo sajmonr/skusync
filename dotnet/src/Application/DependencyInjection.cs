@@ -21,7 +21,7 @@ public static class DependencyInjection
         /// <returns>The builder instance for further chaining.</returns>
         public T AddApplication()
         {
-            builder.Services.AddTransient<IShopifyImportService, ShopifyImportService>();
+            builder.Services.AddTransient<IShopifyService, ShopifyService>();
 
             builder.Services.AddTransient<IShopifyWebhookHandler, ShopifyProductUpdateWebhookHandler>();
             builder.Services.AddTransient<IShopifyWebhookHandler, ShopifyProductCreateWebhookHandler>();

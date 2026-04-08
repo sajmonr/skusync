@@ -10,13 +10,13 @@ using Shouldly;
 
 namespace Tests.Application.Shopify;
 
-public class ShopifyImportServiceTests : IDisposable
+public class ShopifyServiceTests : IDisposable
 {
     private readonly IShopifyProductService _shopifyProductService = Substitute.For<IShopifyProductService>();
     private readonly ApplicationDbContext _dbContext;
-    private readonly TestLogger<ShopifyImportService> _logger = new();
+    private readonly TestLogger<ShopifyService> _logger = new();
 
-    public ShopifyImportServiceTests()
+    public ShopifyServiceTests()
     {
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
@@ -377,7 +377,7 @@ public class ShopifyImportServiceTests : IDisposable
         return entity;
     }
 
-    private ShopifyImportService CreateSut() => new(_shopifyProductService, _dbContext, _logger);
+    private ShopifyService CreateSut() => new(_shopifyProductService, _dbContext, _logger);
 
     private sealed class TestLogger<T> : ILogger<T>
     {

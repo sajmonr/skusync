@@ -12,7 +12,7 @@ namespace Application.Jobs;
 /// </summary>
 [DisallowConcurrentExecution]
 public class ShopifySyncJob(
-    IShopifyImportService shopifyImportService,
+    IShopifyService shopifyService,
     ILogger<ShopifySyncJob> logger) : IJob
 {
     /// <summary>
@@ -39,7 +39,7 @@ public class ShopifySyncJob(
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         try
         {
-            await shopifyImportService.ImportProducts();
+            await shopifyService.ImportProducts();
             stopwatch.Stop();
 
             logger.LogInformation("ShopifySyncJob completed successfully.");

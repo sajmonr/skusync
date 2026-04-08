@@ -6,10 +6,10 @@ using Microsoft.Extensions.Logging;
 
 namespace Application.Shopify;
 
-public class ShopifyImportService(
+public class ShopifyService(
     IShopifyProductService shopifyProductService,
     ApplicationDbContext dbContext,
-    ILogger<ShopifyImportService> logger) : IShopifyImportService
+    ILogger<ShopifyService> logger) : IShopifyService
 {
     public async Task ImportProducts()
     {

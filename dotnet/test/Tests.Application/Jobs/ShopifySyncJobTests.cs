@@ -10,7 +10,7 @@ namespace Tests.Application.Jobs;
 
 public class ShopifySyncJobTests
 {
-    private readonly IShopifyImportService _shopifyImportService = Substitute.For<IShopifyImportService>();
+    private readonly IShopifyService _shopifyService = Substitute.For<IShopifyService>();
     private readonly IJobExecutionContext _context = Substitute.For<IJobExecutionContext>();
     private readonly TestLogger<ShopifySyncJob> _logger = new();
 
@@ -21,7 +21,7 @@ public class ShopifySyncJobTests
 
         await sut.Execute(_context);
 
-        await _shopifyImportService.Received(1).ImportProducts();
+        await _shopifyService.Received(1).ImportProducts();
     }
 
     [Fact]
@@ -48,7 +48,7 @@ public class ShopifySyncJobTests
     public async Task Execute_ShouldThrowJobExecutionException_WhenImportProductsThrows()
     {
         var exception = new InvalidOperationException("Shopify unavailable");
-        _shopifyImportService.ImportProducts().ThrowsAsync(exception);
+        _shopifyService.ImportProducts().ThrowsAsync(exception);
         var sut = CreateSut();
 
         var thrown = await Should.ThrowAsync<JobExecutionException>(() => sut.Execute(_context));
@@ -59,7 +59,7 @@ public class ShopifySyncJobTests
     [Fact]
     public async Task Execute_ShouldNotRefireImmediately_WhenJobFails()
     {
-        _shopifyImportService.ImportProducts().ThrowsAsync(new InvalidOperationException());
+        _shopifyService.ImportProducts().ThrowsAsync(new InvalidOperationException());
         var sut = CreateSut();
 
         var thrown = await Should.ThrowAsync<JobExecutionException>(() => sut.Execute(_context));
@@ -71,7 +71,7 @@ public class ShopifySyncJobTests
     public async Task Execute_ShouldLogError_WhenImportProductsThrows()
     {
         var exception = new InvalidOperationException("Shopify unavailable");
-        _shopifyImportService.ImportProducts().ThrowsAsync(exception);
+        _shopifyService.ImportProducts().ThrowsAsync(exception);
         var sut = CreateSut();
 
         await Should.ThrowAsync<JobExecutionException>(() => sut.Execute(_context));
@@ -81,7 +81,7 @@ public class ShopifySyncJobTests
         errorLogs[0].Exception.ShouldBeSameAs(exception);
     }
 
-    private ShopifySyncJob CreateSut() => new(_shopifyImportService, _logger);
+    private ShopifySyncJob CreateSut() => new(_shopifyService, _logger);
 
     private sealed class TestLogger<T> : ILogger<T>
     {
