@@ -4,6 +4,7 @@ using HealthChecks.UI.Client;
 using Infrastructure;
 using Infrastructure.Database;
 using Integration;
+using Integration.Shopify.Products;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Serilog;
 using Web.Api;
@@ -39,13 +40,6 @@ app.MapHealthChecks("_health", new HealthCheckOptions
     ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
 });
 
-app.MapGet("/shopifysync", async (IShopifySyncService syncService) =>
-{
-    await syncService.SynchronizeProducts();
-    
-    return Results.Ok();
-});
-
 app.UseSerilogRequestLogging();
 
-app.Run();
+await app.RunAsync();

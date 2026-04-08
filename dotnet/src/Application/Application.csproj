@@ -9,6 +9,9 @@
     <ItemGroup>
       <PackageReference Include="AWS.Messaging" />
       <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+      <PackageReference Include="Quartz" />
+      <PackageReference Include="Quartz.Extensions.Hosting" />
+      <PackageReference Include="Quartz.Extensions.DependencyInjection" />
     </ItemGroup>
 
     <ItemGroup>

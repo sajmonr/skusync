@@ -42,10 +42,10 @@ public class ShopifyProductCreateWebhookHandler(
         await dbContext.ShopifyProductVariants.AddRangeAsync(entities);
         await dbContext.SaveChangesAsync();
 
-        await UpdateEntitiesInShopify(product.AdminGraphqlApiId, entities);
+        await CreateBarcodeAndSkuInShopify(product.AdminGraphqlApiId, entities);
     }
 
-    private async Task UpdateEntitiesInShopify(string productId, IEnumerable<ShopifyProductVariantEntity> entities)
+    private async Task CreateBarcodeAndSkuInShopify(string productId, IEnumerable<ShopifyProductVariantEntity> entities)
     {
         var entitiesToUpdate = entities
             .Select(e => new ShopifyUpdateProductVariant(e.GlobalVariantId, e.Sku, e.Barcode)).ToArray();

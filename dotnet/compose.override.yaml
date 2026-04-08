@@ -1,0 +1,14 @@
+services:
+  web.api:
+    environment:
+      DOTNET_ENVIRONMENT: Development
+      ConnectionStrings__SkuSync: "Host=postgres;Port=5432;Database=skusync;Username=postgres;Password=password;Include Error Detail=true"
+    volumes:
+      - ${HOME}/.microsoft/usersecrets:/home/app/.microsoft/usersecrets:ro
+  
+  postgres:
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password

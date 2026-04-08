@@ -1,0 +1,14 @@
+﻿name: skusync
+services:
+  web.api:
+    build: .
+    depends_on:
+      - postgres
+    
+  postgres:
+    image: postgres:18.3
+    volumes:
+      - skusync-data:/var/lib/postgresql
+
+volumes:
+  skusync-data:
