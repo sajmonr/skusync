@@ -38,6 +38,7 @@ public static class DependencyInjection
             {
                 quartz.AddScheduledJob<ShopifySyncJob>(ShopifySyncJob.Key, scheduledJobsOptions.ShopifyProductSync);
                 quartz.AddScheduledJob<ProductEventProcessorJob>(ProductEventProcessorJob.Key, scheduledJobsOptions.ProductEventProcessor);
+                quartz.AddScheduledJob<ProductDeduplicationJob>(ProductDeduplicationJob.Key, scheduledJobsOptions.ProductDeduplication);
             });
 
             builder.Services.AddQuartzHostedService(options =>

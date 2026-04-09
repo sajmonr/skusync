@@ -18,29 +18,10 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="2473acc7-8b17-4e30-b45b-750aea428ada" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.github/dependabot.yml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.github/workflows/build.yml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/.idea.CleanArchitecture/.idea/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/../.idea/.idea.CleanArchitecture/.idea/.gitignore" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/.idea.CleanArchitecture/.idea/.name" beforeDir="false" afterPath="$PROJECT_DIR$/../.idea/.idea.CleanArchitecture/.idea/.name" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/.idea.CleanArchitecture/.idea/encodings.xml" beforeDir="false" afterPath="$PROJECT_DIR$/../.idea/.idea.CleanArchitecture/.idea/encodings.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/.idea.CleanArchitecture/.idea/indexLayout.xml" beforeDir="false" afterPath="$PROJECT_DIR$/../.idea/.idea.CleanArchitecture/.idea/indexLayout.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/.idea.CleanArchitecture/.idea/material_theme_project_new.xml" beforeDir="false" afterPath="$PROJECT_DIR$/../.idea/.idea.CleanArchitecture/.idea/material_theme_project_new.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/.idea.CleanArchitecture/.idea/vcs.xml" beforeDir="false" afterPath="$PROJECT_DIR$/../.idea/.idea.CleanArchitecture/.idea/vcs.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/.idea.SkuSync/.idea/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/../.idea/.idea.SkuSync/.idea/.gitignore" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/.idea.SkuSync/.idea/.name" beforeDir="false" afterPath="$PROJECT_DIR$/../.idea/.idea.SkuSync/.idea/.name" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/.idea.SkuSync/.idea/encodings.xml" beforeDir="false" afterPath="$PROJECT_DIR$/../.idea/.idea.SkuSync/.idea/encodings.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/.idea.SkuSync/.idea/indexLayout.xml" beforeDir="false" afterPath="$PROJECT_DIR$/../.idea/.idea.SkuSync/.idea/indexLayout.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/.idea.SkuSync/.idea/material_theme_project_new.xml" beforeDir="false" afterPath="$PROJECT_DIR$/../.idea/.idea.SkuSync/.idea/material_theme_project_new.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/.idea.SkuSync/.idea/vcs.xml" beforeDir="false" afterPath="$PROJECT_DIR$/../.idea/.idea.SkuSync/.idea/vcs.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/Application/DependencyInjection.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/DependencyInjection.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Application/Jobs/ShopifySyncJob.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/Jobs/ShopifySyncJob.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Application/Shopify/IShopifyService.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/Products/Services/IProductsService.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Application/Shopify/ProductDeduplicationResult.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/Products/Services/ProductDeduplicationResult.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Application/Shopify/ProductImportResult.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/Products/Services/ProductImportResult.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Application/Shopify/ShopifyService.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/Products/Services/ProductsService.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Web.Api/Program.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Web.Api/Program.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/test/Tests.Application/Jobs/ShopifySyncJobTests.cs" beforeDir="false" afterPath="$PROJECT_DIR$/test/Tests.Application/Jobs/ShopifySyncJobTests.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/test/Tests.Application/Shopify/ShopifyServiceTests.cs" beforeDir="false" afterPath="$PROJECT_DIR$/test/Tests.Application/Shopify/ProductsServiceTests.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Application/Jobs/ScheduledJobsOptions.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/Jobs/ScheduledJobsOptions.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Application/Products/Jobs/ProductEventProcessorJob.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/Products/Jobs/ProductEventProcessorJob.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Web.Api/appsettings.Development.json" beforeDir="false" afterPath="$PROJECT_DIR$/src/Web.Api/appsettings.Development.json" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -292,7 +273,7 @@
       <workItem from="1775415061904" duration="20677000" />
       <workItem from="1775519736341" duration="4881000" />
       <workItem from="1775677835638" duration="17932000" />
-      <workItem from="1775775041942" duration="445000" />
+      <workItem from="1775775041942" duration="1773000" />
     </task>
     <servers />
   </component>

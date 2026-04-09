@@ -26,7 +26,7 @@ public class ProductEventProcessorJob(
     /// The stable Quartz job key used to identify and reference this job when registering
     /// triggers or querying the scheduler.
     /// </summary>
-    public static readonly JobKey Key = new(nameof(ProductEventProcessorJob), "product-events");
+    public static readonly JobKey Key = new(nameof(ProductEventProcessorJob), "product");
 
     /// <summary>
     /// Drains all pending product change events and processes the resulting batch.
