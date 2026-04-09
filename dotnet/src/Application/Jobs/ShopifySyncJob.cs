@@ -39,9 +39,15 @@ public class ShopifySyncJob(
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         try
         {
-            await shopifyService.ImportProducts();
+            var importResult = await shopifyService.ImportProducts();
             stopwatch.Stop();
 
+            if (!importResult.IsSuccess)
+            {
+                logger.LogError("Shopify product import failed with error: {ErrorMessage}", importResult.Error);
+                return;
+            }
+            
             logger.LogInformation("ShopifySyncJob completed successfully.");
             logger.LogDebug(
                 "Job finished in {ElapsedMs}ms. Next scheduled fire time: {NextFireTime}.",
