@@ -37,6 +37,7 @@ public class ShopifySyncJobTests
     [Fact]
     public async Task Execute_ShouldLogInformation_WhenJobCompletesSuccessfully()
     {
+        _shopifyService.ImportProducts().Returns(ProductImportResult.Success(0, 0));
         var sut = CreateSut();
 
         await sut.Execute(_context);

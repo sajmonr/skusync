@@ -15,4 +15,14 @@ public interface IShopifyService
     /// or an error message in the case of failure.
     /// </returns>
     Task<ProductImportResult> ImportProducts();
+
+    /// <summary>
+    /// Scans the local database for product variants that share a non-unique SKU or barcode with at least one
+    /// other variant and overwrites the duplicated fields with the variant's own numeric Shopify variant ID.
+    /// </summary>
+    /// <returns>
+    /// A <see cref="ProductDeduplicationResult"/> containing whether the operation succeeded, the numeric variant
+    /// IDs that were modified, or an error message on failure.
+    /// </returns>
+    Task<ProductDeduplicationResult> DeduplicateProducts();
 }

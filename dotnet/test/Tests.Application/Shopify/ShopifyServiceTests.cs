@@ -430,22 +430,208 @@ public class ShopifyServiceTests : IDisposable
         debugLogs.Length.ShouldBeGreaterThan(0);
     }
 
+    [Fact]
+    public async Task DeduplicateProducts_ShouldReturnSuccessWithEmptyArray_WhenNoDuplicatesExist()
+    {
+        SeedVariant("gid://shopify/ProductVariant/100", sku: "SKU-A", barcode: "BAR-A", variantId: 100);
+        SeedVariant("gid://shopify/ProductVariant/200", sku: "SKU-B", barcode: "BAR-B", variantId: 200);
+        await _dbContext.SaveChangesAsync();
+
+        var sut = CreateSut();
+
+        var result = await sut.DeduplicateProducts();
+
+        result.IsSuccess.ShouldBeTrue();
+        result.VariantIds.ShouldBeEmpty();
+        result.Error.ShouldBe("");
+    }
+
+    [Fact]
+    public async Task DeduplicateProducts_ShouldReturnAffectedIds_WhenDuplicateSkuFound()
+    {
+        SeedVariant("gid://shopify/ProductVariant/100", sku: "DUPE-SKU", barcode: "BAR-A", variantId: 100);
+        SeedVariant("gid://shopify/ProductVariant/200", sku: "DUPE-SKU", barcode: "BAR-B", variantId: 200);
+        await _dbContext.SaveChangesAsync();
+
+        var sut = CreateSut();
+
+        var result = await sut.DeduplicateProducts();
+
+        result.IsSuccess.ShouldBeTrue();
+        result.VariantIds.Length.ShouldBe(2);
+        result.VariantIds.ShouldContain(100L);
+        result.VariantIds.ShouldContain(200L);
+    }
+
+    [Fact]
+    public async Task DeduplicateProducts_ShouldReturnAffectedIds_WhenDuplicateBarcodeFound()
+    {
+        SeedVariant("gid://shopify/ProductVariant/100", sku: "SKU-A", barcode: "DUPE-BAR", variantId: 100);
+        SeedVariant("gid://shopify/ProductVariant/200", sku: "SKU-B", barcode: "DUPE-BAR", variantId: 200);
+        await _dbContext.SaveChangesAsync();
+
+        var sut = CreateSut();
+
+        var result = await sut.DeduplicateProducts();
+
+        result.IsSuccess.ShouldBeTrue();
+        result.VariantIds.Length.ShouldBe(2);
+        result.VariantIds.ShouldContain(100L);
+        result.VariantIds.ShouldContain(200L);
+    }
+
+    [Fact]
+    public async Task DeduplicateProducts_ShouldReturnAllAffectedIds_WhenBothSkuAndBarcodeHaveSeparateDuplicates()
+    {
+        SeedVariant("gid://shopify/ProductVariant/100", sku: "DUPE-SKU", barcode: "BAR-A", variantId: 100);
+        SeedVariant("gid://shopify/ProductVariant/200", sku: "DUPE-SKU", barcode: "BAR-B", variantId: 200);
+        SeedVariant("gid://shopify/ProductVariant/300", sku: "SKU-C", barcode: "DUPE-BAR", variantId: 300);
+        SeedVariant("gid://shopify/ProductVariant/400", sku: "SKU-D", barcode: "DUPE-BAR", variantId: 400);
+        await _dbContext.SaveChangesAsync();
+
+        var sut = CreateSut();
+
+        var result = await sut.DeduplicateProducts();
+
+        result.IsSuccess.ShouldBeTrue();
+        result.VariantIds.Length.ShouldBe(4);
+        result.VariantIds.ShouldContain(100L);
+        result.VariantIds.ShouldContain(200L);
+        result.VariantIds.ShouldContain(300L);
+        result.VariantIds.ShouldContain(400L);
+    }
+
+    [Fact]
+    public async Task DeduplicateProducts_ShouldSetSkuToVariantId_WhenSkuIsDuplicated()
+    {
+        SeedVariant("gid://shopify/ProductVariant/100", sku: "DUPE-SKU", barcode: "BAR-A", variantId: 100);
+        SeedVariant("gid://shopify/ProductVariant/200", sku: "DUPE-SKU", barcode: "BAR-B", variantId: 200);
+        await _dbContext.SaveChangesAsync();
+
+        var sut = CreateSut();
+
+        await sut.DeduplicateProducts();
+
+        var variants = await _dbContext.Set<ShopifyProductVariantEntity>().ToListAsync();
+        variants.Single(v => v.VariantId == 100).Sku.ShouldBe("100");
+        variants.Single(v => v.VariantId == 200).Sku.ShouldBe("200");
+    }
+
+    [Fact]
+    public async Task DeduplicateProducts_ShouldSetBarcodeToVariantId_WhenBarcodeIsDuplicated()
+    {
+        SeedVariant("gid://shopify/ProductVariant/100", sku: "SKU-A", barcode: "DUPE-BAR", variantId: 100);
+        SeedVariant("gid://shopify/ProductVariant/200", sku: "SKU-B", barcode: "DUPE-BAR", variantId: 200);
+        await _dbContext.SaveChangesAsync();
+
+        var sut = CreateSut();
+
+        await sut.DeduplicateProducts();
+
+        var variants = await _dbContext.Set<ShopifyProductVariantEntity>().ToListAsync();
+        variants.Single(v => v.VariantId == 100).Barcode.ShouldBe("100");
+        variants.Single(v => v.VariantId == 200).Barcode.ShouldBe("200");
+    }
+
+    [Fact]
+    public async Task DeduplicateProducts_ShouldNotModifyUniqueVariants_WhenOnlySomeVariantsAreDuplicated()
+    {
+        SeedVariant("gid://shopify/ProductVariant/100", sku: "DUPE-SKU", barcode: "BAR-A", variantId: 100);
+        SeedVariant("gid://shopify/ProductVariant/200", sku: "DUPE-SKU", barcode: "BAR-B", variantId: 200);
+        SeedVariant("gid://shopify/ProductVariant/300", sku: "UNIQUE-SKU", barcode: "UNIQUE-BAR", variantId: 300);
+        await _dbContext.SaveChangesAsync();
+
+        var sut = CreateSut();
+
+        var result = await sut.DeduplicateProducts();
+
+        result.VariantIds.ShouldNotContain(300L);
+        var uniqueVariant = await _dbContext.Set<ShopifyProductVariantEntity>()
+            .SingleAsync(v => v.VariantId == 300);
+        uniqueVariant.Sku.ShouldBe("UNIQUE-SKU");
+        uniqueVariant.Barcode.ShouldBe("UNIQUE-BAR");
+    }
+
+    [Fact]
+    public async Task DeduplicateProducts_ShouldIgnoreEmptySkus_WhenCheckingForDuplicates()
+    {
+        SeedVariant("gid://shopify/ProductVariant/100", sku: "", barcode: "BAR-A", variantId: 100);
+        SeedVariant("gid://shopify/ProductVariant/200", sku: "", barcode: "BAR-B", variantId: 200);
+        await _dbContext.SaveChangesAsync();
+
+        var sut = CreateSut();
+
+        var result = await sut.DeduplicateProducts();
+
+        result.IsSuccess.ShouldBeTrue();
+        result.VariantIds.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task DeduplicateProducts_ShouldIgnoreEmptyBarcodes_WhenCheckingForDuplicates()
+    {
+        SeedVariant("gid://shopify/ProductVariant/100", sku: "SKU-A", barcode: "", variantId: 100);
+        SeedVariant("gid://shopify/ProductVariant/200", sku: "SKU-B", barcode: "", variantId: 200);
+        await _dbContext.SaveChangesAsync();
+
+        var sut = CreateSut();
+
+        var result = await sut.DeduplicateProducts();
+
+        result.IsSuccess.ShouldBeTrue();
+        result.VariantIds.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task DeduplicateProducts_ShouldSetUpdatedOnUtc_WhenVariantIsDeduplicated()
+    {
+        var before = DateTime.UtcNow.AddSeconds(-1);
+        SeedVariant("gid://shopify/ProductVariant/100", sku: "DUPE-SKU", barcode: "BAR-A", variantId: 100);
+        SeedVariant("gid://shopify/ProductVariant/200", sku: "DUPE-SKU", barcode: "BAR-B", variantId: 200);
+        await _dbContext.SaveChangesAsync();
+
+        var sut = CreateSut();
+
+        await sut.DeduplicateProducts();
+
+        var variants = await _dbContext.Set<ShopifyProductVariantEntity>().ToListAsync();
+        variants.Single(v => v.VariantId == 100).UpdatedOnUtc.ShouldBeGreaterThan(before);
+        variants.Single(v => v.VariantId == 200).UpdatedOnUtc.ShouldBeGreaterThan(before);
+    }
+
+    [Fact]
+    public async Task DeduplicateProducts_ShouldLogInformation_WhenDeduplicationCompletes()
+    {
+        SeedVariant("gid://shopify/ProductVariant/100", sku: "DUPE-SKU", barcode: "BAR-A", variantId: 100);
+        SeedVariant("gid://shopify/ProductVariant/200", sku: "DUPE-SKU", barcode: "BAR-B", variantId: 200);
+        await _dbContext.SaveChangesAsync();
+
+        var sut = CreateSut();
+
+        await sut.DeduplicateProducts();
+
+        var infoLogs = _logger.Entries.Where(e => e.LogLevel == LogLevel.Information).ToArray();
+        infoLogs.Length.ShouldBeGreaterThan(0);
+    }
+
     private ShopifyProductVariantEntity SeedVariant(
         string globalVariantId,
         string globalProductId = "gid://shopify/Product/100",
         string title = "Variant",
         string variantTitle = "",
         string sku = "SKU",
-        string barcode = "BAR")
+        string barcode = "BAR",
+        long variantId = 200,
+        long productId = 100)
     {
         var fullTitle = string.IsNullOrWhiteSpace(variantTitle) ? title : $"{title} ({variantTitle})";
         var entity = new ShopifyProductVariantEntity
         {
             ShopifyProductVariantId = Guid.NewGuid(),
             GlobalProductId = globalProductId,
-            ProductId = 100,
+            ProductId = productId,
             GlobalVariantId = globalVariantId,
-            VariantId = 200,
+            VariantId = variantId,
             ProductTitle = title,
             VariantTitle = variantTitle,
             FullTitle = fullTitle,

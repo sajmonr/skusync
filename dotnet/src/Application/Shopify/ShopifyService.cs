@@ -90,6 +90,73 @@ public class ShopifyService(
         return ProductImportResult.Success(created, updated);
     }
 
+    public async Task<ProductDeduplicationResult> DeduplicateProducts()
+    {
+        List<ShopifyProductVariantEntity> variants;
+        try
+        {
+            variants = await dbContext.ShopifyProductVariants.ToListAsync();
+        }
+        catch (Exception exception)
+        {
+            logger.LogError(exception, "An exception occurred while fetching product variants from the database.");
+            return ProductDeduplicationResult.Failure(
+                "Could not deduplicate products because the product variants could not be fetched from the database.");
+        }
+
+        logger.LogDebug("Fetched {Count} product variant(s) for deduplication analysis.", variants.Count);
+
+        var duplicateBySkuIds = variants
+            .GroupBy(v => v.Sku)
+            .Where(g => g.Count() > 1)
+            .SelectMany(g => g.Select(v => v.VariantId))
+            .ToHashSet();
+
+        logger.LogDebug("Found {Count} variant(s) with a duplicate SKU.", duplicateBySkuIds.Count);
+
+        var duplicateByBarcodeIds = variants
+            .GroupBy(v => v.Barcode)
+            .Where(g => g.Count() > 1)
+            .SelectMany(g => g.Select(v => v.VariantId))
+            .ToHashSet();
+
+        logger.LogDebug("Found {Count} variant(s) with a duplicate barcode.", duplicateByBarcodeIds.Count);
+
+        var affectedVariantIds = duplicateBySkuIds.Union(duplicateByBarcodeIds).ToHashSet();
+
+        if (affectedVariantIds.Count == 0)
+        {
+            logger.LogInformation("No duplicate SKUs or barcodes found. Deduplication complete.");
+            return ProductDeduplicationResult.Success([]);
+        }
+
+        logger.LogInformation("Deduplicating {Count} variant(s).", affectedVariantIds.Count);
+
+        foreach (var variant in variants.Where(v => affectedVariantIds.Contains(v.VariantId)))
+        {
+            logger.LogDebug("Deduplicating variant {VariantId}: overwriting SKU and barcode with variant ID.",
+                variant.VariantId);
+            variant.Sku = variant.VariantId.ToString();
+            variant.Barcode = variant.VariantId.ToString();
+            variant.UpdatedOnUtc = DateTime.UtcNow;
+        }
+
+        try
+        {
+            await dbContext.SaveChangesAsync();
+        }
+        catch (Exception exception)
+        {
+            logger.LogError(exception, "An exception occurred while saving deduplicated product variants to the database.");
+            return ProductDeduplicationResult.Failure(
+                "Could not deduplicate products because the changes could not be saved to the database.");
+        }
+
+        logger.LogInformation("Deduplication complete. Modified {Count} variant(s).", affectedVariantIds.Count);
+
+        return ProductDeduplicationResult.Success(affectedVariantIds.ToArray());
+    }
+
     private static bool UpdateVariant(ShopifyProductVariantEntity existing, ShopifyProductVariant shopifyVariant)
     {
         var changed = false;
