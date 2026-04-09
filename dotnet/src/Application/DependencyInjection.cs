@@ -1,6 +1,6 @@
 ﻿using Application.Events;
 using Application.Jobs;
-using Application.Queue.ShopifyProductUpdate;
+using Application.Products.Webhook;
 using Application.Shopify;
 using Integration.Aws.Sqs;
 using Microsoft.Extensions.DependencyInjection;
@@ -23,7 +23,7 @@ public static class DependencyInjection
         public T AddApplication()
         {
             // Singleton accumulator shared by all producers (import service + webhook handlers).
-            builder.Services.AddSingleton<IProductEventAccumulator, ProductEventAccumulator>();
+            builder.Services.AddSingleton(typeof(IEventAccumulator<>), typeof(EventAccumulator<>));
 
             builder.Services.AddTransient<IShopifyService, ShopifyService>();
 

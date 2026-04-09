@@ -1,5 +1,6 @@
 using Application.Events;
 using Application.Jobs;
+using Application.Products.Events;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Quartz;
@@ -9,7 +10,7 @@ namespace Tests.Application.Jobs;
 
 public class ProductEventProcessorJobTests
 {
-    private readonly IProductEventAccumulator _eventAccumulator = Substitute.For<IProductEventAccumulator>();
+    private readonly IEventAccumulator<ProductChangedEvent> _eventAccumulator = Substitute.For<IEventAccumulator<ProductChangedEvent>>();
     private readonly IJobExecutionContext _context = Substitute.For<IJobExecutionContext>();
     private readonly TestLogger<ProductEventProcessorJob> _logger = new();
 

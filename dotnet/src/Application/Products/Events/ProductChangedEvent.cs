@@ -1,4 +1,4 @@
-namespace Application.Events;
+namespace Application.Products.Events;
 
 /// <summary>
 /// Indicates whether a product variant was newly added to the local database
@@ -15,7 +15,7 @@ public enum ProductChangeType
 
 /// <summary>
 /// A lightweight, in-process event emitted whenever a product variant is created or updated
-/// in the local database. Instances are accumulated in <see cref="IProductEventAccumulator"/>
+/// in the local database. Instances are accumulated in <see cref="IEventAccumulator"/>
 /// and processed in batches by <c>ProductEventProcessorJob</c>.
 /// </summary>
 /// <param name="VariantId">The numeric Shopify variant ID of the affected variant.</param>

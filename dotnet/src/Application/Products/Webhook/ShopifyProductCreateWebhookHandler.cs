@@ -1,11 +1,12 @@
 using Application.Events;
+using Application.Products.Events;
 using Infrastructure.Database;
 using Infrastructure.Database.Entities;
 using Integration.Aws.Sqs;
 using Integration.Shopify.Products;
 using Microsoft.Extensions.Logging;
 
-namespace Application.Queue.ShopifyProductUpdate;
+namespace Application.Products.Webhook;
 
 /// <summary>
 /// Handles the <c>products/create</c> Shopify webhook topic. When a new product is created
@@ -16,7 +17,7 @@ public class ShopifyProductCreateWebhookHandler(
     ApplicationDbContext dbContext,
     IShopifyProductService productService,
     ILogger<ShopifyProductUpdateWebhookHandler> logger,
-    IProductEventAccumulator eventAccumulator)
+    IEventAccumulator<ProductChangedEvent> eventAccumulator)
     : IShopifyWebhookHandler
 {
     /// <inheritdoc/>

@@ -1,4 +1,5 @@
 using Application.Events;
+using Application.Products.Events;
 using Application.Shopify;
 using Infrastructure.Database;
 using Infrastructure.Database.Entities;
@@ -14,7 +15,7 @@ namespace Tests.Application.Shopify;
 public class ShopifyServiceTests : IDisposable
 {
     private readonly IShopifyProductService _shopifyProductService = Substitute.For<IShopifyProductService>();
-    private readonly IProductEventAccumulator _eventAccumulator = Substitute.For<IProductEventAccumulator>();
+    private readonly IEventAccumulator<ProductChangedEvent> _eventAccumulator = Substitute.For<IEventAccumulator<ProductChangedEvent>>();
     private readonly ApplicationDbContext _dbContext;
     private readonly TestLogger<ShopifyService> _logger = new();
 

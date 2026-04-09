@@ -1,4 +1,5 @@
 using Application.Events;
+using Application.Products.Events;
 using Infrastructure.Database;
 using Infrastructure.Database.Entities;
 using Integration.Shopify.Products;
@@ -11,7 +12,7 @@ public class ShopifyService(
     IShopifyProductService shopifyProductService,
     ApplicationDbContext dbContext,
     ILogger<ShopifyService> logger,
-    IProductEventAccumulator eventAccumulator) : IShopifyService
+    IEventAccumulator<ProductChangedEvent> eventAccumulator) : IShopifyService
 {
     public async Task<ProductImportResult> ImportProducts()
     {

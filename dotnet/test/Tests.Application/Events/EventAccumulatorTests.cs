@@ -1,11 +1,12 @@
 using Application.Events;
+using Application.Products.Events;
 using Shouldly;
 
 namespace Tests.Application.Events;
 
-public class ProductEventAccumulatorTests
+public class EventAccumulatorTests
 {
-    private readonly ProductEventAccumulator _sut = new();
+    private readonly EventAccumulator<ProductChangedEvent> _sut = new();
 
     // -------------------------------------------------------------------------
     // Enqueue

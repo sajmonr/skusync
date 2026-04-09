@@ -1,5 +1,6 @@
 using Application.Events;
-using Application.Queue.ShopifyProductUpdate;
+using Application.Products.Events;
+using Application.Products.Webhook;
 using Infrastructure.Database;
 using Infrastructure.Database.Entities;
 using Integration.Aws.Sqs;
@@ -14,7 +15,7 @@ namespace Tests.Application.Queue;
 public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
 {
     private readonly IShopifyProductService _productService = Substitute.For<IShopifyProductService>();
-    private readonly IProductEventAccumulator _eventAccumulator = Substitute.For<IProductEventAccumulator>();
+    private readonly IEventAccumulator<ProductChangedEvent> _eventAccumulator = Substitute.For<IEventAccumulator<ProductChangedEvent>>();
     private readonly ApplicationDbContext _dbContext;
     private readonly TestLogger<ShopifyProductUpdateWebhookHandler> _logger = new();
 

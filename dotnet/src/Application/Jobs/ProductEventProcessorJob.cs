@@ -1,4 +1,5 @@
 using Application.Events;
+using Application.Products.Events;
 using Microsoft.Extensions.Logging;
 using Quartz;
 
@@ -7,7 +8,7 @@ namespace Application.Jobs;
 /// <summary>
 /// Quartz.NET job that runs every N minutes (configurable via <c>ScheduledJobs:ProductEventProcessor</c>),
 /// drains all accumulated <see cref="ProductChangedEvent"/> instances from the
-/// <see cref="IProductEventAccumulator"/> singleton, and processes them as a batch.
+/// <see cref="IEventAccumulator"/> singleton, and processes them as a batch.
 /// </summary>
 /// <remarks>
 /// The <see cref="DisallowConcurrentExecutionAttribute"/> ensures at most one instance runs at a
@@ -16,7 +17,7 @@ namespace Application.Jobs;
 /// </remarks>
 [DisallowConcurrentExecution]
 public class ProductEventProcessorJob(
-    IProductEventAccumulator eventAccumulator,
+    IEventAccumulator<ProductChangedEvent> eventAccumulator,
     ILogger<ProductEventProcessorJob> logger) : IJob
 {
     /// <summary>
