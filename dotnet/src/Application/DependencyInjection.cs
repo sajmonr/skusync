@@ -7,6 +7,7 @@ using Integration.Aws.Sqs;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Quartz;
+using Quartz.Impl.Matchers;
 using SharedKernel.Options;
 
 namespace Application;
@@ -34,8 +35,14 @@ public static class DependencyInjection
             builder.AddOptionsFromConfiguration<ScheduledJobsOptions>(ScheduledJobsOptions.SectionKey);
             var scheduledJobsOptions = builder.GetRequiredConfigValue<ScheduledJobsOptions>(ScheduledJobsOptions.SectionKey);
 
+            builder.Services.AddSingleton<MutexGroupRegistry>();
+            builder.Services.AddSingleton<MutexGroupListener>();
+
             builder.Services.AddQuartz(quartz =>
             {
+                quartz.AddTriggerListener<MutexGroupListener>(GroupMatcher<TriggerKey>.AnyGroup());
+                quartz.AddJobListener<MutexGroupListener>(GroupMatcher<JobKey>.AnyGroup());
+
                 quartz.AddScheduledJob<ShopifySyncJob>(ShopifySyncJob.Key, scheduledJobsOptions.ShopifyProductSync);
                 quartz.AddScheduledJob<ProductEventProcessorJob>(ProductEventProcessorJob.Key, scheduledJobsOptions.ProductEventProcessor);
                 quartz.AddScheduledJob<ProductDeduplicationJob>(ProductDeduplicationJob.Key, scheduledJobsOptions.ProductDeduplication);

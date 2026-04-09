@@ -11,6 +11,7 @@ namespace Application.Jobs;
 /// than the configured cron interval.
 /// </summary>
 [DisallowConcurrentExecution]
+[MutexGroup("shopify-sync")]
 public class ShopifySyncJob(
     IProductsService productsService,
     ILogger<ShopifySyncJob> logger) : IJob

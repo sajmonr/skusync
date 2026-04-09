@@ -1,3 +1,4 @@
+using Application.Jobs;
 using Application.Products.Services;
 using Infrastructure.Database;
 using Integration.Shopify.Products;
@@ -8,6 +9,7 @@ using Quartz;
 namespace Application.Products.Jobs;
 
 [DisallowConcurrentExecution]
+[MutexGroup("shopify-sync")]
 public class ProductDeduplicationJob(
     IProductsService productsService,
     IShopifyProductService shopifyProductService,
