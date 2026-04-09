@@ -150,6 +150,38 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
             Arg.Is<IEnumerable<ShopifyUpdateProductVariant>>(v => v.Any()));
     }
 
+    [Fact]
+    public async Task Handle_ShouldNotCallUpdateVariants_WhenBarcodeIsEmptyInDatabase()
+    {
+        SeedVariant(100, 200, sku: "SKU-A", barcode: "");
+        await _dbContext.SaveChangesAsync();
+
+        var product = CreateProduct(100, "T-Shirt",
+            CreateVariant(200, "Large", sku: "SKU-A", barcode: "NEW-BAR"));
+
+        await CreateSut().Handle(product);
+
+        await _productService.Received(1).UpdateVariants(
+            Arg.Any<string>(),
+            Arg.Is<IEnumerable<ShopifyUpdateProductVariant>>(v => !v.Any()));
+    }
+
+    [Fact]
+    public async Task Handle_ShouldNotCallUpdateVariants_WhenSkuIsEmptyInDatabase()
+    {
+        SeedVariant(100, 200, sku: "", barcode: "BAR-A");
+        await _dbContext.SaveChangesAsync();
+
+        var product = CreateProduct(100, "T-Shirt",
+            CreateVariant(200, "Large", sku: "NEW-SKU", barcode: "BAR-A"));
+
+        await CreateSut().Handle(product);
+
+        await _productService.Received(1).UpdateVariants(
+            Arg.Any<string>(),
+            Arg.Is<IEnumerable<ShopifyUpdateProductVariant>>(v => !v.Any()));
+    }
+
     // -------------------------------------------------------------------------
     // No Shopify sync needed
     // -------------------------------------------------------------------------

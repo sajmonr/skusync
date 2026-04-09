@@ -101,7 +101,7 @@ public class ShopifyProductUpdateWebhookHandler(
     private bool RequiresUpdateInShopify(ShopifyProductVariantEntity entity, SqsShopEventProduct product,
         SqsShopEventVariant variant)
     {
-        if (entity.Barcode != variant.Barcode)
+        if (!string.IsNullOrEmpty(entity.Barcode) && entity.Barcode != variant.Barcode)
         {
             logger.LogDebug("Barcode for variant {VariantId} does not match in Shopify. Updating it.",
                 variant.Id);
@@ -109,7 +109,7 @@ public class ShopifyProductUpdateWebhookHandler(
             return true;
         }
 
-        if (entity.Sku != variant.Sku)
+        if (!string.IsNullOrEmpty(entity.Sku) && entity.Sku != variant.Sku)
         {
             logger.LogDebug("SKU for variant {VariantId} does not match in Shopify. Updating it.",
                 variant.Id);

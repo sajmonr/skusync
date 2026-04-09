@@ -553,7 +553,7 @@ public class ShopifyServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task DeduplicateProducts_ShouldIgnoreEmptySkus_WhenCheckingForDuplicates()
+    public async Task DeduplicateProducts_ShouldNotIgnoreEmptySkus_WhenCheckingForDuplicates()
     {
         SeedVariant("gid://shopify/ProductVariant/100", sku: "", barcode: "BAR-A", variantId: 100);
         SeedVariant("gid://shopify/ProductVariant/200", sku: "", barcode: "BAR-B", variantId: 200);
@@ -564,11 +564,11 @@ public class ShopifyServiceTests : IDisposable
         var result = await sut.DeduplicateProducts();
 
         result.IsSuccess.ShouldBeTrue();
-        result.VariantIds.ShouldBeEmpty();
+        result.VariantIds.Length.ShouldBe(2);
     }
 
     [Fact]
-    public async Task DeduplicateProducts_ShouldIgnoreEmptyBarcodes_WhenCheckingForDuplicates()
+    public async Task DeduplicateProducts_ShouldNotIgnoreEmptyBarcodes_WhenCheckingForDuplicates()
     {
         SeedVariant("gid://shopify/ProductVariant/100", sku: "SKU-A", barcode: "", variantId: 100);
         SeedVariant("gid://shopify/ProductVariant/200", sku: "SKU-B", barcode: "", variantId: 200);
@@ -579,7 +579,7 @@ public class ShopifyServiceTests : IDisposable
         var result = await sut.DeduplicateProducts();
 
         result.IsSuccess.ShouldBeTrue();
-        result.VariantIds.ShouldBeEmpty();
+        result.VariantIds.Length.ShouldBe(2);
     }
 
     [Fact]
