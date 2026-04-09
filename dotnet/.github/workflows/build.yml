@@ -22,13 +22,13 @@ jobs:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: Restore
-        run: dotnet restore CleanArchitecture.slnx
+        run: dotnet restore SkuSync.slnx
 
       - name: Build
-        run: dotnet build CleanArchitecture.slnx --configuration Release --no-restore
+        run: dotnet build SkuSync.slnx --configuration Release --no-restore
 
       - name: Test
-        run: dotnet test CleanArchitecture.slnx --configuration Release --no-restore --no-build
+        run: dotnet test SkuSync.slnx --configuration Release --no-restore --no-build
 
       - name: Publish
-        run: dotnet publish CleanArchitecture.slnx --configuration Release --no-restore --no-build
+        run: dotnet publish SkuSync.slnx --configuration Release --no-restore --no-build

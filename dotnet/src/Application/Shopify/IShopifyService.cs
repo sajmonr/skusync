@@ -6,9 +6,13 @@ namespace Application.Shopify;
 public interface IShopifyService
 {
     /// <summary>
-    /// Fetches all product variants from Shopify and upserts them into the local database.
-    /// New variants are inserted; existing variants have their title, SKU, and barcode updated
-    /// where applicable.
+    /// Imports products from Shopify into the local database. This operation ensures synchronization
+    /// between the Shopify store and the application's local data store.
     /// </summary>
-    Task ImportProducts();
+    /// <returns>
+    /// A <see cref="ProductImportResult"/> structure containing the outcome of the import operation.
+    /// This includes whether the operation was successful, the number of products created and updated,
+    /// or an error message in the case of failure.
+    /// </returns>
+    Task<ProductImportResult> ImportProducts();
 }

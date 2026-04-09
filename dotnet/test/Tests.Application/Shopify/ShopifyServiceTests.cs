@@ -312,20 +312,100 @@ public class ShopifyServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task ImportProducts_ShouldLogErrorAndRethrow_WhenShopifyCallFails()
+    public async Task ImportProducts_ShouldReturnFailureResult_WhenShopifyCallFails()
     {
         var exception = new InvalidOperationException("Shopify unavailable");
         _shopifyProductService.GetProducts().ThrowsAsync(exception);
 
         var sut = CreateSut();
 
-        var thrown = await Should.ThrowAsync<InvalidOperationException>(() => sut.ImportProducts());
+        var result = await sut.ImportProducts();
 
-        thrown.ShouldBeSameAs(exception);
+        result.IsSuccess.ShouldBeFalse();
+        result.Error.ShouldNotBeNullOrWhiteSpace();
 
         var errorLogs = _logger.Entries.Where(e => e.LogLevel == LogLevel.Error).ToArray();
         errorLogs.Length.ShouldBe(1);
         errorLogs[0].Exception.ShouldBeSameAs(exception);
+    }
+
+    [Fact]
+    public async Task ImportProducts_ShouldReturnSuccessWithCreatedCount_WhenNewVariantsImported()
+    {
+        _shopifyProductService.GetProducts().Returns(
+        [
+            new ShopifyProductVariant("gid://shopify/Product/1", "gid://shopify/ProductVariant/1", "Shirt", "", "SKU-1", "BAR-1"),
+            new ShopifyProductVariant("gid://shopify/Product/2", "gid://shopify/ProductVariant/2", "Pants", "", "SKU-2", "BAR-2")
+        ]);
+
+        var sut = CreateSut();
+
+        var result = await sut.ImportProducts();
+
+        result.IsSuccess.ShouldBeTrue();
+        result.Created.ShouldBe(2);
+        result.Updated.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task ImportProducts_ShouldReturnSuccessWithUpdatedCount_WhenExistingVariantsChanged()
+    {
+        SeedVariant("gid://shopify/ProductVariant/200", title: "Old Title", sku: "SKU-1", barcode: "BAR-1");
+        await _dbContext.SaveChangesAsync();
+
+        _shopifyProductService.GetProducts().Returns(
+        [
+            new ShopifyProductVariant("gid://shopify/Product/100", "gid://shopify/ProductVariant/200", "New Title", "", "SKU-1", "BAR-1")
+        ]);
+
+        var sut = CreateSut();
+
+        var result = await sut.ImportProducts();
+
+        result.IsSuccess.ShouldBeTrue();
+        result.Created.ShouldBe(0);
+        result.Updated.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task ImportProducts_ShouldReturnSuccessWithZeroCounts_WhenNoChanges()
+    {
+        SeedVariant("gid://shopify/ProductVariant/200", title: "T-Shirt", variantTitle: "Large", sku: "SKU-1", barcode: "BAR-1");
+        await _dbContext.SaveChangesAsync();
+
+        _shopifyProductService.GetProducts().Returns(
+        [
+            new ShopifyProductVariant("gid://shopify/Product/100", "gid://shopify/ProductVariant/200", "T-Shirt", "Large", "SKU-1", "BAR-1")
+        ]);
+
+        var sut = CreateSut();
+
+        var result = await sut.ImportProducts();
+
+        result.IsSuccess.ShouldBeTrue();
+        result.Created.ShouldBe(0);
+        result.Updated.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task ImportProducts_ShouldReturnCorrectCounts_WhenMixedCreateAndUpdate()
+    {
+        SeedVariant("gid://shopify/ProductVariant/100", title: "Old Title", sku: "SKU-A", barcode: "BAR-A");
+        await _dbContext.SaveChangesAsync();
+
+        _shopifyProductService.GetProducts().Returns(
+        [
+            new ShopifyProductVariant("gid://shopify/Product/10", "gid://shopify/ProductVariant/100", "New Title", "", "SKU-A", "BAR-A"),
+            new ShopifyProductVariant("gid://shopify/Product/20", "gid://shopify/ProductVariant/200", "Brand New", "", "SKU-B", "BAR-B")
+        ]);
+
+        var sut = CreateSut();
+
+        var result = await sut.ImportProducts();
+
+        result.IsSuccess.ShouldBeTrue();
+        result.Created.ShouldBe(1);
+        result.Updated.ShouldBe(1);
     }
 
     [Fact]

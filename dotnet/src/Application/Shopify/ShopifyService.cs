@@ -11,7 +11,7 @@ public class ShopifyService(
     ApplicationDbContext dbContext,
     ILogger<ShopifyService> logger) : IShopifyService
 {
-    public async Task ImportProducts()
+    public async Task<ProductImportResult> ImportProducts()
     {
         logger.LogDebug("Starting Shopify product synchronization.");
 
@@ -20,10 +20,11 @@ public class ShopifyService(
         {
             shopifyVariants = await shopifyProductService.GetProducts();
         }
-        catch (Exception ex)
+        catch (Exception exception)
         {
-            logger.LogError(ex, "Failed to fetch products from Shopify during synchronization.");
-            throw;
+            logger.LogError(exception, "An exception occurred while fetching products from Shopify.");
+            return ProductImportResult.Failure(
+                "Could not import products from Shopify because the products could not be fetched.");
         }
 
         logger.LogDebug("Fetched {Count} product variants from Shopify.", shopifyVariants.Length);
@@ -45,9 +46,10 @@ public class ShopifyService(
                 {
                     continue;
                 }
-                
+
                 existing.UpdatedOnUtc = DateTime.UtcNow;
-                logger.LogDebug("Updating variant with GlobalVariantId {GlobalVariantId}.", shopifyVariant.GlobalVariantId);
+                logger.LogDebug("Updating variant with GlobalVariantId {GlobalVariantId}.",
+                    shopifyVariant.GlobalVariantId);
                 updated++;
             }
             else
@@ -66,16 +68,28 @@ public class ShopifyService(
                 };
 
                 dbContext.ShopifyProductVariants.Add(newVariant);
-                logger.LogDebug("Creating new variant with GlobalVariantId {GlobalVariantId}.", shopifyVariant.GlobalVariantId);
+                logger.LogDebug("Creating new variant with GlobalVariantId {GlobalVariantId}.",
+                    shopifyVariant.GlobalVariantId);
                 created++;
             }
         }
 
-        await dbContext.SaveChangesAsync();
+        try
+        {
+            await dbContext.SaveChangesAsync();
+        }
+        catch (Exception exception)
+        {
+            logger.LogError(exception, "An exception occurred while saving product variants to the database.");
+            return ProductImportResult.Failure(
+                "Could not import products from Shopify because the product variants could not be saved to the database.");
+        }
 
         logger.LogDebug("Synchronization complete. Created: {Created}, Updated: {Updated}.", created, updated);
+        
+        return ProductImportResult.Success(created, updated);
     }
-    
+
     private static bool UpdateVariant(ShopifyProductVariantEntity existing, ShopifyProductVariant shopifyVariant)
     {
         var changed = false;
@@ -91,20 +105,19 @@ public class ShopifyService(
             existing.VariantTitle = shopifyVariant.VariantTitle;
             changed = true;
         }
-        
-        if(string.IsNullOrWhiteSpace(existing.Sku))
+
+        if (string.IsNullOrWhiteSpace(existing.Sku) && !string.IsNullOrWhiteSpace(shopifyVariant.Sku))
         {
-            existing.Sku = "";
+            existing.Sku = shopifyVariant.Sku;
             changed = true;
         }
-        
-        if(string.IsNullOrWhiteSpace(existing.Barcode))
+
+        if (string.IsNullOrWhiteSpace(existing.Barcode) && !string.IsNullOrWhiteSpace(shopifyVariant.Barcode))
         {
             existing.Barcode = shopifyVariant.Barcode;
             changed = true;
         }
-        
+
         return changed;
     }
-    
 }
