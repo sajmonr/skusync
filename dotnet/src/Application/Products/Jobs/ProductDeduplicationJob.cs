@@ -4,6 +4,7 @@ using Infrastructure.Database;
 using Integration.Shopify.Products;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.FeatureManagement;
 using Quartz;
 
 namespace Application.Products.Jobs;
@@ -14,7 +15,8 @@ public class ProductDeduplicationJob(
     IProductsService productsService,
     IShopifyProductService shopifyProductService,
     ApplicationDbContext dbContext,
-    ILogger<ProductDeduplicationJob> logger) : IJob
+    ILogger<ProductDeduplicationJob> logger,
+    IFeatureManager featureManager) : IJob
 {
     public static readonly JobKey Key = new(nameof(ProductDeduplicationJob), "product");
 
@@ -57,6 +59,15 @@ public class ProductDeduplicationJob(
                 .ToListAsync();
 
             logger.LogDebug("Fetched {Count} affected variant entity(s) from the database.", affectedVariants.Count);
+
+            if (!await featureManager.IsEnabledAsync(FeatureFlags.ShopifyWriteBack))
+            {
+                logger.LogInformation(
+                    "ShopifyWriteBack feature flag is disabled. Skipping Shopify update for {Count} variant(s).",
+                    affectedVariants.Count);
+                stopwatch.Stop();
+                return;
+            }
 
             var variantsByProduct = affectedVariants.GroupBy(v => v.GlobalProductId);
 

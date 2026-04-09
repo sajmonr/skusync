@@ -1,3 +1,4 @@
+using Application;
 using Application.Events;
 using Application.Products.Events;
 using Application.Products.Webhook;
@@ -6,6 +7,7 @@ using Integration.Aws.Sqs;
 using Integration.Shopify.Products;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.FeatureManagement;
 using NSubstitute;
 using Shouldly;
 
@@ -15,6 +17,7 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
 {
     private readonly IShopifyProductService _productService = Substitute.For<IShopifyProductService>();
     private readonly IEventAccumulator<ProductChangedEvent> _eventAccumulator = Substitute.For<IEventAccumulator<ProductChangedEvent>>();
+    private readonly IFeatureManager _featureManager = Substitute.For<IFeatureManager>();
     private readonly ApplicationDbContext _dbContext;
     private readonly TestLogger<ShopifyProductUpdateWebhookHandler> _logger = new();
 
@@ -29,6 +32,8 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
         _productService
             .UpdateVariants(Arg.Any<string>(), Arg.Any<IEnumerable<ShopifyUpdateProductVariant>>())
             .Returns(true);
+
+        _featureManager.IsEnabledAsync(FeatureFlags.ShopifyWriteBack).Returns(true);
     }
 
     public void Dispose() => _dbContext.Dispose();
@@ -155,8 +160,40 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
         _eventAccumulator.DidNotReceive().Enqueue(Arg.Any<ProductChangedEvent>());
     }
 
+    // -------------------------------------------------------------------------
+    // Feature flag: ShopifyWriteBack disabled
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task Handle_ShouldNotCallUpdateVariants_WhenShopifyWriteBackFlagIsDisabled()
+    {
+        _featureManager.IsEnabledAsync(FeatureFlags.ShopifyWriteBack).Returns(false);
+
+        var product = CreateProduct("gid://shopify/Product/100", 100, "T-Shirt",
+            CreateVariant("gid://shopify/ProductVariant/200", 200, "Large"));
+
+        await CreateSut().Handle(product);
+
+        await _productService.DidNotReceive()
+            .UpdateVariants(Arg.Any<string>(), Arg.Any<IEnumerable<ShopifyUpdateProductVariant>>());
+    }
+
+    [Fact]
+    public async Task Handle_ShouldLogInformation_WhenShopifyWriteBackFlagIsDisabled()
+    {
+        _featureManager.IsEnabledAsync(FeatureFlags.ShopifyWriteBack).Returns(false);
+
+        var product = CreateProduct("gid://shopify/Product/100", 100, "T-Shirt",
+            CreateVariant("gid://shopify/ProductVariant/200", 200, "Large"));
+
+        await CreateSut().Handle(product);
+
+        _logger.Entries.ShouldContain(e =>
+            e.LogLevel == LogLevel.Information && e.Message.Contains("ShopifyWriteBack"));
+    }
+
     private ShopifyProductCreateWebhookHandler CreateSut() =>
-        new(_dbContext, _productService, _logger, _eventAccumulator);
+        new(_dbContext, _productService, _logger, _eventAccumulator, _featureManager);
 
     private static SqsShopEventProduct CreateProduct(
         string adminGraphqlApiId, long id, string title, params SqsShopEventVariant[] variants) =>
@@ -167,9 +204,17 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
 
     private sealed class TestLogger<T> : ILogger<T>
     {
+        public List<LogEntry> Entries { get; } = [];
+
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
         public bool IsEnabled(LogLevel logLevel) => true;
+
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
-            Func<TState, Exception?, string> formatter) { }
+            Func<TState, Exception?, string> formatter)
+        {
+            Entries.Add(new LogEntry(logLevel, formatter(state, exception), exception));
+        }
     }
+
+    private sealed record LogEntry(LogLevel LogLevel, string Message, Exception? Exception);
 }

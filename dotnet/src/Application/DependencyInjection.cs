@@ -6,6 +6,7 @@ using Application.Products.Webhook;
 using Integration.Aws.Sqs;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.FeatureManagement;
 using Quartz;
 using Quartz.Impl.Matchers;
 using SharedKernel.Options;
@@ -34,6 +35,8 @@ public static class DependencyInjection
 
             builder.AddOptionsFromConfiguration<ScheduledJobsOptions>(ScheduledJobsOptions.SectionKey);
             var scheduledJobsOptions = builder.GetRequiredConfigValue<ScheduledJobsOptions>(ScheduledJobsOptions.SectionKey);
+
+            builder.Services.AddFeatureManagement();
 
             builder.Services.AddSingleton<MutexGroupRegistry>();
             builder.Services.AddSingleton<MutexGroupListener>();

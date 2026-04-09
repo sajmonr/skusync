@@ -5,6 +5,7 @@ using Infrastructure.Database.Entities;
 using Integration.Aws.Sqs;
 using Integration.Shopify.Products;
 using Microsoft.Extensions.Logging;
+using Microsoft.FeatureManagement;
 
 namespace Application.Products.Webhook;
 
@@ -17,7 +18,8 @@ public class ShopifyProductCreateWebhookHandler(
     ApplicationDbContext dbContext,
     IShopifyProductService productService,
     ILogger<ShopifyProductUpdateWebhookHandler> logger,
-    IEventAccumulator<ProductChangedEvent> eventAccumulator)
+    IEventAccumulator<ProductChangedEvent> eventAccumulator,
+    IFeatureManager featureManager)
     : IShopifyWebhookHandler
 {
     /// <inheritdoc/>
@@ -62,7 +64,16 @@ public class ShopifyProductCreateWebhookHandler(
             eventAccumulator.Enqueue(new ProductChangedEvent(entity.VariantId, ProductChangeType.Created));
         }
 
-        await CreateBarcodeAndSkuInShopify(product.AdminGraphqlApiId, entities);
+        if (await featureManager.IsEnabledAsync(FeatureFlags.ShopifyWriteBack))
+        {
+            await CreateBarcodeAndSkuInShopify(product.AdminGraphqlApiId, entities);
+        }
+        else
+        {
+            logger.LogInformation(
+                "ShopifyWriteBack feature flag is disabled. Skipping Shopify write-back for product {ProductId}.",
+                product.AdminGraphqlApiId);
+        }
     }
 
     private async Task CreateBarcodeAndSkuInShopify(string productId, IEnumerable<ShopifyProductVariantEntity> entities)

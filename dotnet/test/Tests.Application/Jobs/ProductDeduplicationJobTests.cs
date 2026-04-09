@@ -1,3 +1,4 @@
+using Application;
 using Application.Products.Jobs;
 using Application.Products.Services;
 using Infrastructure.Database;
@@ -5,6 +6,7 @@ using Infrastructure.Database.Entities;
 using Integration.Shopify.Products;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.FeatureManagement;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Quartz;
@@ -16,6 +18,7 @@ public class ProductDeduplicationJobTests : IDisposable
 {
     private readonly IProductsService _productsService = Substitute.For<IProductsService>();
     private readonly IShopifyProductService _shopifyProductService = Substitute.For<IShopifyProductService>();
+    private readonly IFeatureManager _featureManager = Substitute.For<IFeatureManager>();
     private readonly ApplicationDbContext _dbContext;
     private readonly IJobExecutionContext _context = Substitute.For<IJobExecutionContext>();
     private readonly TestLogger<ProductDeduplicationJob> _logger = new();
@@ -33,6 +36,8 @@ public class ProductDeduplicationJobTests : IDisposable
         // Default: Shopify update succeeds.
         _shopifyProductService.UpdateVariants(Arg.Any<string>(), Arg.Any<IEnumerable<ShopifyUpdateProductVariant>>())
             .Returns(true);
+        // Default: feature flag enabled.
+        _featureManager.IsEnabledAsync(FeatureFlags.ShopifyWriteBack).Returns(true);
     }
 
     public void Dispose() => _dbContext.Dispose();
@@ -232,6 +237,42 @@ public class ProductDeduplicationJobTests : IDisposable
     }
 
     // -------------------------------------------------------------------------
+    // Feature flag: ShopifyWriteBack disabled
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task Execute_ShouldNotCallShopify_WhenShopifyWriteBackFlagIsDisabled()
+    {
+        _featureManager.IsEnabledAsync(FeatureFlags.ShopifyWriteBack).Returns(false);
+        _productsService.DeduplicateProducts()
+            .Returns(ProductDeduplicationResult.Success([100L]));
+
+        SeedVariant("gid://shopify/ProductVariant/100", "gid://shopify/Product/10", variantId: 100L);
+        await _dbContext.SaveChangesAsync();
+
+        await CreateSut().Execute(_context);
+
+        await _shopifyProductService.DidNotReceive()
+            .UpdateVariants(Arg.Any<string>(), Arg.Any<IEnumerable<ShopifyUpdateProductVariant>>());
+    }
+
+    [Fact]
+    public async Task Execute_ShouldLogInformation_WhenShopifyWriteBackFlagIsDisabled()
+    {
+        _featureManager.IsEnabledAsync(FeatureFlags.ShopifyWriteBack).Returns(false);
+        _productsService.DeduplicateProducts()
+            .Returns(ProductDeduplicationResult.Success([100L]));
+
+        SeedVariant("gid://shopify/ProductVariant/100", "gid://shopify/Product/10", variantId: 100L);
+        await _dbContext.SaveChangesAsync();
+
+        await CreateSut().Execute(_context);
+
+        _logger.Entries.ShouldContain(e =>
+            e.LogLevel == LogLevel.Information && e.Message.Contains("ShopifyWriteBack"));
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 
@@ -258,7 +299,7 @@ public class ProductDeduplicationJobTests : IDisposable
     }
 
     private ProductDeduplicationJob CreateSut() =>
-        new(_productsService, _shopifyProductService, _dbContext, _logger);
+        new(_productsService, _shopifyProductService, _dbContext, _logger, _featureManager);
 
     private sealed class TestLogger<T> : ILogger<T>
     {

@@ -18,11 +18,15 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="2473acc7-8b17-4e30-b45b-750aea428ada" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/.idea.SkuSync/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/.idea.SkuSync/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Directory.Packages.props" beforeDir="false" afterPath="$PROJECT_DIR$/Directory.Packages.props" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Application/Application.csproj" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/Application.csproj" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/Application/DependencyInjection.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/DependencyInjection.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Application/Jobs/ShopifySyncJob.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/Jobs/ShopifySyncJob.cs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/Application/Products/Jobs/ProductDeduplicationJob.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/Products/Jobs/ProductDeduplicationJob.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/test/Tests.Application/Jobs/ProductEventProcessorJobTests.cs" beforeDir="false" afterPath="$PROJECT_DIR$/test/Tests.Application/Jobs/ProductEventProcessorJobTests.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Application/Products/Webhook/ShopifyProductCreateWebhookHandler.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/Products/Webhook/ShopifyProductCreateWebhookHandler.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Application/Products/Webhook/ShopifyProductUpdateWebhookHandler.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/Products/Webhook/ShopifyProductUpdateWebhookHandler.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/Tests.Application/Jobs/ProductDeduplicationJobTests.cs" beforeDir="false" afterPath="$PROJECT_DIR$/test/Tests.Application/Jobs/ProductDeduplicationJobTests.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/Tests.Application/Queue/ShopifyProductCreateWebhookHandlerTests.cs" beforeDir="false" afterPath="$PROJECT_DIR$/test/Tests.Application/Queue/ShopifyProductCreateWebhookHandlerTests.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/Tests.Application/Queue/ShopifyProductUpdateWebhookHandlerTests.cs" beforeDir="false" afterPath="$PROJECT_DIR$/test/Tests.Application/Queue/ShopifyProductUpdateWebhookHandlerTests.cs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -274,7 +278,7 @@
       <workItem from="1775415061904" duration="20677000" />
       <workItem from="1775519736341" duration="4881000" />
       <workItem from="1775677835638" duration="17932000" />
-      <workItem from="1775775041942" duration="3054000" />
+      <workItem from="1775775041942" duration="3500000" />
     </task>
     <servers />
   </component>

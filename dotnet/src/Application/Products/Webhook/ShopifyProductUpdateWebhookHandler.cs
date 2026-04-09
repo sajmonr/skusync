@@ -6,6 +6,7 @@ using Integration.Aws.Sqs;
 using Integration.Shopify.Products;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.FeatureManagement;
 
 namespace Application.Products.Webhook;
 
@@ -19,7 +20,8 @@ public class ShopifyProductUpdateWebhookHandler(
     ApplicationDbContext dbContext,
     IShopifyProductService productService,
     ILogger<ShopifyProductUpdateWebhookHandler> logger,
-    IEventAccumulator<ProductChangedEvent> eventAccumulator)
+    IEventAccumulator<ProductChangedEvent> eventAccumulator,
+    IFeatureManager featureManager)
     : IShopifyWebhookHandler
 {
     /// <inheritdoc/>
@@ -75,7 +77,16 @@ public class ShopifyProductUpdateWebhookHandler(
         // Enqueue only after a successful save so no phantom events enter the queue.
         eventAccumulator.Enqueue(pendingEvents);
 
-        await UpdateEntitiesInShopify(product.AdminGraphqlApiId, toUpdateInShopify);
+        if (await featureManager.IsEnabledAsync(FeatureFlags.ShopifyWriteBack))
+        {
+            await UpdateEntitiesInShopify(product.AdminGraphqlApiId, toUpdateInShopify);
+        }
+        else
+        {
+            logger.LogInformation(
+                "ShopifyWriteBack feature flag is disabled. Skipping Shopify update for product {ProductId}.",
+                product.AdminGraphqlApiId);
+        }
     }
 
     private async Task UpdateEntitiesInShopify(string productId, IEnumerable<ShopifyProductVariantEntity> entities)
