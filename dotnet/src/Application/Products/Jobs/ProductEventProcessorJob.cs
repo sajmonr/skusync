@@ -3,17 +3,19 @@ using Application.Products.Events;
 using Microsoft.Extensions.Logging;
 using Quartz;
 
-namespace Application.Jobs;
+namespace Application.Products.Jobs;
 
 /// <summary>
-/// Quartz.NET job that runs every N minutes (configurable via <c>ScheduledJobs:ProductEventProcessor</c>),
-/// drains all accumulated <see cref="ProductChangedEvent"/> instances from the
-/// <see cref="IEventAccumulator"/> singleton, and processes them as a batch.
+/// Represents a job responsible for processing product-related events.
 /// </summary>
 /// <remarks>
-/// The <see cref="DisallowConcurrentExecutionAttribute"/> ensures at most one instance runs at a
-/// time. Because the accumulator is an in-memory queue, events produced between the previous job
-/// run and the current one are safely captured regardless of how long the previous run took.
+/// This class handles the execution of tasks associated with product events,
+/// such as updating product details, syncing inventory states, or responding
+/// to other product-driven operations within a system. It is typically
+/// triggered in response to specific event occurrences or scheduled tasks.
+/// The implementation may include additional integrations with external
+/// systems, logging mechanisms, or custom business logic tailored to
+/// processing product events efficiently.
 /// </remarks>
 [DisallowConcurrentExecution]
 public class ProductEventProcessorJob(
@@ -32,7 +34,6 @@ public class ProductEventProcessorJob(
     /// <param name="context">The Quartz execution context providing trigger and timing metadata.</param>
     public Task Execute(IJobExecutionContext context)
     {
-        logger.LogInformation("ProductEventProcessorJob started.");
         logger.LogDebug(
             "Triggered by '{TriggerKey}'. Scheduled fire time: {ScheduledFireTime}. Actual fire time: {FireTime}.",
             context.Trigger.Key,
@@ -43,7 +44,6 @@ public class ProductEventProcessorJob(
 
         if (events.Count == 0)
         {
-            logger.LogDebug("No product change events accumulated since the last run.");
             logger.LogInformation("ProductEventProcessorJob completed. No events to process.");
             return Task.CompletedTask;
         }

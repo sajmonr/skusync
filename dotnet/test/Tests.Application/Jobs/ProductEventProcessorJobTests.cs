@@ -1,6 +1,7 @@
 using Application.Events;
 using Application.Jobs;
 using Application.Products.Events;
+using Application.Products.Jobs;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Quartz;

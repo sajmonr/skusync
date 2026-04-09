@@ -1,5 +1,6 @@
 ﻿using Application.Events;
 using Application.Jobs;
+using Application.Products.Jobs;
 using Application.Products.Webhook;
 using Application.Shopify;
 using Integration.Aws.Sqs;
