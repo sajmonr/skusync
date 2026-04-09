@@ -1,9 +1,9 @@
-namespace Application.Shopify;
+namespace Application.Products.Services;
 
 /// <summary>
 /// Defines the contract for synchronizing product data between Shopify and the local database.
 /// </summary>
-public interface IShopifyService
+public interface IProductsService
 {
     /// <summary>
     /// Imports products from Shopify into the local database. This operation ensures synchronization
@@ -14,7 +14,7 @@ public interface IShopifyService
     /// This includes whether the operation was successful, the number of products created and updated,
     /// or an error message in the case of failure.
     /// </returns>
-    Task<ProductImportResult> ImportProducts();
+    Task<ProductImportResult> ImportProductsFromShopify();
 
     /// <summary>
     /// Scans the local database for product variants that share a non-unique SKU or barcode with at least one

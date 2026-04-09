@@ -6,15 +6,15 @@ using Integration.Shopify.Products;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace Application.Shopify;
+namespace Application.Products.Services;
 
-public class ShopifyService(
+public class ProductsService(
     IShopifyProductService shopifyProductService,
     ApplicationDbContext dbContext,
-    ILogger<ShopifyService> logger,
-    IEventAccumulator<ProductChangedEvent> eventAccumulator) : IShopifyService
+    ILogger<ProductsService> logger,
+    IEventAccumulator<ProductChangedEvent> eventAccumulator) : IProductsService
 {
-    public async Task<ProductImportResult> ImportProducts()
+    public async Task<ProductImportResult> ImportProductsFromShopify()
     {
         logger.LogDebug("Starting Shopify product synchronization.");
 

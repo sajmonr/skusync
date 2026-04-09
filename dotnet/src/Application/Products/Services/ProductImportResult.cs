@@ -1,4 +1,4 @@
-namespace Application.Shopify;
+namespace Application.Products.Services;
 
 /// <summary>
 /// Represents the result of a product import operation in a Shopify integration.

@@ -1,5 +1,4 @@
 using Application;
-using Application.Shopify;
 using HealthChecks.UI.Client;
 using Infrastructure;
 using Infrastructure.Database;

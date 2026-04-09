@@ -1,4 +1,4 @@
-using Application.Shopify;
+using Application.Products.Services;
 using Microsoft.Extensions.Logging;
 using Quartz;
 
@@ -12,7 +12,7 @@ namespace Application.Jobs;
 /// </summary>
 [DisallowConcurrentExecution]
 public class ShopifySyncJob(
-    IShopifyService shopifyService,
+    IProductsService productsService,
     ILogger<ShopifySyncJob> logger) : IJob
 {
     /// <summary>
@@ -39,7 +39,7 @@ public class ShopifySyncJob(
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         try
         {
-            var importResult = await shopifyService.ImportProducts();
+            var importResult = await productsService.ImportProductsFromShopify();
             stopwatch.Stop();
 
             if (!importResult.IsSuccess)

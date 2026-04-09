@@ -1,6 +1,6 @@
 using Application.Events;
 using Application.Products.Events;
-using Application.Shopify;
+using Application.Products.Services;
 using Infrastructure.Database;
 using Infrastructure.Database.Entities;
 using Integration.Shopify.Products;
@@ -12,14 +12,14 @@ using Shouldly;
 
 namespace Tests.Application.Shopify;
 
-public class ShopifyServiceTests : IDisposable
+public class ProductsServiceTests : IDisposable
 {
     private readonly IShopifyProductService _shopifyProductService = Substitute.For<IShopifyProductService>();
     private readonly IEventAccumulator<ProductChangedEvent> _eventAccumulator = Substitute.For<IEventAccumulator<ProductChangedEvent>>();
     private readonly ApplicationDbContext _dbContext;
-    private readonly TestLogger<ShopifyService> _logger = new();
+    private readonly TestLogger<ProductsService> _logger = new();
 
-    public ShopifyServiceTests()
+    public ProductsServiceTests()
     {
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
@@ -49,7 +49,7 @@ public class ShopifyServiceTests : IDisposable
 
         var sut = CreateSut();
 
-        await sut.ImportProducts();
+        await sut.ImportProductsFromShopify();
 
         var variants = await _dbContext.Set<ShopifyProductVariantEntity>().ToListAsync();
         variants.Count.ShouldBe(1);
@@ -82,7 +82,7 @@ public class ShopifyServiceTests : IDisposable
 
         var sut = CreateSut();
 
-        await sut.ImportProducts();
+        await sut.ImportProductsFromShopify();
 
         var updated = await _dbContext.Set<ShopifyProductVariantEntity>()
             .SingleAsync(v => v.GlobalVariantId == "gid://shopify/ProductVariant/200");
@@ -109,7 +109,7 @@ public class ShopifyServiceTests : IDisposable
 
         var sut = CreateSut();
 
-        await sut.ImportProducts();
+        await sut.ImportProductsFromShopify();
 
         var updated = await _dbContext.Set<ShopifyProductVariantEntity>()
             .SingleAsync(v => v.GlobalVariantId == "gid://shopify/ProductVariant/200");
@@ -135,7 +135,7 @@ public class ShopifyServiceTests : IDisposable
 
         var sut = CreateSut();
 
-        await sut.ImportProducts();
+        await sut.ImportProductsFromShopify();
 
         var updated = await _dbContext.Set<ShopifyProductVariantEntity>()
             .SingleAsync(v => v.GlobalVariantId == "gid://shopify/ProductVariant/200");
@@ -161,7 +161,7 @@ public class ShopifyServiceTests : IDisposable
 
         var sut = CreateSut();
 
-        await sut.ImportProducts();
+        await sut.ImportProductsFromShopify();
 
         var updated = await _dbContext.Set<ShopifyProductVariantEntity>()
             .SingleAsync(v => v.GlobalVariantId == "gid://shopify/ProductVariant/200");
@@ -187,7 +187,7 @@ public class ShopifyServiceTests : IDisposable
 
         var sut = CreateSut();
 
-        await sut.ImportProducts();
+        await sut.ImportProductsFromShopify();
 
         var updated = await _dbContext.Set<ShopifyProductVariantEntity>()
             .SingleAsync(v => v.GlobalVariantId == "gid://shopify/ProductVariant/200");
@@ -213,7 +213,7 @@ public class ShopifyServiceTests : IDisposable
 
         var sut = CreateSut();
 
-        await sut.ImportProducts();
+        await sut.ImportProductsFromShopify();
 
         var updated = await _dbContext.Set<ShopifyProductVariantEntity>()
             .SingleAsync(v => v.GlobalVariantId == "gid://shopify/ProductVariant/200");
@@ -240,7 +240,7 @@ public class ShopifyServiceTests : IDisposable
 
         var sut = CreateSut();
 
-        await sut.ImportProducts();
+        await sut.ImportProductsFromShopify();
 
         var variant = await _dbContext.Set<ShopifyProductVariantEntity>()
             .SingleAsync(v => v.GlobalVariantId == "gid://shopify/ProductVariant/200");
@@ -267,7 +267,7 @@ public class ShopifyServiceTests : IDisposable
 
         var sut = CreateSut();
 
-        await sut.ImportProducts();
+        await sut.ImportProductsFromShopify();
 
         var updated = await _dbContext.Set<ShopifyProductVariantEntity>()
             .SingleAsync(v => v.GlobalVariantId == "gid://shopify/ProductVariant/200");
@@ -300,7 +300,7 @@ public class ShopifyServiceTests : IDisposable
 
         var sut = CreateSut();
 
-        await sut.ImportProducts();
+        await sut.ImportProductsFromShopify();
 
         var variants = await _dbContext.Set<ShopifyProductVariantEntity>().ToListAsync();
         variants.Count.ShouldBe(2);
@@ -322,7 +322,7 @@ public class ShopifyServiceTests : IDisposable
 
         var sut = CreateSut();
 
-        var result = await sut.ImportProducts();
+        var result = await sut.ImportProductsFromShopify();
 
         result.IsSuccess.ShouldBeFalse();
         result.Error.ShouldNotBeNullOrWhiteSpace();
@@ -343,7 +343,7 @@ public class ShopifyServiceTests : IDisposable
 
         var sut = CreateSut();
 
-        var result = await sut.ImportProducts();
+        var result = await sut.ImportProductsFromShopify();
 
         result.IsSuccess.ShouldBeTrue();
         result.Created.ShouldBe(2);
@@ -363,7 +363,7 @@ public class ShopifyServiceTests : IDisposable
 
         var sut = CreateSut();
 
-        var result = await sut.ImportProducts();
+        var result = await sut.ImportProductsFromShopify();
 
         result.IsSuccess.ShouldBeTrue();
         result.Created.ShouldBe(0);
@@ -383,7 +383,7 @@ public class ShopifyServiceTests : IDisposable
 
         var sut = CreateSut();
 
-        var result = await sut.ImportProducts();
+        var result = await sut.ImportProductsFromShopify();
 
         result.IsSuccess.ShouldBeTrue();
         result.Created.ShouldBe(0);
@@ -404,7 +404,7 @@ public class ShopifyServiceTests : IDisposable
 
         var sut = CreateSut();
 
-        var result = await sut.ImportProducts();
+        var result = await sut.ImportProductsFromShopify();
 
         result.IsSuccess.ShouldBeTrue();
         result.Created.ShouldBe(1);
@@ -427,7 +427,7 @@ public class ShopifyServiceTests : IDisposable
 
         var sut = CreateSut();
 
-        await sut.ImportProducts();
+        await sut.ImportProductsFromShopify();
 
         var debugLogs = _logger.Entries.Where(e => e.LogLevel == LogLevel.Debug).ToArray();
         debugLogs.Length.ShouldBeGreaterThan(0);
@@ -629,7 +629,7 @@ public class ShopifyServiceTests : IDisposable
             new ShopifyProductVariant("gid://shopify/Product/100", "gid://shopify/ProductVariant/200", "T-Shirt", "", "SKU-1", "BAR-1")
         ]);
 
-        await CreateSut().ImportProducts();
+        await CreateSut().ImportProductsFromShopify();
 
         _eventAccumulator.Received(1).Enqueue(
             Arg.Is<ProductChangedEvent>(e => e.VariantId == 200L && e.ChangeType == ProductChangeType.Created));
@@ -646,7 +646,7 @@ public class ShopifyServiceTests : IDisposable
             new ShopifyProductVariant("gid://shopify/Product/100", "gid://shopify/ProductVariant/200", "New Title", "", "SKU-1", "BAR-1")
         ]);
 
-        await CreateSut().ImportProducts();
+        await CreateSut().ImportProductsFromShopify();
 
         _eventAccumulator.Received(1).Enqueue(
             Arg.Is<ProductChangedEvent>(e => e.VariantId == 200L && e.ChangeType == ProductChangeType.Updated));
@@ -663,7 +663,7 @@ public class ShopifyServiceTests : IDisposable
             new ShopifyProductVariant("gid://shopify/Product/100", "gid://shopify/ProductVariant/200", "T-Shirt", "Large", "SKU-1", "BAR-1")
         ]);
 
-        await CreateSut().ImportProducts();
+        await CreateSut().ImportProductsFromShopify();
 
         _eventAccumulator.DidNotReceive().Enqueue(Arg.Any<ProductChangedEvent>());
     }
@@ -697,7 +697,7 @@ public class ShopifyServiceTests : IDisposable
         return entity;
     }
 
-    private ShopifyService CreateSut() => new(_shopifyProductService, _dbContext, _logger, _eventAccumulator);
+    private ProductsService CreateSut() => new(_shopifyProductService, _dbContext, _logger, _eventAccumulator);
 
     private sealed class TestLogger<T> : ILogger<T>
     {
