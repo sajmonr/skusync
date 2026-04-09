@@ -16,7 +16,14 @@ public class ScheduledJobsOptions
     /// Gets the schedule configuration for the Shopify product synchronization job.
     /// </summary>
     [Required]
-    public JobScheduleOptions ShopifyProductSync { get; init; } = new();
+    public JobScheduleOptions ShopifyProductSync { get; init; } = JobScheduleOptions.Disabled;
+
+    /// <summary>
+    /// Gets the schedule configuration for the product change event processor job.
+    /// Defaults to every 5 minutes (<c>0 0/5 * * * ?</c>).
+    /// </summary>
+    [Required]
+    public JobScheduleOptions ProductEventProcessor { get; init; } = JobScheduleOptions.Disabled;
 }
 
 /// <summary>
@@ -42,4 +49,11 @@ public class JobScheduleOptions
     /// not registered with the Quartz scheduler at all and will never execute.
     /// </summary>
     public bool Enabled { get; init; } = true;
+
+    /// <summary>
+    /// Provides a pre-configured instance of <see cref="JobScheduleOptions"/> with the job
+    /// explicitly disabled by setting the <see cref="Enabled"/> property to <c>false</c>.
+    /// </summary>
+    public static JobScheduleOptions Disabled => new() { Enabled = false };
+    
 }

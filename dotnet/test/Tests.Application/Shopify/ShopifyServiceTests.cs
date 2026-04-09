@@ -1,3 +1,4 @@
+using Application.Events;
 using Application.Shopify;
 using Infrastructure.Database;
 using Infrastructure.Database.Entities;
@@ -13,6 +14,7 @@ namespace Tests.Application.Shopify;
 public class ShopifyServiceTests : IDisposable
 {
     private readonly IShopifyProductService _shopifyProductService = Substitute.For<IShopifyProductService>();
+    private readonly IProductEventAccumulator _eventAccumulator = Substitute.For<IProductEventAccumulator>();
     private readonly ApplicationDbContext _dbContext;
     private readonly TestLogger<ShopifyService> _logger = new();
 
@@ -614,6 +616,57 @@ public class ShopifyServiceTests : IDisposable
         infoLogs.Length.ShouldBeGreaterThan(0);
     }
 
+    // -------------------------------------------------------------------------
+    // Event accumulation — ImportProducts
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task ImportProducts_ShouldEnqueueCreatedEvent_WhenNewVariantIsSaved()
+    {
+        _shopifyProductService.GetProducts().Returns(
+        [
+            new ShopifyProductVariant("gid://shopify/Product/100", "gid://shopify/ProductVariant/200", "T-Shirt", "", "SKU-1", "BAR-1")
+        ]);
+
+        await CreateSut().ImportProducts();
+
+        _eventAccumulator.Received(1).Enqueue(
+            Arg.Is<ProductChangedEvent>(e => e.VariantId == 200L && e.ChangeType == ProductChangeType.Created));
+    }
+
+    [Fact]
+    public async Task ImportProducts_ShouldEnqueueUpdatedEvent_WhenExistingVariantIsChanged()
+    {
+        SeedVariant("gid://shopify/ProductVariant/200", title: "Old Title", sku: "SKU-1", barcode: "BAR-1", variantId: 200);
+        await _dbContext.SaveChangesAsync();
+
+        _shopifyProductService.GetProducts().Returns(
+        [
+            new ShopifyProductVariant("gid://shopify/Product/100", "gid://shopify/ProductVariant/200", "New Title", "", "SKU-1", "BAR-1")
+        ]);
+
+        await CreateSut().ImportProducts();
+
+        _eventAccumulator.Received(1).Enqueue(
+            Arg.Is<ProductChangedEvent>(e => e.VariantId == 200L && e.ChangeType == ProductChangeType.Updated));
+    }
+
+    [Fact]
+    public async Task ImportProducts_ShouldNotEnqueueAnyEvent_WhenNoChangesOccur()
+    {
+        SeedVariant("gid://shopify/ProductVariant/200", title: "T-Shirt", variantTitle: "Large", sku: "SKU-1", barcode: "BAR-1", variantId: 200);
+        await _dbContext.SaveChangesAsync();
+
+        _shopifyProductService.GetProducts().Returns(
+        [
+            new ShopifyProductVariant("gid://shopify/Product/100", "gid://shopify/ProductVariant/200", "T-Shirt", "Large", "SKU-1", "BAR-1")
+        ]);
+
+        await CreateSut().ImportProducts();
+
+        _eventAccumulator.DidNotReceive().Enqueue(Arg.Any<ProductChangedEvent>());
+    }
+
     private ShopifyProductVariantEntity SeedVariant(
         string globalVariantId,
         string globalProductId = "gid://shopify/Product/100",
@@ -643,7 +696,7 @@ public class ShopifyServiceTests : IDisposable
         return entity;
     }
 
-    private ShopifyService CreateSut() => new(_shopifyProductService, _dbContext, _logger);
+    private ShopifyService CreateSut() => new(_shopifyProductService, _dbContext, _logger, _eventAccumulator);
 
     private sealed class TestLogger<T> : ILogger<T>
     {

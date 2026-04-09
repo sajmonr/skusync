@@ -1,3 +1,4 @@
+using Application.Events;
 using Application.Queue.ShopifyProductUpdate;
 using Infrastructure.Database;
 using Integration.Aws.Sqs;
@@ -12,6 +13,7 @@ namespace Tests.Application.Queue;
 public class ShopifyProductCreateWebhookHandlerTests : IDisposable
 {
     private readonly IShopifyProductService _productService = Substitute.For<IShopifyProductService>();
+    private readonly IProductEventAccumulator _eventAccumulator = Substitute.For<IProductEventAccumulator>();
     private readonly ApplicationDbContext _dbContext;
     private readonly TestLogger<ShopifyProductUpdateWebhookHandler> _logger = new();
 
@@ -123,8 +125,37 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
             Arg.Is<IEnumerable<ShopifyUpdateProductVariant>>(v => !v.Any()));
     }
 
+    // -------------------------------------------------------------------------
+    // Event accumulation
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task Handle_ShouldEnqueueCreatedEvent_PerPersistedVariant()
+    {
+        var product = CreateProduct("gid://shopify/Product/100", 100, "T-Shirt",
+            CreateVariant("gid://shopify/ProductVariant/200", 200, "Large"),
+            CreateVariant("gid://shopify/ProductVariant/201", 201, "Small"));
+
+        await CreateSut().Handle(product);
+
+        _eventAccumulator.Received(1).Enqueue(
+            Arg.Is<ProductChangedEvent>(e => e.VariantId == 200L && e.ChangeType == ProductChangeType.Created));
+        _eventAccumulator.Received(1).Enqueue(
+            Arg.Is<ProductChangedEvent>(e => e.VariantId == 201L && e.ChangeType == ProductChangeType.Created));
+    }
+
+    [Fact]
+    public async Task Handle_ShouldNotEnqueueAnyEvent_WhenProductHasNoVariants()
+    {
+        var product = CreateProduct("gid://shopify/Product/100", 100, "T-Shirt");
+
+        await CreateSut().Handle(product);
+
+        _eventAccumulator.DidNotReceive().Enqueue(Arg.Any<ProductChangedEvent>());
+    }
+
     private ShopifyProductCreateWebhookHandler CreateSut() =>
-        new(_dbContext, _productService, _logger);
+        new(_dbContext, _productService, _logger, _eventAccumulator);
 
     private static SqsShopEventProduct CreateProduct(
         string adminGraphqlApiId, long id, string title, params SqsShopEventVariant[] variants) =>

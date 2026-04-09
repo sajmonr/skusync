@@ -1,3 +1,4 @@
+using Application.Events;
 using Infrastructure.Database;
 using Infrastructure.Database.Entities;
 using Integration.Shopify.Products;
@@ -9,7 +10,8 @@ namespace Application.Shopify;
 public class ShopifyService(
     IShopifyProductService shopifyProductService,
     ApplicationDbContext dbContext,
-    ILogger<ShopifyService> logger) : IShopifyService
+    ILogger<ShopifyService> logger,
+    IProductEventAccumulator eventAccumulator) : IShopifyService
 {
     public async Task<ProductImportResult> ImportProducts()
     {
@@ -36,6 +38,9 @@ public class ShopifyService(
         var created = 0;
         var updated = 0;
 
+        // Collect events before SaveChangesAsync so we only publish for persisted changes.
+        var pendingEvents = new List<ProductChangedEvent>();
+
         foreach (var shopifyVariant in shopifyVariants)
         {
             if (dbVariantsByGlobalId.TryGetValue(shopifyVariant.GlobalVariantId, out var existing))
@@ -50,6 +55,7 @@ public class ShopifyService(
                 existing.UpdatedOnUtc = DateTime.UtcNow;
                 logger.LogDebug("Updating variant with GlobalVariantId {GlobalVariantId}.",
                     shopifyVariant.GlobalVariantId);
+                pendingEvents.Add(new ProductChangedEvent(shopifyVariant.VariantId, ProductChangeType.Updated));
                 updated++;
             }
             else
@@ -70,6 +76,7 @@ public class ShopifyService(
                 dbContext.ShopifyProductVariants.Add(newVariant);
                 logger.LogDebug("Creating new variant with GlobalVariantId {GlobalVariantId}.",
                     shopifyVariant.GlobalVariantId);
+                pendingEvents.Add(new ProductChangedEvent(shopifyVariant.VariantId, ProductChangeType.Created));
                 created++;
             }
         }
@@ -85,8 +92,11 @@ public class ShopifyService(
                 "Could not import products from Shopify because the product variants could not be saved to the database.");
         }
 
+        // Enqueue only after a successful save so no phantom events enter the queue.
+        eventAccumulator.Enqueue(pendingEvents);
+
         logger.LogDebug("Synchronization complete. Created: {Created}, Updated: {Updated}.", created, updated);
-        
+
         return ProductImportResult.Success(created, updated);
     }
 

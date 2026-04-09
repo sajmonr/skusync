@@ -1,3 +1,4 @@
+using Application.Events;
 using Infrastructure.Database;
 using Infrastructure.Database.Entities;
 using Integration.Aws.Sqs;
@@ -16,7 +17,8 @@ namespace Application.Queue.ShopifyProductUpdate;
 public class ShopifyProductUpdateWebhookHandler(
     ApplicationDbContext dbContext,
     IShopifyProductService productService,
-    ILogger<ShopifyProductUpdateWebhookHandler> logger)
+    ILogger<ShopifyProductUpdateWebhookHandler> logger,
+    IProductEventAccumulator eventAccumulator)
     : IShopifyWebhookHandler
 {
     /// <inheritdoc/>
@@ -37,6 +39,9 @@ public class ShopifyProductUpdateWebhookHandler(
             "Loaded {Count} variants for product {ProductId} [{ProductTitle}]. We currently have {ExistingCount} variants.",
             product.Variants.Count, product.Id, product.Title, existingVariants.Length);
 
+        // Collect events before SaveChangesAsync so we only publish for persisted changes.
+        var pendingEvents = new List<ProductChangedEvent>();
+
         // update entities
         foreach (var variant in product.Variants)
         {
@@ -48,6 +53,7 @@ public class ShopifyProductUpdateWebhookHandler(
 
                 dbContext.ShopifyProductVariants.Add(newEntity);
                 toUpdateInShopify.Add(newEntity);
+                pendingEvents.Add(new ProductChangedEvent(variant.Id, ProductChangeType.Created));
             }
             else
             {
@@ -58,10 +64,15 @@ public class ShopifyProductUpdateWebhookHandler(
                 {
                     toUpdateInShopify.Add(entity);
                 }
+
+                pendingEvents.Add(new ProductChangedEvent(variant.Id, ProductChangeType.Updated));
             }
         }
 
         await dbContext.SaveChangesAsync();
+
+        // Enqueue only after a successful save so no phantom events enter the queue.
+        eventAccumulator.Enqueue(pendingEvents);
 
         await UpdateEntitiesInShopify(product.AdminGraphqlApiId, toUpdateInShopify);
     }

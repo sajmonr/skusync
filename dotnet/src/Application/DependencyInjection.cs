@@ -1,4 +1,5 @@
-﻿using Application.Jobs;
+﻿using Application.Events;
+using Application.Jobs;
 using Application.Queue.ShopifyProductUpdate;
 using Application.Shopify;
 using Integration.Aws.Sqs;
@@ -21,6 +22,9 @@ public static class DependencyInjection
         /// <returns>The builder instance for further chaining.</returns>
         public T AddApplication()
         {
+            // Singleton accumulator shared by all producers (import service + webhook handlers).
+            builder.Services.AddSingleton<IProductEventAccumulator, ProductEventAccumulator>();
+
             builder.Services.AddTransient<IShopifyService, ShopifyService>();
 
             builder.Services.AddTransient<IShopifyWebhookHandler, ShopifyProductUpdateWebhookHandler>();
@@ -32,6 +36,7 @@ public static class DependencyInjection
             builder.Services.AddQuartz(quartz =>
             {
                 quartz.AddScheduledJob<ShopifySyncJob>(ShopifySyncJob.Key, scheduledJobsOptions.ShopifyProductSync);
+                quartz.AddScheduledJob<ProductEventProcessorJob>(ProductEventProcessorJob.Key, scheduledJobsOptions.ProductEventProcessor);
             });
 
             builder.Services.AddQuartzHostedService(options =>

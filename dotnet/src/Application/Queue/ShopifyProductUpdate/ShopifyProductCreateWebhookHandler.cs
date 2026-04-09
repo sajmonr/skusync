@@ -1,3 +1,4 @@
+using Application.Events;
 using Infrastructure.Database;
 using Infrastructure.Database.Entities;
 using Integration.Aws.Sqs;
@@ -14,7 +15,8 @@ namespace Application.Queue.ShopifyProductUpdate;
 public class ShopifyProductCreateWebhookHandler(
     ApplicationDbContext dbContext,
     IShopifyProductService productService,
-    ILogger<ShopifyProductUpdateWebhookHandler> logger)
+    ILogger<ShopifyProductUpdateWebhookHandler> logger,
+    IProductEventAccumulator eventAccumulator)
     : IShopifyWebhookHandler
 {
     /// <inheritdoc/>
@@ -52,6 +54,12 @@ public class ShopifyProductCreateWebhookHandler(
 
         await dbContext.ShopifyProductVariants.AddRangeAsync(entities);
         await dbContext.SaveChangesAsync();
+
+        // Enqueue only after a successful save so no phantom events enter the queue.
+        foreach (var entity in entities)
+        {
+            eventAccumulator.Enqueue(new ProductChangedEvent(entity.VariantId, ProductChangeType.Created));
+        }
 
         await CreateBarcodeAndSkuInShopify(product.AdminGraphqlApiId, entities);
     }

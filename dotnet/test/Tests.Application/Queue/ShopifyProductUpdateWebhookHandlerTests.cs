@@ -1,3 +1,4 @@
+using Application.Events;
 using Application.Queue.ShopifyProductUpdate;
 using Infrastructure.Database;
 using Infrastructure.Database.Entities;
@@ -13,6 +14,7 @@ namespace Tests.Application.Queue;
 public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
 {
     private readonly IShopifyProductService _productService = Substitute.For<IShopifyProductService>();
+    private readonly IProductEventAccumulator _eventAccumulator = Substitute.For<IProductEventAccumulator>();
     private readonly ApplicationDbContext _dbContext;
     private readonly TestLogger<ShopifyProductUpdateWebhookHandler> _logger = new();
 
@@ -226,8 +228,57 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
     // Helpers
     // -------------------------------------------------------------------------
 
+    // -------------------------------------------------------------------------
+    // Event accumulation
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task Handle_ShouldEnqueueCreatedEvent_WhenNewVariantIsSaved()
+    {
+        var product = CreateProduct(100, "T-Shirt",
+            CreateVariant(200, "Large", sku: "SKU-A", barcode: "BAR-A"));
+
+        await CreateSut().Handle(product);
+
+        _eventAccumulator.Received(1).Enqueue(
+            Arg.Is<ProductChangedEvent>(e => e.VariantId == 200L && e.ChangeType == ProductChangeType.Created));
+    }
+
+    [Fact]
+    public async Task Handle_ShouldEnqueueUpdatedEvent_WhenExistingVariantIsProcessed()
+    {
+        SeedVariant(100, 200, sku: "SKU-A", barcode: "BAR-A");
+        await _dbContext.SaveChangesAsync();
+
+        var product = CreateProduct(100, "T-Shirt",
+            CreateVariant(200, "Large", sku: "SKU-A", barcode: "BAR-A"));
+
+        await CreateSut().Handle(product);
+
+        _eventAccumulator.Received(1).Enqueue(
+            Arg.Is<ProductChangedEvent>(e => e.VariantId == 200L && e.ChangeType == ProductChangeType.Updated));
+    }
+
+    [Fact]
+    public async Task Handle_ShouldEnqueueOneEventPerVariant_WhenMultipleVariantsArePresent()
+    {
+        SeedVariant(100, 200, sku: "SKU-A", barcode: "BAR-A");
+        await _dbContext.SaveChangesAsync();
+
+        var product = CreateProduct(100, "T-Shirt",
+            CreateVariant(200, "Large", sku: "SKU-A", barcode: "BAR-A"),  // existing → Updated
+            CreateVariant(201, "Small", sku: "SKU-B", barcode: "BAR-B")); // new → Created
+
+        await CreateSut().Handle(product);
+
+        _eventAccumulator.Received(1).Enqueue(
+            Arg.Is<ProductChangedEvent>(e => e.VariantId == 200L && e.ChangeType == ProductChangeType.Updated));
+        _eventAccumulator.Received(1).Enqueue(
+            Arg.Is<ProductChangedEvent>(e => e.VariantId == 201L && e.ChangeType == ProductChangeType.Created));
+    }
+
     private ShopifyProductUpdateWebhookHandler CreateSut() =>
-        new(_dbContext, _productService, _logger);
+        new(_dbContext, _productService, _logger, _eventAccumulator);
 
     private void SeedVariant(
         long productId,
