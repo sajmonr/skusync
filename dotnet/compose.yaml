@@ -3,6 +3,7 @@ services:
   web.api:
     build: .
     environment:
+      - DOTNET_ENVIRONMENT
       - Skulabs___Api__ApiKey
       - Skulabs__Admin__Username
       - Skulabs__Admin__Password

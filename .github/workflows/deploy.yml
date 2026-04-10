@@ -6,7 +6,8 @@ on:
       - main
     paths:
       - 'dotnet/**'
-      - '!dotnet/test/Tests.Application/**'
+      - '!dotnet/test/**'
+      - '.github/workflows/deploy.yml'
   workflow_dispatch:
 
 defaults:
@@ -35,13 +36,7 @@ jobs:
 
       - name: Run unit tests
         run: |
-          dotnet test test/Tests.Application/Tests.Application.csproj \
-            --no-build --configuration Release \
-            --logger "console;verbosity=normal"
-
-      - name: Run architecture tests
-        run: |
-          dotnet test test/ArchitectureTests/ArchitectureTests.csproj \
+          dotnet test
             --no-build --configuration Release \
             --logger "console;verbosity=normal"
 
