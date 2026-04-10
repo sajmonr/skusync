@@ -1,0 +1,49 @@
+name: .NET Build & Deploy
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'dotnet/**'
+      - '!dotnet/test/Tests.Application/**'
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: dotnet
+
+jobs:
+  build-test-deploy:
+    name: Build, Test, and Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore NuGet packages
+        run: dotnet restore SkuSync.slnx
+
+      - name: Build solution
+        run: dotnet build SkuSync.slnx --no-restore --configuration Release
+
+      - name: Run unit tests
+        run: |
+          dotnet test test/Tests.Application/Tests.Application.csproj \
+            --no-build --configuration Release \
+            --logger "console;verbosity=normal"
+
+      - name: Run architecture tests
+        run: |
+          dotnet test test/ArchitectureTests/ArchitectureTests.csproj \
+            --no-build --configuration Release \
+            --logger "console;verbosity=normal"
+
+      - name: Trigger deployment
+        run: curl --fail --silent --show-error -X POST ${{ secrets.DEPLOY_HOOK }}

@@ -2,11 +2,24 @@
 services:
   web.api:
     build: .
+    environment:
+      - Skulabs___Api__ApiKey
+      - Skulabs__Admin__Username
+      - Skulabs__Admin__Password
+      - Shopify__ApiKey
+      - ConnectionStrings__SkuSync
+      - Aws__Auth__SecretKey
+      - Aws__Auth__AccessKey
     depends_on:
       - postgres
     
   postgres:
     image: postgres:18.3
+    ports:
+      - "5433:5432"
+    environment:
+      - POSTGRES_USER
+      - POSTGRES_PASSWORD
     volumes:
       - skusync-data:/var/lib/postgresql
 

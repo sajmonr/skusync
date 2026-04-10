@@ -7,8 +7,6 @@ services:
       - ${HOME}/.microsoft/usersecrets:/home/app/.microsoft/usersecrets:ro
   
   postgres:
-    ports:
-      - "5433:5432"
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
