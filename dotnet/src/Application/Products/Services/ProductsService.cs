@@ -117,23 +117,8 @@ public class ProductsService(
 
         logger.LogDebug("Fetched {Count} product variant(s) for deduplication analysis.", variants.Count);
 
-        var duplicateBySkuIds = variants
-            .GroupBy(v => v.Sku)
-            .Where(g => g.Count() > 1)
-            .SelectMany(g => g.Select(v => v.VariantId))
-            .ToHashSet();
-
-        logger.LogDebug("Found {Count} variant(s) with a duplicate SKU.", duplicateBySkuIds.Count);
-
-        var duplicateByBarcodeIds = variants
-            .GroupBy(v => v.Barcode)
-            .Where(g => g.Count() > 1)
-            .SelectMany(g => g.Select(v => v.VariantId))
-            .ToHashSet();
-
-        logger.LogDebug("Found {Count} variant(s) with a duplicate barcode.", duplicateByBarcodeIds.Count);
-
-        var affectedVariantIds = duplicateBySkuIds.Union(duplicateByBarcodeIds).ToHashSet();
+        var duplicates = FindDuplicateIds(variants);
+        var affectedVariantIds = duplicates.BySkuIds.Union(duplicates.ByBarcodeIds).ToHashSet();
 
         if (affectedVariantIds.Count == 0)
         {
@@ -142,15 +127,7 @@ public class ProductsService(
         }
 
         logger.LogInformation("Deduplicating {Count} variant(s).", affectedVariantIds.Count);
-
-        foreach (var variant in variants.Where(v => affectedVariantIds.Contains(v.VariantId)))
-        {
-            logger.LogDebug("Deduplicating variant {VariantId}: overwriting SKU and barcode with variant ID.",
-                variant.VariantId);
-            variant.Sku = variant.VariantId.ToString();
-            variant.Barcode = variant.VariantId.ToString();
-            variant.UpdatedOnUtc = DateTime.UtcNow;
-        }
+        ApplyDeduplication(variants, duplicates.BySkuIds, duplicates.ByBarcodeIds, affectedVariantIds);
 
         try
         {
@@ -166,6 +143,59 @@ public class ProductsService(
         logger.LogInformation("Deduplication complete. Modified {Count} variant(s).", affectedVariantIds.Count);
 
         return ProductDeduplicationResult.Success(affectedVariantIds.ToArray());
+    }
+
+    private DuplicateIds FindDuplicateIds(List<ShopifyProductVariantEntity> variants)
+    {
+        var bySkuIds = variants
+            .GroupBy(v => v.Sku)
+            .Where(g => g.Count() > 1)
+            .SelectMany(g => g.Select(v => v.VariantId))
+            .ToHashSet();
+
+        logger.LogDebug("Found {Count} variant(s) with a duplicate SKU.", bySkuIds.Count);
+
+        var byBarcodeIds = variants
+            .GroupBy(v => v.Barcode)
+            .Where(g => g.Count() > 1)
+            .SelectMany(g => g.Select(v => v.VariantId))
+            .ToHashSet();
+
+        logger.LogDebug("Found {Count} variant(s) with a duplicate barcode.", byBarcodeIds.Count);
+
+        return new DuplicateIds(bySkuIds, byBarcodeIds);
+    }
+
+    private record DuplicateIds(HashSet<long> BySkuIds, HashSet<long> ByBarcodeIds);
+
+    private void ApplyDeduplication(
+        List<ShopifyProductVariantEntity> variants,
+        HashSet<long> duplicateBySkuIds,
+        HashSet<long> duplicateByBarcodeIds,
+        HashSet<long> affectedVariantIds)
+    {
+        foreach (var variant in variants.Where(v => affectedVariantIds.Contains(v.VariantId)))
+        {
+            var hasDupeSku = duplicateBySkuIds.Contains(variant.VariantId);
+            var hasDupeBarcode = duplicateByBarcodeIds.Contains(variant.VariantId);
+
+            logger.LogDebug(
+                "Deduplicating variant {VariantId}: overwriting {Fields} with variant ID.",
+                variant.VariantId,
+                hasDupeSku && hasDupeBarcode ? "SKU and barcode" : hasDupeSku ? "SKU" : "barcode");
+
+            if (hasDupeSku)
+            {
+                variant.Sku = variant.VariantId.ToString();
+            }
+
+            if (hasDupeBarcode)
+            {
+                variant.Barcode = variant.VariantId.ToString();
+            }
+
+            variant.UpdatedOnUtc = DateTime.UtcNow;
+        }
     }
 
     private static bool UpdateVariant(ShopifyProductVariantEntity existing, ShopifyProductVariant shopifyVariant)

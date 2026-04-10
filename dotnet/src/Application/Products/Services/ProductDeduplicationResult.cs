@@ -11,7 +11,7 @@ public readonly record struct ProductDeduplicationResult(bool IsSuccess, long[] 
     /// <param name="variantIds">The numeric Shopify variant IDs whose SKU and barcode were overwritten.</param>
     /// <returns>A <see cref="ProductDeduplicationResult"/> instance representing a successful operation.</returns>
     public static ProductDeduplicationResult Success(long[] variantIds) => new(true, variantIds, "");
-
+    
     /// <summary>
     /// Creates a failed result with an error message describing the failure.
     /// </summary>

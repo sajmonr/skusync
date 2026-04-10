@@ -19,9 +19,8 @@
   <component name="ChangeListManager">
     <list default="true" id="2473acc7-8b17-4e30-b45b-750aea428ada" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/.idea.SkuSync/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/.idea.SkuSync/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Application/DependencyInjection.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/DependencyInjection.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Web.Api/appsettings.Development.json" beforeDir="false" afterPath="$PROJECT_DIR$/src/Web.Api/appsettings.Development.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Web.Api/appsettings.json" beforeDir="false" afterPath="$PROJECT_DIR$/src/Web.Api/appsettings.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Application/Products/Services/ProductsService.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/Products/Services/ProductsService.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/Tests.Application/Shopify/ProductsServiceTests.cs" beforeDir="false" afterPath="$PROJECT_DIR$/test/Tests.Application/Shopify/ProductsServiceTests.cs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -271,7 +270,7 @@
       <workItem from="1775415061904" duration="20677000" />
       <workItem from="1775519736341" duration="4881000" />
       <workItem from="1775677835638" duration="17932000" />
-      <workItem from="1775775041942" duration="5844000" />
+      <workItem from="1775775041942" duration="6948000" />
     </task>
     <servers />
   </component>
@@ -313,45 +312,6 @@
           <properties exception="System.Threading.ThreadAbortException" breakIfHandledByOtherCode="false" displayValue="System.Threading.ThreadAbortException" />
           <option name="timeStamp" value="3" />
         </breakpoint>
-        <line-breakpoint enabled="true" type="DotNet Breakpoints">
-          <url>file://$PROJECT_DIR$/src/Application/Jobs/ShopifySyncJob.cs</url>
-          <line>32</line>
-          <properties documentPath="$PROJECT_DIR$/src/Application/Jobs/ShopifySyncJob.cs" containingFunctionPresentation="Method 'Execute'">
-            <startOffsets>
-              <option value="1361" />
-            </startOffsets>
-            <endOffsets>
-              <option value="1410" />
-            </endOffsets>
-          </properties>
-          <option name="timeStamp" value="4" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" type="DotNet Breakpoints">
-          <url>file://$PROJECT_DIR$/src/Application/Jobs/QuartzJobRegistrationExtensions.cs</url>
-          <line>34</line>
-          <properties documentPath="$PROJECT_DIR$/src/Application/Jobs/QuartzJobRegistrationExtensions.cs" containingFunctionPresentation="Method 'AddScheduledJob'">
-            <startOffsets>
-              <option value="1745" />
-            </startOffsets>
-            <endOffsets>
-              <option value="1815" />
-            </endOffsets>
-          </properties>
-          <option name="timeStamp" value="5" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" type="DotNet Breakpoints">
-          <url>file://$PROJECT_DIR$/src/Application/Jobs/QuartzJobRegistrationExtensions.cs</url>
-          <line>29</line>
-          <properties documentPath="$PROJECT_DIR$/src/Application/Jobs/QuartzJobRegistrationExtensions.cs" containingFunctionPresentation="Method 'AddScheduledJob'">
-            <startOffsets>
-              <option value="1667" />
-            </startOffsets>
-            <endOffsets>
-              <option value="1688" />
-            </endOffsets>
-          </properties>
-          <option name="timeStamp" value="6" />
-        </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>
   </component>

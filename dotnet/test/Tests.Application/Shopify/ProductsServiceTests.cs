@@ -518,6 +518,9 @@ public class ProductsServiceTests : IDisposable
         var variants = await _dbContext.Set<ShopifyProductVariantEntity>().ToListAsync();
         variants.Single(v => v.VariantId == 100).Sku.ShouldBe("100");
         variants.Single(v => v.VariantId == 200).Sku.ShouldBe("200");
+        // Barcode was not duplicated — it should remain unchanged
+        variants.Single(v => v.VariantId == 100).Barcode.ShouldBe("BAR-A");
+        variants.Single(v => v.VariantId == 200).Barcode.ShouldBe("BAR-B");
     }
 
     [Fact]
@@ -532,6 +535,27 @@ public class ProductsServiceTests : IDisposable
         await sut.DeduplicateProducts();
 
         var variants = await _dbContext.Set<ShopifyProductVariantEntity>().ToListAsync();
+        variants.Single(v => v.VariantId == 100).Barcode.ShouldBe("100");
+        variants.Single(v => v.VariantId == 200).Barcode.ShouldBe("200");
+        // SKU was not duplicated — it should remain unchanged
+        variants.Single(v => v.VariantId == 100).Sku.ShouldBe("SKU-A");
+        variants.Single(v => v.VariantId == 200).Sku.ShouldBe("SKU-B");
+    }
+
+    [Fact]
+    public async Task DeduplicateProducts_ShouldSetBothSkuAndBarcodeToVariantId_WhenBothAreDuplicated()
+    {
+        SeedVariant("gid://shopify/ProductVariant/100", sku: "DUPE-SKU", barcode: "DUPE-BAR", variantId: 100);
+        SeedVariant("gid://shopify/ProductVariant/200", sku: "DUPE-SKU", barcode: "DUPE-BAR", variantId: 200);
+        await _dbContext.SaveChangesAsync();
+
+        var sut = CreateSut();
+
+        await sut.DeduplicateProducts();
+
+        var variants = await _dbContext.Set<ShopifyProductVariantEntity>().ToListAsync();
+        variants.Single(v => v.VariantId == 100).Sku.ShouldBe("100");
+        variants.Single(v => v.VariantId == 200).Sku.ShouldBe("200");
         variants.Single(v => v.VariantId == 100).Barcode.ShouldBe("100");
         variants.Single(v => v.VariantId == 200).Barcode.ShouldBe("200");
     }
