@@ -36,7 +36,7 @@ jobs:
 
       - name: Run unit tests
         run: |
-          dotnet test
+          dotnet test \
             --no-build --configuration Release \
             --logger "console;verbosity=normal"
 
