@@ -43,8 +43,8 @@ public static class DependencyInjection
 
             builder.Services.AddQuartz(quartz =>
             {
-                quartz.AddTriggerListener<MutexGroupListener>(GroupMatcher<TriggerKey>.AnyGroup());
-                quartz.AddJobListener<MutexGroupListener>(GroupMatcher<JobKey>.AnyGroup());
+                //quartz.AddTriggerListener<MutexGroupListener>(GroupMatcher<TriggerKey>.AnyGroup());
+                //quartz.AddJobListener<MutexGroupListener>(GroupMatcher<JobKey>.AnyGroup());
 
                 quartz.AddScheduledJob<ShopifySyncJob>(ShopifySyncJob.Key, scheduledJobsOptions.ShopifyProductSync);
                 quartz.AddScheduledJob<ProductEventProcessorJob>(ProductEventProcessorJob.Key, scheduledJobsOptions.ProductEventProcessor);
