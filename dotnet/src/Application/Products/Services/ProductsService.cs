@@ -103,31 +103,62 @@ public class ProductsService(
 
     public async Task<ProductDeduplicationResult> DeduplicateProducts()
     {
-        List<ShopifyProductVariantEntity> variants;
+        logger.LogInformation("Starting product deduplication.");
+
+        // Find which SKU and barcode values are shared by more than one variant — entirely in the database.
+        HashSet<string> duplicateSkus;
+        HashSet<string> duplicateBarcodes;
         try
         {
-            variants = await dbContext.ShopifyProductVariants.ToListAsync();
+            duplicateSkus = (await dbContext.ShopifyProductVariants
+                .GroupBy(v => v.Sku)
+                .Where(g => g.Count() > 1)
+                .Select(g => g.Key)
+                .ToListAsync())
+                .ToHashSet();
+
+            duplicateBarcodes = (await dbContext.ShopifyProductVariants
+                .GroupBy(v => v.Barcode)
+                .Where(g => g.Count() > 1)
+                .Select(g => g.Key)
+                .ToListAsync())
+                .ToHashSet();
         }
         catch (Exception exception)
         {
-            logger.LogError(exception, "An exception occurred while fetching product variants from the database.");
+            logger.LogError(exception, "An exception occurred while identifying duplicate product variants in the database.");
             return ProductDeduplicationResult.Failure(
-                "Could not deduplicate products because the product variants could not be fetched from the database.");
+                "Could not deduplicate products because duplicate variants could not be identified in the database.");
         }
 
-        logger.LogDebug("Fetched {Count} product variant(s) for deduplication analysis.", variants.Count);
+        logger.LogDebug("Found {SkuCount} duplicate SKU value(s) and {BarcodeCount} duplicate barcode value(s).",
+            duplicateSkus.Count, duplicateBarcodes.Count);
 
-        var duplicates = FindDuplicateIds(variants);
-        var affectedVariantIds = duplicates.BySkuIds.Union(duplicates.ByBarcodeIds).ToHashSet();
-
-        if (affectedVariantIds.Count == 0)
+        if (duplicateSkus.Count == 0 && duplicateBarcodes.Count == 0)
         {
             logger.LogInformation("No duplicate SKUs or barcodes found. Deduplication complete.");
             return ProductDeduplicationResult.Success([]);
         }
 
-        logger.LogInformation("Deduplicating {Count} variant(s).", affectedVariantIds.Count);
-        ApplyDeduplication(variants, duplicates.BySkuIds, duplicates.ByBarcodeIds, affectedVariantIds);
+        // Load only the affected rows — variants whose SKU or barcode is one of the duplicated values.
+        List<ShopifyProductVariantEntity> variants;
+        try
+        {
+            variants = await dbContext.ShopifyProductVariants
+                .Where(v => duplicateSkus.Contains(v.Sku) || duplicateBarcodes.Contains(v.Barcode))
+                .ToListAsync();
+        }
+        catch (Exception exception)
+        {
+            logger.LogError(exception, "An exception occurred while fetching duplicate product variants from the database.");
+            return ProductDeduplicationResult.Failure(
+                "Could not deduplicate products because the duplicate variants could not be fetched from the database.");
+        }
+
+        logger.LogInformation("Deduplicating {Count} variant(s).", variants.Count);
+        ApplyDeduplication(variants, duplicateSkus, duplicateBarcodes);
+
+        var affectedVariantIds = variants.Select(v => v.VariantId).ToArray();
 
         try
         {
@@ -140,44 +171,20 @@ public class ProductsService(
                 "Could not deduplicate products because the changes could not be saved to the database.");
         }
 
-        logger.LogInformation("Deduplication complete. Modified {Count} variant(s).", affectedVariantIds.Count);
+        logger.LogInformation("Deduplication complete. Modified {Count} variant(s).", affectedVariantIds.Length);
 
-        return ProductDeduplicationResult.Success(affectedVariantIds.ToArray());
+        return ProductDeduplicationResult.Success(affectedVariantIds);
     }
-
-    private DuplicateIds FindDuplicateIds(List<ShopifyProductVariantEntity> variants)
-    {
-        var bySkuIds = variants
-            .GroupBy(v => v.Sku)
-            .Where(g => g.Count() > 1)
-            .SelectMany(g => g.Select(v => v.VariantId))
-            .ToHashSet();
-
-        logger.LogDebug("Found {Count} variant(s) with a duplicate SKU.", bySkuIds.Count);
-
-        var byBarcodeIds = variants
-            .GroupBy(v => v.Barcode)
-            .Where(g => g.Count() > 1)
-            .SelectMany(g => g.Select(v => v.VariantId))
-            .ToHashSet();
-
-        logger.LogDebug("Found {Count} variant(s) with a duplicate barcode.", byBarcodeIds.Count);
-
-        return new DuplicateIds(bySkuIds, byBarcodeIds);
-    }
-
-    private record DuplicateIds(HashSet<long> BySkuIds, HashSet<long> ByBarcodeIds);
 
     private void ApplyDeduplication(
         List<ShopifyProductVariantEntity> variants,
-        HashSet<long> duplicateBySkuIds,
-        HashSet<long> duplicateByBarcodeIds,
-        HashSet<long> affectedVariantIds)
+        HashSet<string> duplicateSkus,
+        HashSet<string> duplicateBarcodes)
     {
-        foreach (var variant in variants.Where(v => affectedVariantIds.Contains(v.VariantId)))
+        foreach (var variant in variants)
         {
-            var hasDupeSku = duplicateBySkuIds.Contains(variant.VariantId);
-            var hasDupeBarcode = duplicateByBarcodeIds.Contains(variant.VariantId);
+            var hasDupeSku = duplicateSkus.Contains(variant.Sku);
+            var hasDupeBarcode = duplicateBarcodes.Contains(variant.Barcode);
 
             logger.LogDebug(
                 "Deduplicating variant {VariantId}: overwriting {Fields} with variant ID.",
