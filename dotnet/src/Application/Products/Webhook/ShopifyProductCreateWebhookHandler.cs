@@ -51,7 +51,12 @@ public class ShopifyProductCreateWebhookHandler(
                 Sku = variant.Id.ToString(),
                 Barcode = variant.Id.ToString()
             };
-            
+
+            newEntity.LogEvents.Add(new ShopifyProductVariantLogEventEntity
+            {
+                Message = "Product variant was created."
+            });
+
             entities.Add(newEntity);
         }
 

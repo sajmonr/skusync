@@ -54,6 +54,11 @@ public class ShopifyProductUpdateWebhookHandler(
             {
                 var newEntity = CreateEntity(product, variant);
 
+                newEntity.LogEvents.Add(new ShopifyProductVariantLogEventEntity
+                {
+                    Message = "Product variant was created."
+                });
+
                 dbContext.ShopifyProductVariants.Add(newEntity);
                 toUpdateInShopify.Add(newEntity);
                 pendingEvents.Add(new ProductChangedEvent(variant.Id, ProductChangeType.Created));
@@ -104,6 +109,8 @@ public class ShopifyProductUpdateWebhookHandler(
     private void UpdateEntity(ShopifyProductVariantEntity entity, SqsShopEventProduct product,
         SqsShopEventVariant variant)
     {
+        var oldFullTitle = entity.FullTitle;
+
         if (entity.ProductTitle != product.Title)
         {
             logger.LogDebug("Updating product title for variant {VariantId}: [{OldTitle}] -> [{NewTitle}].",
@@ -118,6 +125,15 @@ public class ShopifyProductUpdateWebhookHandler(
                 variant.Id, entity.VariantTitle, variant.Title);
             entity.VariantTitle = variant.Title;
             entity.UpdatedOnUtc = DateTime.UtcNow;
+        }
+
+        if (entity.FullTitle != oldFullTitle)
+        {
+            dbContext.ShopifyProductVariantLogEvents.Add(new ShopifyProductVariantLogEventEntity
+            {
+                ShopifyProductVariantId = entity.ShopifyProductVariantId,
+                Message = $"Title changed from '{oldFullTitle}' to '{entity.FullTitle}'."
+            });
         }
     }
 

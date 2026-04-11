@@ -74,6 +74,10 @@ public class ProductsService(
                     Barcode = shopifyVariant.Barcode
                 };
 
+                newVariant.LogEvents.Add(new ShopifyProductVariantLogEventEntity
+                {
+                    Message = "Product variant was created."
+                });
                 dbContext.ShopifyProductVariants.Add(newVariant);
                 logger.LogDebug("Creating new variant with GlobalVariantId {GlobalVariantId}.",
                     shopifyVariant.GlobalVariantId);
@@ -193,21 +197,34 @@ public class ProductsService(
 
             if (hasDupeSku)
             {
+                var oldSku = variant.Sku;
                 variant.Sku = variant.VariantId.ToString();
+                dbContext.ShopifyProductVariantLogEvents.Add(new ShopifyProductVariantLogEventEntity
+                {
+                    ShopifyProductVariantId = variant.ShopifyProductVariantId,
+                    Message = $"Duplicate SKU detected (was '{oldSku}'). SKU changed to variant ID: {variant.VariantId}."
+                });
             }
 
             if (hasDupeBarcode)
             {
+                var oldBarcode = variant.Barcode;
                 variant.Barcode = variant.VariantId.ToString();
+                dbContext.ShopifyProductVariantLogEvents.Add(new ShopifyProductVariantLogEventEntity
+                {
+                    ShopifyProductVariantId = variant.ShopifyProductVariantId,
+                    Message = $"Duplicate barcode detected (was '{oldBarcode}'). Barcode changed to variant ID: {variant.VariantId}."
+                });
             }
 
             variant.UpdatedOnUtc = DateTime.UtcNow;
         }
     }
 
-    private static bool UpdateVariant(ShopifyProductVariantEntity existing, ShopifyProductVariant shopifyVariant)
+    private bool UpdateVariant(ShopifyProductVariantEntity existing, ShopifyProductVariant shopifyVariant)
     {
         var changed = false;
+        var oldFullTitle = existing.FullTitle;
 
         if (existing.ProductTitle != shopifyVariant.ProductTitle)
         {
@@ -221,16 +238,35 @@ public class ProductsService(
             changed = true;
         }
 
+        if (existing.FullTitle != oldFullTitle)
+        {
+            dbContext.ShopifyProductVariantLogEvents.Add(new ShopifyProductVariantLogEventEntity
+            {
+                ShopifyProductVariantId = existing.ShopifyProductVariantId,
+                Message = $"Title changed from '{oldFullTitle}' to '{existing.FullTitle}'."
+            });
+        }
+
         if (string.IsNullOrWhiteSpace(existing.Sku) && !string.IsNullOrWhiteSpace(shopifyVariant.Sku))
         {
             existing.Sku = shopifyVariant.Sku;
             changed = true;
+            dbContext.ShopifyProductVariantLogEvents.Add(new ShopifyProductVariantLogEventEntity
+            {
+                ShopifyProductVariantId = existing.ShopifyProductVariantId,
+                Message = $"SKU assigned: '{shopifyVariant.Sku}'."
+            });
         }
 
         if (string.IsNullOrWhiteSpace(existing.Barcode) && !string.IsNullOrWhiteSpace(shopifyVariant.Barcode))
         {
             existing.Barcode = shopifyVariant.Barcode;
             changed = true;
+            dbContext.ShopifyProductVariantLogEvents.Add(new ShopifyProductVariantLogEventEntity
+            {
+                ShopifyProductVariantId = existing.ShopifyProductVariantId,
+                Message = $"Barcode assigned: '{shopifyVariant.Barcode}'."
+            });
         }
 
         return changed;

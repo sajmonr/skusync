@@ -16,6 +16,11 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     /// </summary>
     public DbSet<ShopifyProductVariantEntity> ShopifyProductVariants { get; init; }
 
+    /// <summary>
+    /// Gets the set of log events recording changes to Shopify product variant records.
+    /// </summary>
+    public DbSet<ShopifyProductVariantLogEventEntity> ShopifyProductVariantLogEvents { get; init; }
+
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
