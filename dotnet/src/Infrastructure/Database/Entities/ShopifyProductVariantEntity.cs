@@ -88,6 +88,14 @@ public class ShopifyProductVariantEntity
     /// <summary>Gets or sets the UTC timestamp at which this record was last modified.</summary>
     public DateTime UpdatedOnUtc { get; set; } = DateTime.UtcNow;
 
+    /// <summary>
+    /// Gets or sets the collection of log events associated with this Shopify product variant.
+    /// These log events capture historical data or changes related to the variant,
+    /// such as updates, errors, or other relevant messages.
+    /// </summary>
+    public ICollection<ShopifyProductVariantLogEventEntity> LogEvents { get; set; } =
+        new HashSet<ShopifyProductVariantLogEventEntity>();
+    
     private void GenerateFullTitle()
     {
         _fullTitle = string.IsNullOrWhiteSpace(VariantTitle) ? ProductTitle : $"{ProductTitle} ({VariantTitle})";
