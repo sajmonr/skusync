@@ -24,6 +24,7 @@ namespace Application.Products.Jobs;
 [DisallowConcurrentExecution]
 public class ProductEventProcessorJob(
     IEventAccumulator<ProductChangedEvent> eventAccumulator,
+    IEventDispatcher eventDispatcher,
     ILogger<ProductEventProcessorJob> logger,
     IFeatureManager featureManager,
     IShopifyProductService shopifyProductService,
@@ -51,7 +52,7 @@ public class ProductEventProcessorJob(
 
         if (events.Count == 0)
         {
-            logger.LogInformation("ProductEventProcessorJob completed. No events to process.");
+            logger.LogDebug("ProductEventProcessorJob completed. No events to process.");
             return;
         }
 
@@ -63,7 +64,7 @@ public class ProductEventProcessorJob(
             events.Count, createdEvents.Length, updateEvents.Length);
 
         await HandleCreatedProducts(createdEvents);
-        await HandleUpdatedProducts();
+        await HandleUpdatedProducts(updateEvents);
 
         logger.LogInformation(
             "ProductEventProcessorJob completed. Processed {Total} event(s).",
@@ -97,9 +98,37 @@ public class ProductEventProcessorJob(
                 group.Select(i => new ShopifyUpdateProductVariant(i.GlobalVariantId, i.Sku, i.Barcode));
             await shopifyProductService.UpdateVariants(productId, variantsToUpdate);
         }
+        
+        // Created product should trigger a new import to Skulabs.
+        eventDispatcher.Dispatch(new SkulabsProductImportEvent());
     }
 
-    private async Task HandleUpdatedProducts()
+    private async Task HandleUpdatedProducts(ProductChangedEvent[] events)
     {
+        if (!await featureManager.IsEnabledAsync(FeatureFlags.ShopifyWriteBack))
+        {
+            logger.LogInformation(
+                "ShopifyWriteBack feature flag is disabled. Skipping Shopify update for created products.");
+            return;
+        }
+
+        // We need to update SKUs & Barcodes in Shopify.
+        // Get all info from DB and group it by product ID.
+        // Then update Shopify.
+        var variantIds = events.Select(e => e.ProductVariantId).ToArray();
+        var items = await dbContext
+            .ShopifyProductVariants
+            .Where(variant => variantIds.Contains(variant.ShopifyProductVariantId))
+            .Select(variant => new { variant.GlobalProductId, variant.GlobalVariantId, variant.Sku, variant.Barcode })
+            .ToArrayAsync();
+        var groups = items.GroupBy(i => i.GlobalProductId);
+
+        foreach (var group in groups)
+        {
+            var productId = group.Key;
+            var variantsToUpdate =
+                group.Select(i => new ShopifyUpdateProductVariant(i.GlobalVariantId, i.Sku, i.Barcode));
+            await shopifyProductService.UpdateVariants(productId, variantsToUpdate);
+        }
     }
 }

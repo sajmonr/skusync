@@ -6,7 +6,7 @@ using Quartz;
 namespace Application.Products.Jobs;
 
 /// <summary>
-/// Quartz.NET job that triggers a full Shopify product synchronisation on each scheduled
+/// Quartz.NET job that triggers a full Shopify product synchronization on each scheduled
 /// execution. The <see cref="DisallowConcurrentExecutionAttribute"/> ensures that only one
 /// instance runs at a time, preventing overlapping database writes if a sync takes longer
 /// than the configured cron interval.
@@ -24,7 +24,7 @@ public class ShopifyProductSyncJob(
     public static readonly JobKey Key = new(nameof(ShopifyProductSyncJob), "shopify");
 
     /// <summary>
-    /// Executes the Shopify product synchronisation. Logs timing and trigger details at
+    /// Executes the Shopify product synchronization. Logs timing and trigger details at
     /// <c>Debug</c> level and wraps any exception in a <see cref="JobExecutionException"/>
     /// with <c>refireImmediately: false</c> to prevent an immediate retry loop.
     /// </summary>
@@ -42,6 +42,12 @@ public class ShopifyProductSyncJob(
         try
         {
             var importResult = await productsService.ImportProductsFromShopify();
+
+            if (importResult.IsSuccess)
+            {
+                await productsService.DeduplicateProducts();
+            }
+            
             stopwatch.Stop();
 
             if (!importResult.IsSuccess)

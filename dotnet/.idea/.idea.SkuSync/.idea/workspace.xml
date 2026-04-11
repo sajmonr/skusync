@@ -18,15 +18,16 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="2473acc7-8b17-4e30-b45b-750aea428ada" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/src/Application/Events/EventDispatcher.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/Application/Events/EventDispatcherExtensions.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/Application/Events/IEventDispatcher.cs" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/src/Application/Products/Events/SkulabsProductImportEvent.cs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/.idea.SkuSync/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/.idea.SkuSync/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Application/Events/EventAccumulatorExtensions.cs" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Application/DependencyInjection.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/DependencyInjection.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Application/Events/EventAccumulator.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/Events/EventAccumulator.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Application/Jobs/ScheduledJobsOptions.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/Jobs/ScheduledJobsOptions.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Application/Products/Jobs/ProductDeduplicationJob.cs" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/src/Application/Products/Jobs/ProductEventProcessorJob.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/Products/Jobs/ProductEventProcessorJob.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Application/Products/Webhook/ShopifyProductCreateWebhookHandler.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/Products/Webhook/ShopifyProductCreateWebhookHandler.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Application/Products/Webhook/ShopifyProductUpdateWebhookHandler.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/Products/Webhook/ShopifyProductUpdateWebhookHandler.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Application/Products/Jobs/ShopifyProductSyncJob.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/Products/Jobs/ShopifyProductSyncJob.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Application/Products/Services/ProductsService.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/Products/Services/ProductsService.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Web.Api/appsettings.Development.json" beforeDir="false" afterPath="$PROJECT_DIR$/src/Web.Api/appsettings.Development.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Web.Api/appsettings.json" beforeDir="false" afterPath="$PROJECT_DIR$/src/Web.Api/appsettings.json" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -69,6 +70,7 @@
     <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/SourcesCache/44445fa8e755b688d9bd2164e9ba8e8fcd558d95fd4ad9539895eaa383479a/OptionsServiceCollectionExtensions.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/SourcesCache/60e67c8435f2f3e3a3a4e0848b36dee8fbe4b31162bc25f58ddcd628f7d8dc/IProductService.cs" root0="SKIP_HIGHLIGHTING" />
     <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/SourcesCache/7b403145787ec043db942f5412faa174fe63b8c7bb5ac93242d5165d8e5b6a4/MigrationCommandExecutor.cs" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/SourcesCache/90bf9ac51b760d05d7e33d5306b3499ff3132dbb33490fd972f778663cce0fc/IJob.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/SourcesCache/91a836c022434a8a6f145b2b56bc778c9e8c1288ad092e714446eb4eb19fd4f/ShopifyObject.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/SourcesCache/c1f1afeb5be9f63605a77cf5c75fb3295bed2f36d49f486cb18569e7181df/IServiceCollectionQuartzConfigurator.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/SourcesCache/c3cd15de44959111d31f5822f2413a1a064a371b064155ebac1d5b68073c64/OptionsBuilderConfigurationExtensions.cs" root0="FORCE_HIGHLIGHTING" />
@@ -323,6 +325,19 @@
           <properties exception="System.Threading.ThreadAbortException" breakIfHandledByOtherCode="false" displayValue="System.Threading.ThreadAbortException" />
           <option name="timeStamp" value="3" />
         </breakpoint>
+        <line-breakpoint enabled="true" type="DotNet Breakpoints">
+          <url>file://$PROJECT_DIR$/src/Application/Events/EventDispatcher.cs</url>
+          <line>9</line>
+          <properties documentPath="$PROJECT_DIR$/src/Application/Events/EventDispatcher.cs" containingFunctionPresentation="Method 'Dispatch'">
+            <startOffsets>
+              <option value="319" />
+            </startOffsets>
+            <endOffsets>
+              <option value="347" />
+            </endOffsets>
+          </properties>
+          <option name="timeStamp" value="16" />
+        </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>
   </component>
