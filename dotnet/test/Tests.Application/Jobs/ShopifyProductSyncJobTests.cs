@@ -83,6 +83,30 @@ public class ShopifyProductSyncJobTests
         errorLogs[0].Exception.ShouldBeSameAs(exception);
     }
 
+    [Fact]
+    public async Task Execute_ShouldCallDeduplicateProducts_WhenImportSucceeds()
+    {
+        _productsService.ImportProductsFromShopify().Returns(ProductImportResult.Success(0, 0));
+        _productsService.DeduplicateProducts().Returns(ProductDeduplicationResult.Success([]));
+        var sut = CreateSut();
+
+        await sut.Execute(_context);
+
+        await _productsService.Received(1).DeduplicateProducts();
+    }
+
+    [Fact]
+    public async Task Execute_ShouldNotCallDeduplicateProducts_WhenImportFails()
+    {
+        _productsService.ImportProductsFromShopify()
+            .Returns(ProductImportResult.Failure("Shopify unavailable"));
+        var sut = CreateSut();
+
+        await sut.Execute(_context);
+
+        await _productsService.DidNotReceive().DeduplicateProducts();
+    }
+
     private ShopifyProductSyncJob CreateSut() => new(_productsService, _logger);
 
     private sealed class TestLogger<T> : ILogger<T>
