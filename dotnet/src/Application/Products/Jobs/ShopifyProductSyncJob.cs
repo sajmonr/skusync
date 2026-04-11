@@ -1,8 +1,9 @@
+using Application.Jobs;
 using Application.Products.Services;
 using Microsoft.Extensions.Logging;
 using Quartz;
 
-namespace Application.Jobs;
+namespace Application.Products.Jobs;
 
 /// <summary>
 /// Quartz.NET job that triggers a full Shopify product synchronisation on each scheduled
@@ -12,15 +13,15 @@ namespace Application.Jobs;
 /// </summary>
 [DisallowConcurrentExecution]
 [MutexGroup("shopify-sync")]
-public class ShopifySyncJob(
+public class ShopifyProductSyncJob(
     IProductsService productsService,
-    ILogger<ShopifySyncJob> logger) : IJob
+    ILogger<ShopifyProductSyncJob> logger) : IJob
 {
     /// <summary>
     /// The stable Quartz job key used to identify and reference this job when registering
     /// triggers or querying the scheduler.
     /// </summary>
-    public static readonly JobKey Key = new(nameof(ShopifySyncJob), "shopify");
+    public static readonly JobKey Key = new(nameof(ShopifyProductSyncJob), "shopify");
 
     /// <summary>
     /// Executes the Shopify product synchronisation. Logs timing and trigger details at

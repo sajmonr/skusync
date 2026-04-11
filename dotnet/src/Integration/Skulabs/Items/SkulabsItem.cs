@@ -5,17 +5,22 @@ namespace Integration.Skulabs.Items;
 /// enriched with the linked Shopify variant and product identifiers.
 /// </summary>
 public record SkuLabsItem(
-    /// <summary>The internal SkuLabs item identifier.</summary>
     string SkulabsId,
-    /// <summary>The Shopify variant ID taken from the item's first listing.</summary>
     string ShopifyVariantId,
-    /// <summary>The Shopify product ID taken from the item's first listing.</summary>
     string ShopifyProductId,
-    /// <summary>The stock-keeping unit (SKU) assigned to this item in SkuLabs.</summary>
     string Sku,
-    /// <summary>The barcode (UPC/EAN) assigned to this item in SkuLabs.</summary>
     string Barcode)
 {
+    /// <summary>
+    /// Converts a <see cref="SkulabsItemResponse"/> object to a <see cref="SkuLabsItem"/> domain model instance.
+    /// This method maps response fields, ensuring compatibility between the API data and the application model.
+    /// </summary>
+    /// <param name="response">
+    /// The <see cref="SkulabsItemResponse"/> object representing the raw API response for a SkuLabs inventory item.
+    /// </param>
+    /// <returns>
+    /// A <see cref="SkuLabsItem"/> object containing the mapped and enriched domain model representation of the item.
+    /// </returns>
     internal static SkuLabsItem FromResponse(SkulabsItemResponse response)
     {
         return new SkuLabsItem(response.Id, response.Listings[0].VariantId, response.Listings[0].ProductId,

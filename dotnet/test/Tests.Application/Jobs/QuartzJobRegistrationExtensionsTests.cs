@@ -1,4 +1,5 @@
 using Application.Jobs;
+using Application.Products.Jobs;
 using Microsoft.Extensions.DependencyInjection;
 using Quartz;
 using Shouldly;
@@ -13,7 +14,7 @@ public class QuartzJobRegistrationExtensionsTests
         var options = new JobScheduleOptions { Enabled = false };
         var scheduler = await BuildScheduler(options);
 
-        var jobDetail = await scheduler.GetJobDetail(ShopifySyncJob.Key);
+        var jobDetail = await scheduler.GetJobDetail(ShopifyProductSyncJob.Key);
 
         jobDetail.ShouldBeNull();
     }
@@ -24,10 +25,10 @@ public class QuartzJobRegistrationExtensionsTests
         var options = new JobScheduleOptions { Enabled = true, CronExpression = "0 0 * * * ?" };
         var scheduler = await BuildScheduler(options);
 
-        var jobDetail = await scheduler.GetJobDetail(ShopifySyncJob.Key);
+        var jobDetail = await scheduler.GetJobDetail(ShopifyProductSyncJob.Key);
 
         jobDetail.ShouldNotBeNull();
-        jobDetail.JobType.ShouldBe(typeof(ShopifySyncJob));
+        jobDetail.JobType.ShouldBe(typeof(ShopifyProductSyncJob));
     }
 
     [Fact]
@@ -36,7 +37,7 @@ public class QuartzJobRegistrationExtensionsTests
         var options = new JobScheduleOptions { Enabled = true, CronExpression = "0 0 * * * ?", RunOnStart = false };
         var scheduler = await BuildScheduler(options);
 
-        var triggers = await scheduler.GetTriggersOfJob(ShopifySyncJob.Key);
+        var triggers = await scheduler.GetTriggersOfJob(ShopifyProductSyncJob.Key);
 
         triggers.Count.ShouldBe(1);
         triggers.Single().ShouldBeAssignableTo<ICronTrigger>();
@@ -48,7 +49,7 @@ public class QuartzJobRegistrationExtensionsTests
         var options = new JobScheduleOptions { Enabled = true, CronExpression = "0 0 * * * ?", RunOnStart = true };
         var scheduler = await BuildScheduler(options);
 
-        var triggers = await scheduler.GetTriggersOfJob(ShopifySyncJob.Key);
+        var triggers = await scheduler.GetTriggersOfJob(ShopifyProductSyncJob.Key);
 
         triggers.Count.ShouldBe(2);
     }
@@ -59,7 +60,7 @@ public class QuartzJobRegistrationExtensionsTests
         var options = new JobScheduleOptions { Enabled = true, CronExpression = "0 0 * * * ?", RunOnStart = true };
         var scheduler = await BuildScheduler(options);
 
-        var triggers = await scheduler.GetTriggersOfJob(ShopifySyncJob.Key);
+        var triggers = await scheduler.GetTriggersOfJob(ShopifyProductSyncJob.Key);
 
         triggers.ShouldContain(t => t is ISimpleTrigger);
     }
@@ -71,7 +72,7 @@ public class QuartzJobRegistrationExtensionsTests
         var options = new JobScheduleOptions { Enabled = true, CronExpression = cronExpression };
         var scheduler = await BuildScheduler(options);
 
-        var triggers = await scheduler.GetTriggersOfJob(ShopifySyncJob.Key);
+        var triggers = await scheduler.GetTriggersOfJob(ShopifyProductSyncJob.Key);
 
         var cronTrigger = triggers.OfType<ICronTrigger>().Single();
         cronTrigger.CronExpressionString.ShouldBe(cronExpression);
@@ -82,7 +83,7 @@ public class QuartzJobRegistrationExtensionsTests
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddQuartz(quartz =>
-            quartz.AddScheduledJob<ShopifySyncJob>(ShopifySyncJob.Key, options));
+            quartz.AddScheduledJob<ShopifyProductSyncJob>(ShopifyProductSyncJob.Key, options));
 
         var provider = services.BuildServiceProvider();
         var schedulerFactory = provider.GetRequiredService<ISchedulerFactory>();

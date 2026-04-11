@@ -18,9 +18,11 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="2473acc7-8b17-4e30-b45b-750aea428ada" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/src/Application/Products/Services/ProductsService.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/Products/Services/ProductsService.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Application/Products/Webhook/ShopifyProductCreateWebhookHandler.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/Products/Webhook/ShopifyProductCreateWebhookHandler.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Application/Products/Webhook/ShopifyProductUpdateWebhookHandler.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/Products/Webhook/ShopifyProductUpdateWebhookHandler.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Application/DependencyInjection.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/DependencyInjection.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Application/Jobs/ShopifySyncJob.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/Products/Jobs/ShopifyProductSyncJob.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Integration/Skulabs/Items/SkulabsItem.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Integration/Skulabs/Items/SkulabsItem.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/Tests.Application/Jobs/QuartzJobRegistrationExtensionsTests.cs" beforeDir="false" afterPath="$PROJECT_DIR$/test/Tests.Application/Jobs/QuartzJobRegistrationExtensionsTests.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/Tests.Application/Jobs/ShopifySyncJobTests.cs" beforeDir="false" afterPath="$PROJECT_DIR$/test/Tests.Application/Jobs/ShopifyProductSyncJobTests.cs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
