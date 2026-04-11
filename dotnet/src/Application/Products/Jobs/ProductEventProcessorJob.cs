@@ -1,6 +1,10 @@
 using Application.Events;
 using Application.Products.Events;
+using Infrastructure.Database;
+using Integration.Shopify.Products;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.FeatureManagement;
 using Quartz;
 
 namespace Application.Products.Jobs;
@@ -20,7 +24,11 @@ namespace Application.Products.Jobs;
 [DisallowConcurrentExecution]
 public class ProductEventProcessorJob(
     IEventAccumulator<ProductChangedEvent> eventAccumulator,
-    ILogger<ProductEventProcessorJob> logger) : IJob
+    IEventDispatcher eventDispatcher,
+    ILogger<ProductEventProcessorJob> logger,
+    IFeatureManager featureManager,
+    IShopifyProductService shopifyProductService,
+    ApplicationDbContext dbContext) : IJob
 {
     /// <summary>
     /// The stable Quartz job key used to identify and reference this job when registering
@@ -32,7 +40,7 @@ public class ProductEventProcessorJob(
     /// Drains all pending product change events and processes the resulting batch.
     /// </summary>
     /// <param name="context">The Quartz execution context providing trigger and timing metadata.</param>
-    public Task Execute(IJobExecutionContext context)
+    public async Task Execute(IJobExecutionContext context)
     {
         logger.LogDebug(
             "Triggered by '{TriggerKey}'. Scheduled fire time: {ScheduledFireTime}. Actual fire time: {FireTime}.",
@@ -44,26 +52,90 @@ public class ProductEventProcessorJob(
 
         if (events.Count == 0)
         {
-            logger.LogInformation("ProductEventProcessorJob completed. No events to process.");
-            return Task.CompletedTask;
+            logger.LogDebug("ProductEventProcessorJob completed. No events to process.");
+            return;
         }
 
-        var createdCount = events.Count(e => e.ChangeType == ProductChangeType.Created);
-        var updatedCount = events.Count(e => e.ChangeType == ProductChangeType.Updated);
+        var createdEvents = events.Where(e => e.ChangeType == ProductChangeType.Created).ToArray();
+        var updateEvents = events.Where(e => e.ChangeType == ProductChangeType.Updated).ToArray();
 
         logger.LogInformation(
             "Processing {Total} accumulated product change event(s): {Created} created, {Updated} updated.",
-            events.Count, createdCount, updatedCount);
+            events.Count, createdEvents.Length, updateEvents.Length);
 
-        // TODO: add downstream business logic here, e.g.:
-        //   - push changed variant IDs to an external system (SkuLabs, etc.)
-        //   - trigger a reconciliation task
-        //   - publish a summary notification
+        if (createdEvents.Length > 0)
+        {
+            await HandleCreatedProducts(createdEvents);   
+        }
+
+        if (updateEvents.Length > 0)
+        {
+            await HandleUpdatedProducts(updateEvents);
+        }
 
         logger.LogInformation(
             "ProductEventProcessorJob completed. Processed {Total} event(s).",
             events.Count);
+    }
 
-        return Task.CompletedTask;
+    private async Task HandleCreatedProducts(ProductChangedEvent[] events)
+    {
+        if (!await featureManager.IsEnabledAsync(FeatureFlags.ShopifyWriteBack))
+        {
+            logger.LogInformation(
+                "ShopifyWriteBack feature flag is disabled. Skipping Shopify update for created products.");
+            return;
+        }
+
+        // We need to update SKUs & Barcodes in Shopify.
+        // Get all info from DB and group it by product ID.
+        // Then update Shopify.
+        var variantIds = events.Select(e => e.ProductVariantId).ToArray();
+        var items = await dbContext
+            .ShopifyProductVariants
+            .Where(variant => variantIds.Contains(variant.ShopifyProductVariantId))
+            .Select(variant => new { variant.GlobalProductId, variant.GlobalVariantId, variant.Sku, variant.Barcode })
+            .ToArrayAsync();
+        var groups = items.GroupBy(i => i.GlobalProductId);
+
+        foreach (var group in groups)
+        {
+            var productId = group.Key;
+            var variantsToUpdate =
+                group.Select(i => new ShopifyUpdateProductVariant(i.GlobalVariantId, i.Sku, i.Barcode));
+            await shopifyProductService.UpdateVariants(productId, variantsToUpdate);
+        }
+        
+        // Created product should trigger a new import to Skulabs.
+        eventDispatcher.Dispatch(new SkulabsProductImportEvent());
+    }
+
+    private async Task HandleUpdatedProducts(ProductChangedEvent[] events)
+    {
+        if (!await featureManager.IsEnabledAsync(FeatureFlags.ShopifyWriteBack))
+        {
+            logger.LogInformation(
+                "ShopifyWriteBack feature flag is disabled. Skipping Shopify update for created products.");
+            return;
+        }
+
+        // We need to update SKUs & Barcodes in Shopify.
+        // Get all info from DB and group it by product ID.
+        // Then update Shopify.
+        var variantIds = events.Select(e => e.ProductVariantId).ToArray();
+        var items = await dbContext
+            .ShopifyProductVariants
+            .Where(variant => variantIds.Contains(variant.ShopifyProductVariantId))
+            .Select(variant => new { variant.GlobalProductId, variant.GlobalVariantId, variant.Sku, variant.Barcode })
+            .ToArrayAsync();
+        var groups = items.GroupBy(i => i.GlobalProductId);
+
+        foreach (var group in groups)
+        {
+            var productId = group.Key;
+            var variantsToUpdate =
+                group.Select(i => new ShopifyUpdateProductVariant(i.GlobalVariantId, i.Sku, i.Barcode));
+            await shopifyProductService.UpdateVariants(productId, variantsToUpdate);
+        }
     }
 }

@@ -26,6 +26,7 @@ public static class DependencyInjection
         public T AddApplication()
         {
             // Singleton accumulator shared by all producers (import service + webhook handlers).
+            builder.Services.AddSingleton<IEventDispatcher, EventDispatcher>();
             builder.Services.AddSingleton(typeof(IEventAccumulator<>), typeof(EventAccumulator<>));
 
             builder.Services.AddTransient<IProductsService, ProductsService>();
@@ -46,9 +47,8 @@ public static class DependencyInjection
                 //quartz.AddTriggerListener<MutexGroupListener>(GroupMatcher<TriggerKey>.AnyGroup());
                 //quartz.AddJobListener<MutexGroupListener>(GroupMatcher<JobKey>.AnyGroup());
 
-                quartz.AddScheduledJob<ShopifySyncJob>(ShopifySyncJob.Key, scheduledJobsOptions.ShopifyProductSync);
+                quartz.AddScheduledJob<ShopifyProductSyncJob>(ShopifyProductSyncJob.Key, scheduledJobsOptions.ShopifyProductSync);
                 quartz.AddScheduledJob<ProductEventProcessorJob>(ProductEventProcessorJob.Key, scheduledJobsOptions.ProductEventProcessor);
-                quartz.AddScheduledJob<ProductDeduplicationJob>(ProductDeduplicationJob.Key, scheduledJobsOptions.ProductDeduplication);
             });
 
             builder.Services.AddQuartzHostedService(options =>

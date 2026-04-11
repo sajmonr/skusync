@@ -1,4 +1,3 @@
-using Application;
 using Application.Events;
 using Application.Products.Events;
 using Application.Products.Webhook;
@@ -7,7 +6,6 @@ using Integration.Aws.Sqs;
 using Integration.Shopify.Products;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Microsoft.FeatureManagement;
 using NSubstitute;
 using Shouldly;
 
@@ -15,9 +13,7 @@ namespace Tests.Application.Queue;
 
 public class ShopifyProductCreateWebhookHandlerTests : IDisposable
 {
-    private readonly IShopifyProductService _productService = Substitute.For<IShopifyProductService>();
-    private readonly IEventAccumulator<ProductChangedEvent> _eventAccumulator = Substitute.For<IEventAccumulator<ProductChangedEvent>>();
-    private readonly IFeatureManager _featureManager = Substitute.For<IFeatureManager>();
+    private readonly IEventDispatcher _eventDispatcher = Substitute.For<IEventDispatcher>();
     private readonly ApplicationDbContext _dbContext;
     private readonly TestLogger<ShopifyProductUpdateWebhookHandler> _logger = new();
 
@@ -28,15 +24,13 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
             .Options;
 
         _dbContext = new ApplicationDbContext(options);
-
-        _productService
-            .UpdateVariants(Arg.Any<string>(), Arg.Any<IEnumerable<ShopifyUpdateProductVariant>>())
-            .Returns(true);
-
-        _featureManager.IsEnabledAsync(FeatureFlags.ShopifyWriteBack).Returns(true);
     }
 
     public void Dispose() => _dbContext.Dispose();
+
+    // -------------------------------------------------------------------------
+    // Entity persistence
+    // -------------------------------------------------------------------------
 
     [Fact]
     public async Task Handle_ShouldPersistOneEntity_PerVariant()
@@ -82,33 +76,6 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
     }
 
     [Fact]
-    public async Task Handle_ShouldCallUpdateVariants_WithProductGlobalId()
-    {
-        var product = CreateProduct("gid://shopify/Product/100", 100, "T-Shirt",
-            CreateVariant("gid://shopify/ProductVariant/200", 200, "Large"));
-
-        await CreateSut().Handle(product);
-
-        await _productService.Received(1).UpdateVariants(
-            "gid://shopify/Product/100",
-            Arg.Any<IEnumerable<ShopifyUpdateProductVariant>>());
-    }
-
-    [Fact]
-    public async Task Handle_ShouldPassAllVariants_ToUpdateVariants()
-    {
-        var product = CreateProduct("gid://shopify/Product/100", 100, "T-Shirt",
-            CreateVariant("gid://shopify/ProductVariant/200", 200, "Large"),
-            CreateVariant("gid://shopify/ProductVariant/201", 201, "Small"));
-
-        await CreateSut().Handle(product);
-
-        await _productService.Received(1).UpdateVariants(
-            Arg.Any<string>(),
-            Arg.Is<IEnumerable<ShopifyUpdateProductVariant>>(v => v.Count() == 2));
-    }
-
-    [Fact]
     public async Task Handle_ShouldPersistNoEntities_WhenProductHasNoVariants()
     {
         var product = CreateProduct("gid://shopify/Product/100", 100, "T-Shirt");
@@ -119,24 +86,12 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
         saved.ShouldBeEmpty();
     }
 
-    [Fact]
-    public async Task Handle_ShouldCallUpdateVariants_EvenWhenProductHasNoVariants()
-    {
-        var product = CreateProduct("gid://shopify/Product/100", 100, "T-Shirt");
-
-        await CreateSut().Handle(product);
-
-        await _productService.Received(1).UpdateVariants(
-            "gid://shopify/Product/100",
-            Arg.Is<IEnumerable<ShopifyUpdateProductVariant>>(v => !v.Any()));
-    }
-
     // -------------------------------------------------------------------------
-    // Event accumulation
+    // Event dispatching
     // -------------------------------------------------------------------------
 
     [Fact]
-    public async Task Handle_ShouldEnqueueCreatedEvent_PerPersistedVariant()
+    public async Task Handle_ShouldDispatchCreatedEvent_PerPersistedVariant()
     {
         var product = CreateProduct("gid://shopify/Product/100", 100, "T-Shirt",
             CreateVariant("gid://shopify/ProductVariant/200", 200, "Large"),
@@ -144,56 +99,26 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
 
         await CreateSut().Handle(product);
 
-        _eventAccumulator.Received(1).Enqueue(
-            Arg.Is<ProductChangedEvent>(e => e.VariantId == 200L && e.ChangeType == ProductChangeType.Created));
-        _eventAccumulator.Received(1).Enqueue(
-            Arg.Is<ProductChangedEvent>(e => e.VariantId == 201L && e.ChangeType == ProductChangeType.Created));
+        _eventDispatcher.Received(2).Dispatch(
+            Arg.Is<ProductChangedEvent>(e => e.ProductVariantId != Guid.Empty && e.ChangeType == ProductChangeType.Created));
     }
 
     [Fact]
-    public async Task Handle_ShouldNotEnqueueAnyEvent_WhenProductHasNoVariants()
+    public async Task Handle_ShouldNotDispatchAnyEvent_WhenProductHasNoVariants()
     {
         var product = CreateProduct("gid://shopify/Product/100", 100, "T-Shirt");
 
         await CreateSut().Handle(product);
 
-        _eventAccumulator.DidNotReceive().Enqueue(Arg.Any<ProductChangedEvent>());
+        _eventDispatcher.DidNotReceive().Dispatch(Arg.Any<ProductChangedEvent>());
     }
 
     // -------------------------------------------------------------------------
-    // Feature flag: ShopifyWriteBack disabled
+    // Helpers
     // -------------------------------------------------------------------------
-
-    [Fact]
-    public async Task Handle_ShouldNotCallUpdateVariants_WhenShopifyWriteBackFlagIsDisabled()
-    {
-        _featureManager.IsEnabledAsync(FeatureFlags.ShopifyWriteBack).Returns(false);
-
-        var product = CreateProduct("gid://shopify/Product/100", 100, "T-Shirt",
-            CreateVariant("gid://shopify/ProductVariant/200", 200, "Large"));
-
-        await CreateSut().Handle(product);
-
-        await _productService.DidNotReceive()
-            .UpdateVariants(Arg.Any<string>(), Arg.Any<IEnumerable<ShopifyUpdateProductVariant>>());
-    }
-
-    [Fact]
-    public async Task Handle_ShouldLogInformation_WhenShopifyWriteBackFlagIsDisabled()
-    {
-        _featureManager.IsEnabledAsync(FeatureFlags.ShopifyWriteBack).Returns(false);
-
-        var product = CreateProduct("gid://shopify/Product/100", 100, "T-Shirt",
-            CreateVariant("gid://shopify/ProductVariant/200", 200, "Large"));
-
-        await CreateSut().Handle(product);
-
-        _logger.Entries.ShouldContain(e =>
-            e.LogLevel == LogLevel.Information && e.Message.Contains("ShopifyWriteBack"));
-    }
 
     private ShopifyProductCreateWebhookHandler CreateSut() =>
-        new(_dbContext, _productService, _logger, _eventAccumulator, _featureManager);
+        new(_dbContext, _logger, _eventDispatcher);
 
     private static SqsShopEventProduct CreateProduct(
         string adminGraphqlApiId, long id, string title, params SqsShopEventVariant[] variants) =>

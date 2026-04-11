@@ -12,7 +12,7 @@ public class ProductsService(
     IShopifyProductService shopifyProductService,
     ApplicationDbContext dbContext,
     ILogger<ProductsService> logger,
-    IEventAccumulator<ProductChangedEvent> eventAccumulator) : IProductsService
+    IEventDispatcher eventDispatcher) : IProductsService
 {
     public async Task<ProductImportResult> ImportProductsFromShopify()
     {
@@ -36,11 +36,9 @@ public class ProductsService(
 
         logger.LogDebug("Found {Count} product variants in the database.", dbVariantsByGlobalId.Count);
 
-        var created = 0;
-        var updated = 0;
-
         // Collect events before SaveChangesAsync so we only publish for persisted changes.
-        var pendingEvents = new List<ProductChangedEvent>();
+        var createdEntities = new List<ShopifyProductVariantEntity>();
+        var updatedEntities = new List<ShopifyProductVariantEntity>();
 
         foreach (var shopifyVariant in shopifyVariants)
         {
@@ -56,8 +54,7 @@ public class ProductsService(
                 existing.UpdatedOnUtc = DateTime.UtcNow;
                 logger.LogDebug("Updating variant with GlobalVariantId {GlobalVariantId}.",
                     shopifyVariant.GlobalVariantId);
-                pendingEvents.Add(new ProductChangedEvent(shopifyVariant.VariantId, ProductChangeType.Updated));
-                updated++;
+                updatedEntities.Add(existing);
             }
             else
             {
@@ -74,11 +71,14 @@ public class ProductsService(
                     Barcode = shopifyVariant.Barcode
                 };
 
+                newVariant.LogEvents.Add(new ShopifyProductVariantLogEventEntity
+                {
+                    Message = VariantLogMessages.VariantCreated()
+                });
                 dbContext.ShopifyProductVariants.Add(newVariant);
                 logger.LogDebug("Creating new variant with GlobalVariantId {GlobalVariantId}.",
                     shopifyVariant.GlobalVariantId);
-                pendingEvents.Add(new ProductChangedEvent(shopifyVariant.VariantId, ProductChangeType.Created));
-                created++;
+                createdEntities.Add(newVariant);
             }
         }
 
@@ -94,11 +94,12 @@ public class ProductsService(
         }
 
         // Enqueue only after a successful save so no phantom events enter the queue.
-        eventAccumulator.Enqueue(pendingEvents);
+        eventDispatcher.DispatchMany(updatedEntities.Select(e => ProductChangedEvent.Updated(e.ShopifyProductVariantId)));
+        eventDispatcher.DispatchMany(createdEntities.Select(e => ProductChangedEvent.Created(e.ShopifyProductVariantId)));
 
-        logger.LogDebug("Synchronization complete. Created: {Created}, Updated: {Updated}.", created, updated);
+        logger.LogDebug("Synchronization complete. Created: {Created}, Updated: {Updated}.", createdEntities.Count, updatedEntities.Count);
 
-        return ProductImportResult.Success(created, updated);
+        return ProductImportResult.Success(createdEntities.Count, updatedEntities.Count);
     }
 
     public async Task<ProductDeduplicationResult> DeduplicateProducts()
@@ -193,21 +194,34 @@ public class ProductsService(
 
             if (hasDupeSku)
             {
+                var oldSku = variant.Sku;
                 variant.Sku = variant.VariantId.ToString();
+                dbContext.ShopifyProductVariantLogEvents.Add(new ShopifyProductVariantLogEventEntity
+                {
+                    ShopifyProductVariantId = variant.ShopifyProductVariantId,
+                    Message = VariantLogMessages.SkuUpdated(oldSku, variant.VariantId.ToString())
+                });
             }
 
             if (hasDupeBarcode)
             {
+                var oldBarcode = variant.Barcode;
                 variant.Barcode = variant.VariantId.ToString();
+                dbContext.ShopifyProductVariantLogEvents.Add(new ShopifyProductVariantLogEventEntity
+                {
+                    ShopifyProductVariantId = variant.ShopifyProductVariantId,
+                    Message = VariantLogMessages.BarcodeUpdated(oldBarcode, variant.VariantId.ToString())
+                });
             }
 
             variant.UpdatedOnUtc = DateTime.UtcNow;
         }
     }
 
-    private static bool UpdateVariant(ShopifyProductVariantEntity existing, ShopifyProductVariant shopifyVariant)
+    private bool UpdateVariant(ShopifyProductVariantEntity existing, ShopifyProductVariant shopifyVariant)
     {
         var changed = false;
+        var oldFullTitle = existing.FullTitle;
 
         if (existing.ProductTitle != shopifyVariant.ProductTitle)
         {
@@ -221,15 +235,40 @@ public class ProductsService(
             changed = true;
         }
 
+        if (existing.FullTitle != oldFullTitle)
+        {
+            dbContext.ShopifyProductVariantLogEvents.Add(new ShopifyProductVariantLogEventEntity
+            {
+                ShopifyProductVariantId = existing.ShopifyProductVariantId,
+                Message = VariantLogMessages.TitleUpdated(oldFullTitle, existing.FullTitle)
+            });
+        }
+
         if (string.IsNullOrWhiteSpace(existing.Sku) && !string.IsNullOrWhiteSpace(shopifyVariant.Sku))
         {
             existing.Sku = shopifyVariant.Sku;
             changed = true;
+            dbContext.ShopifyProductVariantLogEvents.Add(new ShopifyProductVariantLogEventEntity
+            {
+                ShopifyProductVariantId = existing.ShopifyProductVariantId,
+                Message = VariantLogMessages.SkuSet(shopifyVariant.Sku)
+            });
         }
 
         if (string.IsNullOrWhiteSpace(existing.Barcode) && !string.IsNullOrWhiteSpace(shopifyVariant.Barcode))
         {
             existing.Barcode = shopifyVariant.Barcode;
+            changed = true;
+            dbContext.ShopifyProductVariantLogEvents.Add(new ShopifyProductVariantLogEventEntity
+            {
+                ShopifyProductVariantId = existing.ShopifyProductVariantId,
+                Message = VariantLogMessages.BarcodeSet(shopifyVariant.Barcode)
+            });
+        }
+
+        // The below will force change to run
+        if (existing.Sku != shopifyVariant.Sku || existing.Barcode != shopifyVariant.Barcode)
+        {
             changed = true;
         }
 

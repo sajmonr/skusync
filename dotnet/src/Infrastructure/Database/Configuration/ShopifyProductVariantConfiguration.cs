@@ -8,7 +8,7 @@ public class ShopifyProductVariantConfiguration : IEntityTypeConfiguration<Shopi
 {
     public void Configure(EntityTypeBuilder<ShopifyProductVariantEntity> builder)
     {
-        builder.ToTable("ShopifyProductVariant");
+        builder.ToTable("ShopifyProductVariants");
 
         builder.HasUuidV7PrimaryKey(x => x.ShopifyProductVariantId);
 
@@ -33,7 +33,7 @@ public class ShopifyProductVariantConfiguration : IEntityTypeConfiguration<Shopi
             .HasDefaultValueDateTimeNowUtcSql();
         
         builder.Property(x => x.Barcode).IsRequired()
-            .HasMaxLength(50);
+            .HasMaxLength(100);
         builder.Property(x => x.Sku).IsRequired()
             .HasMaxLength(100);
 

@@ -1,4 +1,5 @@
 using Application.Jobs;
+using Application.Products.Jobs;
 using Application.Products.Services;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -8,11 +9,11 @@ using Shouldly;
 
 namespace Tests.Application.Jobs;
 
-public class ShopifySyncJobTests
+public class ShopifyProductSyncJobTests
 {
     private readonly IProductsService _productsService = Substitute.For<IProductsService>();
     private readonly IJobExecutionContext _context = Substitute.For<IJobExecutionContext>();
-    private readonly TestLogger<ShopifySyncJob> _logger = new();
+    private readonly TestLogger<ShopifyProductSyncJob> _logger = new();
 
     [Fact]
     public async Task Execute_ShouldCallImportProducts()
@@ -82,7 +83,31 @@ public class ShopifySyncJobTests
         errorLogs[0].Exception.ShouldBeSameAs(exception);
     }
 
-    private ShopifySyncJob CreateSut() => new(_productsService, _logger);
+    [Fact]
+    public async Task Execute_ShouldCallDeduplicateProducts_WhenImportSucceeds()
+    {
+        _productsService.ImportProductsFromShopify().Returns(ProductImportResult.Success(0, 0));
+        _productsService.DeduplicateProducts().Returns(ProductDeduplicationResult.Success([]));
+        var sut = CreateSut();
+
+        await sut.Execute(_context);
+
+        await _productsService.Received(1).DeduplicateProducts();
+    }
+
+    [Fact]
+    public async Task Execute_ShouldNotCallDeduplicateProducts_WhenImportFails()
+    {
+        _productsService.ImportProductsFromShopify()
+            .Returns(ProductImportResult.Failure("Shopify unavailable"));
+        var sut = CreateSut();
+
+        await sut.Execute(_context);
+
+        await _productsService.DidNotReceive().DeduplicateProducts();
+    }
+
+    private ShopifyProductSyncJob CreateSut() => new(_productsService, _logger);
 
     private sealed class TestLogger<T> : ILogger<T>
     {

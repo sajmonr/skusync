@@ -23,7 +23,7 @@ public class EventAccumulatorTests
     [Fact]
     public void DrainAll_ShouldReturnEnqueuedEvent_WhenOneEventWasAdded()
     {
-        var evt = new ProductChangedEvent(100L, ProductChangeType.Created);
+        var evt = ProductChangedEvent.Created(Guid.NewGuid());
 
         _sut.Enqueue(evt);
         var result = _sut.DrainAll();
@@ -35,9 +35,9 @@ public class EventAccumulatorTests
     [Fact]
     public void DrainAll_ShouldReturnAllEvents_WhenMultipleEventsWereEnqueued()
     {
-        _sut.Enqueue(new ProductChangedEvent(100L, ProductChangeType.Created));
-        _sut.Enqueue(new ProductChangedEvent(200L, ProductChangeType.Updated));
-        _sut.Enqueue(new ProductChangedEvent(300L, ProductChangeType.Created));
+        _sut.Enqueue(ProductChangedEvent.Created(Guid.NewGuid()));
+        _sut.Enqueue(ProductChangedEvent.Updated(Guid.NewGuid()));
+        _sut.Enqueue(ProductChangedEvent.Created(Guid.NewGuid()));
 
         var result = _sut.DrainAll();
 
@@ -47,8 +47,8 @@ public class EventAccumulatorTests
     [Fact]
     public void DrainAll_ShouldPreserveFifoOrder()
     {
-        var first  = new ProductChangedEvent(100L, ProductChangeType.Created);
-        var second = new ProductChangedEvent(200L, ProductChangeType.Updated);
+        var first  = ProductChangedEvent.Created(Guid.NewGuid());
+        var second = ProductChangedEvent.Updated(Guid.NewGuid());
 
         _sut.Enqueue(first);
         _sut.Enqueue(second);
@@ -66,7 +66,7 @@ public class EventAccumulatorTests
     [Fact]
     public void DrainAll_ShouldEmptyTheQueue_SoSubsequentDrainReturnsNothing()
     {
-        _sut.Enqueue(new ProductChangedEvent(100L, ProductChangeType.Created));
+        _sut.Enqueue(ProductChangedEvent.Created(Guid.NewGuid()));
 
         _sut.DrainAll();
         var secondDrain = _sut.DrainAll();
@@ -77,18 +77,21 @@ public class EventAccumulatorTests
     [Fact]
     public void DrainAll_ShouldOnlyReturnEventsThatWereEnqueuedBeforeTheCall()
     {
-        _sut.Enqueue(new ProductChangedEvent(100L, ProductChangeType.Created));
+        var firstId = Guid.NewGuid();
+        var secondId = Guid.NewGuid();
+
+        _sut.Enqueue(ProductChangedEvent.Created(firstId));
 
         var firstDrain = _sut.DrainAll();
 
-        _sut.Enqueue(new ProductChangedEvent(200L, ProductChangeType.Updated));
+        _sut.Enqueue(ProductChangedEvent.Updated(secondId));
 
         var secondDrain = _sut.DrainAll();
 
         firstDrain.Count.ShouldBe(1);
-        firstDrain[0].VariantId.ShouldBe(100L);
+        firstDrain[0].ProductVariantId.ShouldBe(firstId);
 
         secondDrain.Count.ShouldBe(1);
-        secondDrain[0].VariantId.ShouldBe(200L);
+        secondDrain[0].ProductVariantId.ShouldBe(secondId);
     }
 }

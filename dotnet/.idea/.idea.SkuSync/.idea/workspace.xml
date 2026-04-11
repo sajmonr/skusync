@@ -19,7 +19,7 @@
   <component name="ChangeListManager">
     <list default="true" id="2473acc7-8b17-4e30-b45b-750aea428ada" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/.idea.SkuSync/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/.idea.SkuSync/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Web.Api/appsettings.json" beforeDir="false" afterPath="$PROJECT_DIR$/src/Web.Api/appsettings.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Web.Api/appsettings.Development.json" beforeDir="false" afterPath="$PROJECT_DIR$/src/Web.Api/appsettings.Development.json" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -59,16 +59,24 @@
     <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/DecompilerCache/decompiler/83add8f7267547cfb60a9d0fdc92f3bb368a8/20/e8bb4403/MessageEnvelope.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/SourcesCache/17a3a8d481919bdc3f1630b5a7deadb2cd394fa12fff3312e6abe29bfc4/IConfiguration.cs" root0="SKIP_HIGHLIGHTING" />
     <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/SourcesCache/1a34ca7d4cae141a11e98d56a86f50dfb7ea8c149c534eb024ed11d5c4e6/IServiceFactory.cs" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/SourcesCache/3f7928ea90e69336931ee773cd8c15e22960ad505897569f9047e4afcc776cc/JobRunShell.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/SourcesCache/44445fa8e755b688d9bd2164e9ba8e8fcd558d95fd4ad9539895eaa383479a/OptionsServiceCollectionExtensions.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/SourcesCache/60e67c8435f2f3e3a3a4e0848b36dee8fbe4b31162bc25f58ddcd628f7d8dc/IProductService.cs" root0="SKIP_HIGHLIGHTING" />
     <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/SourcesCache/7b403145787ec043db942f5412faa174fe63b8c7bb5ac93242d5165d8e5b6a4/MigrationCommandExecutor.cs" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/SourcesCache/90bf9ac51b760d05d7e33d5306b3499ff3132dbb33490fd972f778663cce0fc/IJob.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/SourcesCache/91a836c022434a8a6f145b2b56bc778c9e8c1288ad092e714446eb4eb19fd4f/ShopifyObject.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/SourcesCache/c1f1afeb5be9f63605a77cf5c75fb3295bed2f36d49f486cb18569e7181df/IServiceCollectionQuartzConfigurator.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/SourcesCache/c3cd15de44959111d31f5822f2413a1a064a371b064155ebac1d5b68073c64/OptionsBuilderConfigurationExtensions.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/SourcesCache/e8f9cedf687e8046dcbaa0a73311ef2b3af71b44b9cdb912e41bec42663c97/Product.cs" root0="SKIP_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/src/Application/Events/EventDispatcher.cs" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/src/Application/Events/IEventDispatcher.cs" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/src/Application/Products/Events/SkulabsProductImportEvent.cs" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/src/Application/Products/Webhook/ShopifyWebhookBase.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/src/Infrastructure/Database/ApplicationDbContext.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/src/Infrastructure/Database/Configuration/ShopifyProductVariantConfiguration.cs" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/src/Infrastructure/Database/Configuration/SkulabsItemConfiguration.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/src/Infrastructure/Database/Entities/ShopifyProductVariantEntity.cs" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/src/Infrastructure/Database/Entities/SkulabsItemEntity.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/src/Infrastructure/Database/Extensions/EntityBuilderExtensions.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/src/Integration/Aws/Sqs/SqsOptions.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/src/Integration/Aws/Sqs/SqsProductWebhookTypes.cs" root0="FORCE_HIGHLIGHTING" />
@@ -82,7 +90,6 @@
     <setting file="file://$PROJECT_DIR$/src/Integration/Shopify/Products/ShopifyUpdateProductVariant.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/src/Integration/Shopify/Products/UpdateVariantsGraphResponse.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/src/Integration/Shopify/Responses/UserErrorsResponse.cs" root0="FORCE_HIGHLIGHTING" />
-    <setting file="file://$PROJECT_DIR$/src/Integration/Skulabs/Items/ItemClient.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/src/Integration/Skulabs/Items/SkulabsItem.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/src/Integration/Skulabs/Items/SkulabsListingResponse.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/src/Integration/Skulabs/Options/SkulabsApiOptions.cs" root0="FORCE_HIGHLIGHTING" />
@@ -121,7 +128,7 @@
   </component>
   <component name="PropertiesComponent">{
   &quot;keyToString&quot;: {
-    &quot;.NET Launch Settings Profile.Web.Api: http.executor&quot;: &quot;Debug&quot;,
+    &quot;.NET Launch Settings Profile.Web.Api: http.executor&quot;: &quot;Run&quot;,
     &quot;HTTP Request.Web.Api | #1.executor&quot;: &quot;Run&quot;,
     &quot;HTTP Request.Web.Api | #2.executor&quot;: &quot;Run&quot;,
     &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
@@ -135,7 +142,7 @@
     &quot;cidr.known.project.marker&quot;: &quot;true&quot;,
     &quot;codeWithMe.voiceChat.enabledByDefault&quot;: &quot;false&quot;,
     &quot;com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultModelSelectionForGA.v1&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;develop&quot;,
     &quot;junie.onboarding.icon.badge.shown&quot;: &quot;true&quot;,
     &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
     &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
@@ -269,7 +276,7 @@
       <workItem from="1775415061904" duration="20677000" />
       <workItem from="1775519736341" duration="4881000" />
       <workItem from="1775677835638" duration="17932000" />
-      <workItem from="1775775041942" duration="11475000" />
+      <workItem from="1775775041942" duration="13397000" />
     </task>
     <servers />
   </component>

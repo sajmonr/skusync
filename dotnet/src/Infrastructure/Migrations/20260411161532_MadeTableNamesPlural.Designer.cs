@@ -3,6 +3,7 @@ using System;
 using Infrastructure.Database;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260411161532_MadeTableNamesPlural")]
+    partial class MadeTableNamesPlural
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -30,8 +33,8 @@ namespace Infrastructure.Migrations
 
                     b.Property<string>("Barcode")
                         .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
 
                     b.Property<DateTime>("CreatedOnUtc")
                         .ValueGeneratedOnAdd()
@@ -113,43 +116,6 @@ namespace Infrastructure.Migrations
                     b.ToTable("ShopifyProductVariantLogEvents", (string)null);
                 });
 
-            modelBuilder.Entity("Infrastructure.Database.Entities.SkulabsItemEntity", b =>
-                {
-                    b.Property<Guid>("SkulabsItemId")
-                        .HasColumnType("uuid")
-                        .HasDefaultValueSql("uuidv7()");
-
-                    b.Property<string>("Barcode")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<Guid>("ShopifyProductVariantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Sku")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<string>("SkulabsSourceId")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.HasKey("SkulabsItemId");
-
-                    b.HasIndex("SkulabsSourceId")
-                        .IsUnique();
-
-                    b.ToTable("SkulabsItems", (string)null);
-                });
-
             modelBuilder.Entity("Infrastructure.Database.Entities.ShopifyProductVariantLogEventEntity", b =>
                 {
                     b.HasOne("Infrastructure.Database.Entities.ShopifyProductVariantEntity", "ShopifyProductVariant")
@@ -161,22 +127,9 @@ namespace Infrastructure.Migrations
                     b.Navigation("ShopifyProductVariant");
                 });
 
-            modelBuilder.Entity("Infrastructure.Database.Entities.SkulabsItemEntity", b =>
-                {
-                    b.HasOne("Infrastructure.Database.Entities.ShopifyProductVariantEntity", "ShopifyProductVariant")
-                        .WithOne("SkulabsItem")
-                        .HasForeignKey("Infrastructure.Database.Entities.SkulabsItemEntity", "SkulabsItemId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("ShopifyProductVariant");
-                });
-
             modelBuilder.Entity("Infrastructure.Database.Entities.ShopifyProductVariantEntity", b =>
                 {
                     b.Navigation("LogEvents");
-
-                    b.Navigation("SkulabsItem");
                 });
 #pragma warning restore 612, 618
         }

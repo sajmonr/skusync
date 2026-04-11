@@ -24,13 +24,6 @@ public class ScheduledJobsOptions
     /// </summary>
     [Required]
     public JobScheduleOptions ProductEventProcessor { get; init; } = JobScheduleOptions.Disabled;
-
-    /// <summary>
-    /// Gets the schedule configuration for the product deduplication job.
-    /// Defaults to every 10 minutes (<c>0 0/10 * * * ?</c>).
-    /// </summary>
-    [Required]
-    public JobScheduleOptions ProductDeduplication { get; init; } = JobScheduleOptions.Disabled;
 }
 
 /// <summary>

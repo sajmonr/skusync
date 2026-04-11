@@ -1,11 +1,10 @@
 using Application.Events;
 using Application.Products.Events;
+using Application.Products.Services;
 using Infrastructure.Database;
 using Infrastructure.Database.Entities;
 using Integration.Aws.Sqs;
-using Integration.Shopify.Products;
 using Microsoft.Extensions.Logging;
-using Microsoft.FeatureManagement;
 
 namespace Application.Products.Webhook;
 
@@ -16,12 +15,11 @@ namespace Application.Products.Webhook;
 /// </summary>
 public class ShopifyProductCreateWebhookHandler(
     ApplicationDbContext dbContext,
-    IShopifyProductService productService,
     ILogger<ShopifyProductUpdateWebhookHandler> logger,
-    IEventAccumulator<ProductChangedEvent> eventAccumulator,
-    IFeatureManager featureManager)
-    : IShopifyWebhookHandler
+    IEventDispatcher eventDispatcher)
+    : ShopifyWebhookBase, IShopifyWebhookHandler
 {
+
     /// <inheritdoc/>
     public string TopicName => "products/create";
 
@@ -40,18 +38,13 @@ public class ShopifyProductCreateWebhookHandler(
                 "New variant {VariantId} [{VariantTitle} for product {ProductId} [{ProductTitle}] found.",
                 variant.Id, variant.Title, product.Id, product.Title);
 
-            var newEntity = new ShopifyProductVariantEntity
+            var newEntity = ConstructEntity(product, variant);
+
+            newEntity.LogEvents.Add(new ShopifyProductVariantLogEventEntity
             {
-                GlobalProductId = product.AdminGraphqlApiId,
-                ProductId = product.Id,
-                GlobalVariantId = variant.AdminGraphqlApiId,
-                VariantId = variant.Id,
-                ProductTitle = product.Title,
-                VariantTitle = variant.Title,
-                Sku = variant.Id.ToString(),
-                Barcode = variant.Id.ToString()
-            };
-            
+                Message = VariantLogMessages.VariantCreated()
+            });
+
             entities.Add(newEntity);
         }
 
@@ -61,31 +54,7 @@ public class ShopifyProductCreateWebhookHandler(
         // Enqueue only after a successful save so no phantom events enter the queue.
         foreach (var entity in entities)
         {
-            eventAccumulator.Enqueue(new ProductChangedEvent(entity.VariantId, ProductChangeType.Created));
-        }
-
-        if (await featureManager.IsEnabledAsync(FeatureFlags.ShopifyWriteBack))
-        {
-            await CreateBarcodeAndSkuInShopify(product.AdminGraphqlApiId, entities);
-        }
-        else
-        {
-            logger.LogInformation(
-                "ShopifyWriteBack feature flag is disabled. Skipping Shopify write-back for product {ProductId}.",
-                product.AdminGraphqlApiId);
+            eventDispatcher.Dispatch(ProductChangedEvent.Created(entity.ShopifyProductVariantId));
         }
     }
-
-    private async Task CreateBarcodeAndSkuInShopify(string productId, IEnumerable<ShopifyProductVariantEntity> entities)
-    {
-        var entitiesToUpdate = entities
-            .Select(e => new ShopifyUpdateProductVariant(e.GlobalVariantId, e.Sku, e.Barcode)).ToArray();
-
-        logger.LogDebug("Updating {Count} variants in Shopify from {TopicName} webhook.", entitiesToUpdate.Length,
-            TopicName);
-
-        await productService.UpdateVariants(productId,
-            entitiesToUpdate);
-    }
-
 }

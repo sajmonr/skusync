@@ -1,12 +1,11 @@
 using Application.Events;
 using Application.Products.Events;
+using Application.Products.Services;
 using Infrastructure.Database;
 using Infrastructure.Database.Entities;
 using Integration.Aws.Sqs;
-using Integration.Shopify.Products;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Microsoft.FeatureManagement;
 
 namespace Application.Products.Webhook;
 
@@ -18,11 +17,9 @@ namespace Application.Products.Webhook;
 /// </summary>
 public class ShopifyProductUpdateWebhookHandler(
     ApplicationDbContext dbContext,
-    IShopifyProductService productService,
     ILogger<ShopifyProductUpdateWebhookHandler> logger,
-    IEventAccumulator<ProductChangedEvent> eventAccumulator,
-    IFeatureManager featureManager)
-    : IShopifyWebhookHandler
+    IEventDispatcher eventDispatcher)
+    : ShopifyWebhookBase, IShopifyWebhookHandler
 {
     /// <inheritdoc/>
     public string TopicName => "products/update";
@@ -36,14 +33,14 @@ public class ShopifyProductUpdateWebhookHandler(
     {
         var existingVariants = await dbContext.ShopifyProductVariants.Where(variant => variant.ProductId == product.Id)
             .ToArrayAsync();
-        var toUpdateInShopify = new List<ShopifyProductVariantEntity>();
 
         logger.LogDebug(
             "Loaded {Count} variants for product {ProductId} [{ProductTitle}]. We currently have {ExistingCount} variants.",
             product.Variants.Count, product.Id, product.Title, existingVariants.Length);
 
         // Collect events before SaveChangesAsync so we only publish for persisted changes.
-        var pendingEvents = new List<ProductChangedEvent>();
+        var createdEntities = new List<ShopifyProductVariantEntity>();
+        var updatedEntities = new List<ShopifyProductVariantEntity>();
 
         // update entities
         foreach (var variant in product.Variants)
@@ -52,64 +49,51 @@ public class ShopifyProductUpdateWebhookHandler(
 
             if (entity is null)
             {
-                var newEntity = CreateEntity(product, variant);
+                var newEntity = ConstructEntity(product, variant);
+
+                newEntity.LogEvents.Add(new ShopifyProductVariantLogEventEntity
+                {
+                    Message = VariantLogMessages.VariantCreated()
+                });
 
                 dbContext.ShopifyProductVariants.Add(newEntity);
-                toUpdateInShopify.Add(newEntity);
-                pendingEvents.Add(new ProductChangedEvent(variant.Id, ProductChangeType.Created));
+                createdEntities.Add(newEntity);
             }
             else
             {
                 // Update it
-                UpdateEntity(entity, product, variant);
+                var didChange = UpdateEntity(entity, product, variant);
+                var didBarcodeOrSkuChange = DidBarcodeOrSkuChange(entity, variant);
 
-                if (RequiresUpdateInShopify(entity, product, variant))
+                if (!didChange && !didBarcodeOrSkuChange)
                 {
-                    toUpdateInShopify.Add(entity);
+                    continue;
                 }
 
-                pendingEvents.Add(new ProductChangedEvent(variant.Id, ProductChangeType.Updated));
+                updatedEntities.Add(entity);
             }
         }
 
         await dbContext.SaveChangesAsync();
 
         // Enqueue only after a successful save so no phantom events enter the queue.
-        eventAccumulator.Enqueue(pendingEvents);
-
-        if (await featureManager.IsEnabledAsync(FeatureFlags.ShopifyWriteBack))
-        {
-            await UpdateEntitiesInShopify(product.AdminGraphqlApiId, toUpdateInShopify);
-        }
-        else
-        {
-            logger.LogInformation(
-                "ShopifyWriteBack feature flag is disabled. Skipping Shopify update for product {ProductId}.",
-                product.AdminGraphqlApiId);
-        }
+        eventDispatcher.DispatchMany(updatedEntities.Select(e => ProductChangedEvent.Updated(e.ShopifyProductVariantId)));
+        eventDispatcher.DispatchMany(createdEntities.Select(e => ProductChangedEvent.Created(e.ShopifyProductVariantId)));
     }
 
-    private async Task UpdateEntitiesInShopify(string productId, IEnumerable<ShopifyProductVariantEntity> entities)
-    {
-        var entitiesToUpdate = entities
-            .Select(e => new ShopifyUpdateProductVariant(e.GlobalVariantId, e.Sku, e.Barcode)).ToArray();
-
-        logger.LogDebug("Updating {Count} variants in Shopify from {TopicName} webhook.", entitiesToUpdate.Length,
-            TopicName);
-
-        await productService.UpdateVariants(productId,
-            entitiesToUpdate);
-    }
-
-    private void UpdateEntity(ShopifyProductVariantEntity entity, SqsShopEventProduct product,
+    private bool UpdateEntity(ShopifyProductVariantEntity entity, SqsShopEventProduct product,
         SqsShopEventVariant variant)
     {
+        var changed = false;
+        var oldFullTitle = entity.FullTitle;
+
         if (entity.ProductTitle != product.Title)
         {
             logger.LogDebug("Updating product title for variant {VariantId}: [{OldTitle}] -> [{NewTitle}].",
                 variant.Id, entity.ProductTitle, product.Title);
             entity.ProductTitle = product.Title;
             entity.UpdatedOnUtc = DateTime.UtcNow;
+            changed = true;
         }
 
         if (variant.Title != "Default Title" && entity.VariantTitle != variant.Title)
@@ -118,11 +102,22 @@ public class ShopifyProductUpdateWebhookHandler(
                 variant.Id, entity.VariantTitle, variant.Title);
             entity.VariantTitle = variant.Title;
             entity.UpdatedOnUtc = DateTime.UtcNow;
+            changed = true;
         }
+
+        if (entity.FullTitle != oldFullTitle)
+        {
+            dbContext.ShopifyProductVariantLogEvents.Add(new ShopifyProductVariantLogEventEntity
+            {
+                ShopifyProductVariantId = entity.ShopifyProductVariantId,
+                Message = VariantLogMessages.TitleUpdated(oldFullTitle, entity.FullTitle)
+            });
+        }
+        
+        return changed;
     }
 
-    private bool RequiresUpdateInShopify(ShopifyProductVariantEntity entity, SqsShopEventProduct product,
-        SqsShopEventVariant variant)
+    private bool DidBarcodeOrSkuChange(ShopifyProductVariantEntity entity, SqsShopEventVariant variant)
     {
         if (!string.IsNullOrEmpty(entity.Barcode) && entity.Barcode != variant.Barcode)
         {
@@ -141,25 +136,5 @@ public class ShopifyProductUpdateWebhookHandler(
         }
 
         return false;
-    }
-
-    private ShopifyProductVariantEntity CreateEntity(SqsShopEventProduct product, SqsShopEventVariant variant)
-    {
-        logger.LogInformation(
-            "New variant {VariantId} [{VariantTitle} for product {ProductId} [{ProductTitle}] found.",
-            variant.Id, variant.Title, product.Id, product.Title);
-
-        // Create it
-        return new ShopifyProductVariantEntity
-        {
-            GlobalProductId = product.AdminGraphqlApiId,
-            ProductId = product.Id,
-            GlobalVariantId = variant.AdminGraphqlApiId,
-            VariantId = variant.Id,
-            ProductTitle = product.Title,
-            VariantTitle = variant.Title,
-            Sku = variant.Id.ToString(),
-            Barcode = variant.Id.ToString()
-        };
     }
 }

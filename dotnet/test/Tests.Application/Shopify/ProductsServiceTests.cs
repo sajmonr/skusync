@@ -15,7 +15,7 @@ namespace Tests.Application.Shopify;
 public class ProductsServiceTests : IDisposable
 {
     private readonly IShopifyProductService _shopifyProductService = Substitute.For<IShopifyProductService>();
-    private readonly IEventAccumulator<ProductChangedEvent> _eventAccumulator = Substitute.For<IEventAccumulator<ProductChangedEvent>>();
+    private readonly IEventDispatcher _eventDispatcher = Substitute.For<IEventDispatcher>();
     private readonly ApplicationDbContext _dbContext;
     private readonly TestLogger<ProductsService> _logger = new();
 
@@ -655,8 +655,8 @@ public class ProductsServiceTests : IDisposable
 
         await CreateSut().ImportProductsFromShopify();
 
-        _eventAccumulator.Received(1).Enqueue(
-            Arg.Is<ProductChangedEvent>(e => e.VariantId == 200L && e.ChangeType == ProductChangeType.Created));
+        _eventDispatcher.Received(1).Dispatch(
+            Arg.Is<ProductChangedEvent>(e => e.ProductVariantId != Guid.Empty && e.ChangeType == ProductChangeType.Created));
     }
 
     [Fact]
@@ -672,8 +672,8 @@ public class ProductsServiceTests : IDisposable
 
         await CreateSut().ImportProductsFromShopify();
 
-        _eventAccumulator.Received(1).Enqueue(
-            Arg.Is<ProductChangedEvent>(e => e.VariantId == 200L && e.ChangeType == ProductChangeType.Updated));
+        _eventDispatcher.Received(1).Dispatch(
+            Arg.Is<ProductChangedEvent>(e => e.ProductVariantId != Guid.Empty && e.ChangeType == ProductChangeType.Updated));
     }
 
     [Fact]
@@ -689,7 +689,7 @@ public class ProductsServiceTests : IDisposable
 
         await CreateSut().ImportProductsFromShopify();
 
-        _eventAccumulator.DidNotReceive().Enqueue(Arg.Any<ProductChangedEvent>());
+        _eventDispatcher.DidNotReceive().Dispatch(Arg.Any<ProductChangedEvent>());
     }
 
     private ShopifyProductVariantEntity SeedVariant(
@@ -721,7 +721,7 @@ public class ProductsServiceTests : IDisposable
         return entity;
     }
 
-    private ProductsService CreateSut() => new(_shopifyProductService, _dbContext, _logger, _eventAccumulator);
+    private ProductsService CreateSut() => new(_shopifyProductService, _dbContext, _logger, _eventDispatcher);
 
     private sealed class TestLogger<T> : ILogger<T>
     {

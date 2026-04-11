@@ -1,4 +1,3 @@
-using Application;
 using Application.Events;
 using Application.Products.Events;
 using Application.Products.Webhook;
@@ -8,7 +7,6 @@ using Integration.Aws.Sqs;
 using Integration.Shopify.Products;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Microsoft.FeatureManagement;
 using NSubstitute;
 using Shouldly;
 
@@ -16,9 +14,7 @@ namespace Tests.Application.Queue;
 
 public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
 {
-    private readonly IShopifyProductService _productService = Substitute.For<IShopifyProductService>();
-    private readonly IEventAccumulator<ProductChangedEvent> _eventAccumulator = Substitute.For<IEventAccumulator<ProductChangedEvent>>();
-    private readonly IFeatureManager _featureManager = Substitute.For<IFeatureManager>();
+    private readonly IEventDispatcher _eventDispatcher = Substitute.For<IEventDispatcher>();
     private readonly ApplicationDbContext _dbContext;
     private readonly TestLogger<ShopifyProductUpdateWebhookHandler> _logger = new();
 
@@ -29,12 +25,6 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
             .Options;
 
         _dbContext = new ApplicationDbContext(options);
-
-        _productService
-            .UpdateVariants(Arg.Any<string>(), Arg.Any<IEnumerable<ShopifyUpdateProductVariant>>())
-            .Returns(true);
-
-        _featureManager.IsEnabledAsync(FeatureFlags.ShopifyWriteBack).Returns(true);
     }
 
     public void Dispose() => _dbContext.Dispose();
@@ -57,16 +47,15 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
     }
 
     [Fact]
-    public async Task Handle_ShouldCallUpdateVariants_WhenNewVariantIsCreated()
+    public async Task Handle_ShouldDispatchCreatedEvent_WhenNewVariantIsSaved()
     {
         var product = CreateProduct(100, "T-Shirt",
             CreateVariant(200, "Large", sku: "SKU-A", barcode: "BAR-A"));
 
         await CreateSut().Handle(product);
 
-        await _productService.Received(1).UpdateVariants(
-            "gid://shopify/Product/100",
-            Arg.Is<IEnumerable<ShopifyUpdateProductVariant>>(v => v.Any()));
+        _eventDispatcher.Received(1).Dispatch(
+            Arg.Is<ProductChangedEvent>(e => e.ProductVariantId != Guid.Empty && e.ChangeType == ProductChangeType.Created));
     }
 
     // -------------------------------------------------------------------------
@@ -119,11 +108,11 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
     }
 
     // -------------------------------------------------------------------------
-    // Shopify sync — barcode
+    // Updated event dispatching — barcode / SKU mismatch
     // -------------------------------------------------------------------------
 
     [Fact]
-    public async Task Handle_ShouldCallUpdateVariants_WhenBarcodeDoesNotMatch()
+    public async Task Handle_ShouldDispatchUpdatedEvent_WhenBarcodeDoesNotMatch()
     {
         SeedVariant(100, 200, sku: "SKU-A", barcode: "OLD-BAR");
         await _dbContext.SaveChangesAsync();
@@ -133,17 +122,12 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
 
         await CreateSut().Handle(product);
 
-        await _productService.Received(1).UpdateVariants(
-            "gid://shopify/Product/100",
-            Arg.Is<IEnumerable<ShopifyUpdateProductVariant>>(v => v.Any()));
+        _eventDispatcher.Received(1).Dispatch(
+            Arg.Is<ProductChangedEvent>(e => e.ProductVariantId != Guid.Empty && e.ChangeType == ProductChangeType.Updated));
     }
 
-    // -------------------------------------------------------------------------
-    // Shopify sync — SKU (exercises the bug fix)
-    // -------------------------------------------------------------------------
-
     [Fact]
-    public async Task Handle_ShouldCallUpdateVariants_WhenSkuDoesNotMatch()
+    public async Task Handle_ShouldDispatchUpdatedEvent_WhenSkuDoesNotMatch()
     {
         SeedVariant(100, 200, sku: "OLD-SKU", barcode: "BAR-A");
         await _dbContext.SaveChangesAsync();
@@ -153,15 +137,15 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
 
         await CreateSut().Handle(product);
 
-        await _productService.Received(1).UpdateVariants(
-            "gid://shopify/Product/100",
-            Arg.Is<IEnumerable<ShopifyUpdateProductVariant>>(v => v.Any()));
+        _eventDispatcher.Received(1).Dispatch(
+            Arg.Is<ProductChangedEvent>(e => e.ProductVariantId != Guid.Empty && e.ChangeType == ProductChangeType.Updated));
     }
 
     [Fact]
-    public async Task Handle_ShouldNotCallUpdateVariants_WhenBarcodeIsEmptyInDatabase()
+    public async Task Handle_ShouldNotDispatchUpdatedEvent_WhenBarcodeIsEmptyInDatabase()
     {
-        SeedVariant(100, 200, sku: "SKU-A", barcode: "");
+        // Title must match so UpdateEntity returns false; only DidBarcodeOrSkuChange is tested.
+        SeedVariant(100, 200, productTitle: "T-Shirt", variantTitle: "Large", sku: "SKU-A", barcode: "");
         await _dbContext.SaveChangesAsync();
 
         var product = CreateProduct(100, "T-Shirt",
@@ -169,15 +153,14 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
 
         await CreateSut().Handle(product);
 
-        await _productService.Received(1).UpdateVariants(
-            Arg.Any<string>(),
-            Arg.Is<IEnumerable<ShopifyUpdateProductVariant>>(v => !v.Any()));
+        _eventDispatcher.DidNotReceive().Dispatch(Arg.Any<ProductChangedEvent>());
     }
 
     [Fact]
-    public async Task Handle_ShouldNotCallUpdateVariants_WhenSkuIsEmptyInDatabase()
+    public async Task Handle_ShouldNotDispatchUpdatedEvent_WhenSkuIsEmptyInDatabase()
     {
-        SeedVariant(100, 200, sku: "", barcode: "BAR-A");
+        // Title must match so UpdateEntity returns false; only DidBarcodeOrSkuChange is tested.
+        SeedVariant(100, 200, productTitle: "T-Shirt", variantTitle: "Large", sku: "", barcode: "BAR-A");
         await _dbContext.SaveChangesAsync();
 
         var product = CreateProduct(100, "T-Shirt",
@@ -185,17 +168,11 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
 
         await CreateSut().Handle(product);
 
-        await _productService.Received(1).UpdateVariants(
-            Arg.Any<string>(),
-            Arg.Is<IEnumerable<ShopifyUpdateProductVariant>>(v => !v.Any()));
+        _eventDispatcher.DidNotReceive().Dispatch(Arg.Any<ProductChangedEvent>());
     }
 
-    // -------------------------------------------------------------------------
-    // No Shopify sync needed
-    // -------------------------------------------------------------------------
-
     [Fact]
-    public async Task Handle_ShouldNotCallUpdateVariants_WhenVariantIsFullyUpToDate()
+    public async Task Handle_ShouldNotDispatchAnyEvent_WhenVariantIsFullyUpToDate()
     {
         SeedVariant(100, 200, productTitle: "T-Shirt", variantTitle: "Large", sku: "SKU-A", barcode: "BAR-A");
         await _dbContext.SaveChangesAsync();
@@ -205,9 +182,7 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
 
         await CreateSut().Handle(product);
 
-        await _productService.Received(1).UpdateVariants(
-            Arg.Any<string>(),
-            Arg.Is<IEnumerable<ShopifyUpdateProductVariant>>(v => !v.Any()));
+        _eventDispatcher.DidNotReceive().Dispatch(Arg.Any<ProductChangedEvent>());
     }
 
     // -------------------------------------------------------------------------
@@ -230,61 +205,30 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
         variants.Count.ShouldBe(2);
     }
 
-    // -------------------------------------------------------------------------
-    // Helpers
-    // -------------------------------------------------------------------------
-
-    // -------------------------------------------------------------------------
-    // Event accumulation
-    // -------------------------------------------------------------------------
-
     [Fact]
-    public async Task Handle_ShouldEnqueueCreatedEvent_WhenNewVariantIsSaved()
-    {
-        var product = CreateProduct(100, "T-Shirt",
-            CreateVariant(200, "Large", sku: "SKU-A", barcode: "BAR-A"));
-
-        await CreateSut().Handle(product);
-
-        _eventAccumulator.Received(1).Enqueue(
-            Arg.Is<ProductChangedEvent>(e => e.VariantId == 200L && e.ChangeType == ProductChangeType.Created));
-    }
-
-    [Fact]
-    public async Task Handle_ShouldEnqueueUpdatedEvent_WhenExistingVariantIsProcessed()
+    public async Task Handle_ShouldDispatchOneEventPerVariant_WhenMixedCreatedAndUpdated()
     {
         SeedVariant(100, 200, sku: "SKU-A", barcode: "BAR-A");
         await _dbContext.SaveChangesAsync();
 
         var product = CreateProduct(100, "T-Shirt",
-            CreateVariant(200, "Large", sku: "SKU-A", barcode: "BAR-A"));
-
-        await CreateSut().Handle(product);
-
-        _eventAccumulator.Received(1).Enqueue(
-            Arg.Is<ProductChangedEvent>(e => e.VariantId == 200L && e.ChangeType == ProductChangeType.Updated));
-    }
-
-    [Fact]
-    public async Task Handle_ShouldEnqueueOneEventPerVariant_WhenMultipleVariantsArePresent()
-    {
-        SeedVariant(100, 200, sku: "SKU-A", barcode: "BAR-A");
-        await _dbContext.SaveChangesAsync();
-
-        var product = CreateProduct(100, "T-Shirt",
-            CreateVariant(200, "Large", sku: "SKU-A", barcode: "BAR-A"),  // existing → Updated
+            CreateVariant(200, "Large", sku: "SKU-A", barcode: "NEW-BAR"), // existing → Updated (barcode mismatch)
             CreateVariant(201, "Small", sku: "SKU-B", barcode: "BAR-B")); // new → Created
 
         await CreateSut().Handle(product);
 
-        _eventAccumulator.Received(1).Enqueue(
-            Arg.Is<ProductChangedEvent>(e => e.VariantId == 200L && e.ChangeType == ProductChangeType.Updated));
-        _eventAccumulator.Received(1).Enqueue(
-            Arg.Is<ProductChangedEvent>(e => e.VariantId == 201L && e.ChangeType == ProductChangeType.Created));
+        _eventDispatcher.Received(1).Dispatch(
+            Arg.Is<ProductChangedEvent>(e => e.ChangeType == ProductChangeType.Updated));
+        _eventDispatcher.Received(1).Dispatch(
+            Arg.Is<ProductChangedEvent>(e => e.ChangeType == ProductChangeType.Created));
     }
 
+    // -------------------------------------------------------------------------
+    // Helpers
+    // -------------------------------------------------------------------------
+
     private ShopifyProductUpdateWebhookHandler CreateSut() =>
-        new(_dbContext, _productService, _logger, _eventAccumulator, _featureManager);
+        new(_dbContext, _logger, _eventDispatcher);
 
     private void SeedVariant(
         long productId,
@@ -312,38 +256,6 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
 
     private static SqsShopEventVariant CreateVariant(long id, string title, string sku, string barcode) =>
         new($"gid://shopify/ProductVariant/{id}", barcode, id, ProductId: 100, sku, title);
-
-    // -------------------------------------------------------------------------
-    // Feature flag: ShopifyWriteBack disabled
-    // -------------------------------------------------------------------------
-
-    [Fact]
-    public async Task Handle_ShouldNotCallUpdateVariants_WhenShopifyWriteBackFlagIsDisabled()
-    {
-        _featureManager.IsEnabledAsync(FeatureFlags.ShopifyWriteBack).Returns(false);
-
-        var product = CreateProduct(100, "T-Shirt",
-            CreateVariant(200, "Large", sku: "SKU-A", barcode: "BAR-A"));
-
-        await CreateSut().Handle(product);
-
-        await _productService.DidNotReceive()
-            .UpdateVariants(Arg.Any<string>(), Arg.Any<IEnumerable<ShopifyUpdateProductVariant>>());
-    }
-
-    [Fact]
-    public async Task Handle_ShouldLogInformation_WhenShopifyWriteBackFlagIsDisabled()
-    {
-        _featureManager.IsEnabledAsync(FeatureFlags.ShopifyWriteBack).Returns(false);
-
-        var product = CreateProduct(100, "T-Shirt",
-            CreateVariant(200, "Large", sku: "SKU-A", barcode: "BAR-A"));
-
-        await CreateSut().Handle(product);
-
-        _logger.Entries.ShouldContain(e =>
-            e.LogLevel == LogLevel.Information && e.Message.Contains("ShopifyWriteBack"));
-    }
 
     private sealed class TestLogger<T> : ILogger<T>
     {
