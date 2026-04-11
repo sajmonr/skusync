@@ -18,10 +18,13 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="2473acc7-8b17-4e30-b45b-750aea428ada" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/src/Application/Events/EventDispatcher.cs" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/Application/Events/EventDispatcherExtensions.cs" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/Application/Events/IEventDispatcher.cs" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/Application/Products/Events/SkulabsProductImportEvent.cs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/.idea.SkuSync/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/.idea.SkuSync/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Application/Products/Events/ProductChangedEvent.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/Products/Events/ProductChangedEvent.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Application/Events/EventAccumulatorExtensions.cs" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/src/Application/Products/Jobs/ProductEventProcessorJob.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/Products/Jobs/ProductEventProcessorJob.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Application/Products/Services/ProductsService.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/Products/Services/ProductsService.cs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/Application/Products/Webhook/ShopifyProductCreateWebhookHandler.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/Products/Webhook/ShopifyProductCreateWebhookHandler.cs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/Application/Products/Webhook/ShopifyProductUpdateWebhookHandler.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/Products/Webhook/ShopifyProductUpdateWebhookHandler.cs" afterDir="false" />
     </list>
@@ -70,6 +73,9 @@
     <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/SourcesCache/c1f1afeb5be9f63605a77cf5c75fb3295bed2f36d49f486cb18569e7181df/IServiceCollectionQuartzConfigurator.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/SourcesCache/c3cd15de44959111d31f5822f2413a1a064a371b064155ebac1d5b68073c64/OptionsBuilderConfigurationExtensions.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/SourcesCache/e8f9cedf687e8046dcbaa0a73311ef2b3af71b44b9cdb912e41bec42663c97/Product.cs" root0="SKIP_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/src/Application/Events/EventDispatcher.cs" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/src/Application/Events/IEventDispatcher.cs" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/src/Application/Products/Events/SkulabsProductImportEvent.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/src/Application/Products/Webhook/ShopifyWebhookBase.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/src/Infrastructure/Database/ApplicationDbContext.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/src/Infrastructure/Database/Configuration/ShopifyProductVariantConfiguration.cs" root0="FORCE_HIGHLIGHTING" />
@@ -89,7 +95,6 @@
     <setting file="file://$PROJECT_DIR$/src/Integration/Shopify/Products/ShopifyUpdateProductVariant.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/src/Integration/Shopify/Products/UpdateVariantsGraphResponse.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/src/Integration/Shopify/Responses/UserErrorsResponse.cs" root0="FORCE_HIGHLIGHTING" />
-    <setting file="file://$PROJECT_DIR$/src/Integration/Skulabs/Items/ItemClient.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/src/Integration/Skulabs/Items/SkulabsItem.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/src/Integration/Skulabs/Items/SkulabsListingResponse.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/src/Integration/Skulabs/Options/SkulabsApiOptions.cs" root0="FORCE_HIGHLIGHTING" />

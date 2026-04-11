@@ -18,7 +18,7 @@ namespace Application.Products.Webhook;
 public class ShopifyProductUpdateWebhookHandler(
     ApplicationDbContext dbContext,
     ILogger<ShopifyProductUpdateWebhookHandler> logger,
-    IEventAccumulator<ProductChangedEvent> eventAccumulator)
+    IEventDispatcher eventDispatcher)
     : ShopifyWebhookBase, IShopifyWebhookHandler
 {
     /// <inheritdoc/>
@@ -76,8 +76,8 @@ public class ShopifyProductUpdateWebhookHandler(
 
         await dbContext.SaveChangesAsync();
         
-        eventAccumulator.Enqueue(updatedEntities.Select(e => ProductChangedEvent.Updated(e.ShopifyProductVariantId)));
-        eventAccumulator.Enqueue(createdEntities.Select(e => ProductChangedEvent.Created(e.ShopifyProductVariantId)));
+        eventDispatcher.Dispatch(updatedEntities.Select(e => ProductChangedEvent.Updated(e.ShopifyProductVariantId)));
+        eventDispatcher.Dispatch(createdEntities.Select(e => ProductChangedEvent.Created(e.ShopifyProductVariantId)));
     }
 
     private bool UpdateEntity(ShopifyProductVariantEntity entity, SqsShopEventProduct product,

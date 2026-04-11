@@ -16,7 +16,7 @@ namespace Application.Products.Webhook;
 public class ShopifyProductCreateWebhookHandler(
     ApplicationDbContext dbContext,
     ILogger<ShopifyProductUpdateWebhookHandler> logger,
-    IEventAccumulator<ProductChangedEvent> eventAccumulator)
+    IEventDispatcher eventDispatcher)
     : ShopifyWebhookBase, IShopifyWebhookHandler
 {
 
@@ -54,7 +54,7 @@ public class ShopifyProductCreateWebhookHandler(
         // Enqueue only after a successful save so no phantom events enter the queue.
         foreach (var entity in entities)
         {
-            eventAccumulator.Enqueue(ProductChangedEvent.Created(entity.ShopifyProductVariantId));
+            eventDispatcher.Dispatch(ProductChangedEvent.Created(entity.ShopifyProductVariantId));
         }
     }
 }
