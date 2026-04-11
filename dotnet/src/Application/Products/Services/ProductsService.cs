@@ -266,6 +266,12 @@ public class ProductsService(
             });
         }
 
+        // The below will force change to run
+        if (existing.Sku != shopifyVariant.Sku || existing.Barcode != shopifyVariant.Barcode)
+        {
+            changed = true;
+        }
+
         return changed;
     }
 }
