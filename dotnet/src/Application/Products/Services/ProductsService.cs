@@ -36,11 +36,9 @@ public class ProductsService(
 
         logger.LogDebug("Found {Count} product variants in the database.", dbVariantsByGlobalId.Count);
 
-        var created = 0;
-        var updated = 0;
-
         // Collect events before SaveChangesAsync so we only publish for persisted changes.
-        var pendingEvents = new List<ProductChangedEvent>();
+        var createdEntities = new List<ShopifyProductVariantEntity>();
+        var updatedEntities = new List<ShopifyProductVariantEntity>();
 
         foreach (var shopifyVariant in shopifyVariants)
         {
@@ -56,8 +54,7 @@ public class ProductsService(
                 existing.UpdatedOnUtc = DateTime.UtcNow;
                 logger.LogDebug("Updating variant with GlobalVariantId {GlobalVariantId}.",
                     shopifyVariant.GlobalVariantId);
-                pendingEvents.Add(new ProductChangedEvent(shopifyVariant.VariantId, ProductChangeType.Updated));
-                updated++;
+                updatedEntities.Add(existing);
             }
             else
             {
@@ -81,8 +78,7 @@ public class ProductsService(
                 dbContext.ShopifyProductVariants.Add(newVariant);
                 logger.LogDebug("Creating new variant with GlobalVariantId {GlobalVariantId}.",
                     shopifyVariant.GlobalVariantId);
-                pendingEvents.Add(new ProductChangedEvent(shopifyVariant.VariantId, ProductChangeType.Created));
-                created++;
+                createdEntities.Add(newVariant);
             }
         }
 
@@ -98,11 +94,12 @@ public class ProductsService(
         }
 
         // Enqueue only after a successful save so no phantom events enter the queue.
-        eventAccumulator.Enqueue(pendingEvents);
+        eventAccumulator.Enqueue(updatedEntities.Select(e => ProductChangedEvent.Updated(e.ShopifyProductVariantId)));
+        eventAccumulator.Enqueue(createdEntities.Select(e => ProductChangedEvent.Created(e.ShopifyProductVariantId)));
 
-        logger.LogDebug("Synchronization complete. Created: {Created}, Updated: {Updated}.", created, updated);
+        logger.LogDebug("Synchronization complete. Created: {Created}, Updated: {Updated}.", createdEntities.Count, updatedEntities.Count);
 
-        return ProductImportResult.Success(created, updated);
+        return ProductImportResult.Success(createdEntities.Count, updatedEntities.Count);
     }
 
     public async Task<ProductDeduplicationResult> DeduplicateProducts()

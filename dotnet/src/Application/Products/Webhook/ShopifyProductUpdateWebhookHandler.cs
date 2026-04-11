@@ -39,7 +39,8 @@ public class ShopifyProductUpdateWebhookHandler(
             product.Variants.Count, product.Id, product.Title, existingVariants.Length);
 
         // Collect events before SaveChangesAsync so we only publish for persisted changes.
-        var pendingEvents = new List<ProductChangedEvent>();
+        var createdEntities = new List<ShopifyProductVariantEntity>();
+        var updatedEntities = new List<ShopifyProductVariantEntity>();
 
         // update entities
         foreach (var variant in product.Variants)
@@ -56,7 +57,7 @@ public class ShopifyProductUpdateWebhookHandler(
                 });
 
                 dbContext.ShopifyProductVariants.Add(newEntity);
-                pendingEvents.Add(new ProductChangedEvent(variant.Id, ProductChangeType.Created));
+                createdEntities.Add(newEntity);
             }
             else
             {
@@ -69,14 +70,14 @@ public class ShopifyProductUpdateWebhookHandler(
                     continue;
                 }
 
-                pendingEvents.Add(new ProductChangedEvent(variant.Id, ProductChangeType.Updated));
+                updatedEntities.Add(entity);
             }
         }
 
         await dbContext.SaveChangesAsync();
-
-        // Enqueue only after a successful save so no phantom events enter the queue.
-        eventAccumulator.Enqueue(pendingEvents);
+        
+        eventAccumulator.Enqueue(updatedEntities.Select(e => ProductChangedEvent.Updated(e.ShopifyProductVariantId)));
+        eventAccumulator.Enqueue(createdEntities.Select(e => ProductChangedEvent.Created(e.ShopifyProductVariantId)));
     }
 
     private bool UpdateEntity(ShopifyProductVariantEntity entity, SqsShopEventProduct product,

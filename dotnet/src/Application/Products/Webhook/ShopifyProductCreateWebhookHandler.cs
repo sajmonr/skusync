@@ -54,7 +54,7 @@ public class ShopifyProductCreateWebhookHandler(
         // Enqueue only after a successful save so no phantom events enter the queue.
         foreach (var entity in entities)
         {
-            eventAccumulator.Enqueue(new ProductChangedEvent(entity.VariantId, ProductChangeType.Created));
+            eventAccumulator.Enqueue(ProductChangedEvent.Created(entity.ShopifyProductVariantId));
         }
     }
 }

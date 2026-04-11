@@ -14,10 +14,56 @@ public enum ProductChangeType
 }
 
 /// <summary>
-/// A lightweight, in-process event emitted whenever a product variant is created or updated
-/// in the local database. Instances are accumulated in <see cref="IEventAccumulator"/>
-/// and processed in batches by <c>ProductEventProcessorJob</c>.
+/// Represents an event that captures changes to a product variant in the system.
 /// </summary>
-/// <param name="VariantId">The numeric Shopify variant ID of the affected variant.</param>
-/// <param name="ChangeType">Whether the variant was created or updated.</param>
-public record ProductChangedEvent(long VariantId, ProductChangeType ChangeType);
+/// <remarks>
+/// This event is used to identify whether a product variant was either newly added
+/// to the local database or an existing record was modified. It encapsulates the
+/// unique identifier of the product variant involved and the type of change that occurred.
+/// </remarks>
+public readonly record struct ProductChangedEvent(Guid ProductVariantId, ProductChangeType ChangeType)
+{
+    /// <summary>
+    /// Creates a new instance of the <see cref="ProductChangedEvent"/> indicating
+    /// that a product variant was newly added to the local database.
+    /// </summary>
+    /// <param name="productVariantId">
+    /// The unique identifier of the product variant that was created.
+    /// Must not be an empty GUID.
+    /// </param>
+    /// <returns>
+    /// A <see cref="ProductChangedEvent"/> instance representing the 'Created' change type
+    /// for the specified product variant.
+    /// </returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown if the <paramref name="productVariantId"/> is an empty GUID.
+    /// </exception>
+    public static ProductChangedEvent Created(Guid productVariantId)
+    {
+        ArgumentOutOfRangeException.ThrowIfEqual(Guid.Empty, productVariantId);
+        
+        return new(productVariantId, ProductChangeType.Created);
+    }
+
+    /// <summary>
+    /// Creates a new instance of the <see cref="ProductChangedEvent"/> indicating
+    /// that an existing product variant record was modified in the local database.
+    /// </summary>
+    /// <param name="productVariantId">
+    /// The unique identifier of the product variant that was updated.
+    /// Must not be an empty GUID.
+    /// </param>
+    /// <returns>
+    /// A <see cref="ProductChangedEvent"/> instance representing the 'Updated' change type
+    /// for the specified product variant.
+    /// </returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown if the <paramref name="productVariantId"/> is an empty GUID.
+    /// </exception>
+    public static ProductChangedEvent Updated(Guid productVariantId)
+    {
+        ArgumentOutOfRangeException.ThrowIfEqual(Guid.Empty, productVariantId);
+        
+        return new(productVariantId, ProductChangeType.Updated);
+    }
+}

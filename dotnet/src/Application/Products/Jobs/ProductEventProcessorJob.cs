@@ -54,7 +54,7 @@ public class ProductEventProcessorJob(
         logger.LogInformation(
             "Processing {Total} accumulated product change event(s): {Created} created, {Updated} updated.",
             events.Count, createdCount, updatedCount);
-
+        
         // TODO: add downstream business logic here, e.g.:
         //   - push changed variant IDs to an external system (SkuLabs, etc.)
         //   - trigger a reconciliation task
