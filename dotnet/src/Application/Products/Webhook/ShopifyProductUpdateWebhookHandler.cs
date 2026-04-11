@@ -1,5 +1,6 @@
 using Application.Events;
 using Application.Products.Events;
+using Application.Products.Services;
 using Infrastructure.Database;
 using Infrastructure.Database.Entities;
 using Integration.Aws.Sqs;
@@ -56,7 +57,7 @@ public class ShopifyProductUpdateWebhookHandler(
 
                 newEntity.LogEvents.Add(new ShopifyProductVariantLogEventEntity
                 {
-                    Message = "Product variant was created."
+                    Message = VariantLogMessages.VariantCreated()
                 });
 
                 dbContext.ShopifyProductVariants.Add(newEntity);
@@ -132,7 +133,7 @@ public class ShopifyProductUpdateWebhookHandler(
             dbContext.ShopifyProductVariantLogEvents.Add(new ShopifyProductVariantLogEventEntity
             {
                 ShopifyProductVariantId = entity.ShopifyProductVariantId,
-                Message = $"Title changed from '{oldFullTitle}' to '{entity.FullTitle}'."
+                Message = VariantLogMessages.TitleUpdated(oldFullTitle, entity.FullTitle)
             });
         }
     }

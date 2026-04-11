@@ -76,7 +76,7 @@ public class ProductsService(
 
                 newVariant.LogEvents.Add(new ShopifyProductVariantLogEventEntity
                 {
-                    Message = "Product variant was created."
+                    Message = VariantLogMessages.VariantCreated()
                 });
                 dbContext.ShopifyProductVariants.Add(newVariant);
                 logger.LogDebug("Creating new variant with GlobalVariantId {GlobalVariantId}.",
@@ -202,7 +202,7 @@ public class ProductsService(
                 dbContext.ShopifyProductVariantLogEvents.Add(new ShopifyProductVariantLogEventEntity
                 {
                     ShopifyProductVariantId = variant.ShopifyProductVariantId,
-                    Message = $"Duplicate SKU detected (was '{oldSku}'). SKU changed to variant ID: {variant.VariantId}."
+                    Message = VariantLogMessages.SkuUpdated(oldSku, variant.VariantId.ToString())
                 });
             }
 
@@ -213,7 +213,7 @@ public class ProductsService(
                 dbContext.ShopifyProductVariantLogEvents.Add(new ShopifyProductVariantLogEventEntity
                 {
                     ShopifyProductVariantId = variant.ShopifyProductVariantId,
-                    Message = $"Duplicate barcode detected (was '{oldBarcode}'). Barcode changed to variant ID: {variant.VariantId}."
+                    Message = VariantLogMessages.BarcodeUpdated(oldBarcode, variant.VariantId.ToString())
                 });
             }
 
@@ -243,7 +243,7 @@ public class ProductsService(
             dbContext.ShopifyProductVariantLogEvents.Add(new ShopifyProductVariantLogEventEntity
             {
                 ShopifyProductVariantId = existing.ShopifyProductVariantId,
-                Message = $"Title changed from '{oldFullTitle}' to '{existing.FullTitle}'."
+                Message = VariantLogMessages.TitleUpdated(oldFullTitle, existing.FullTitle)
             });
         }
 
@@ -254,7 +254,7 @@ public class ProductsService(
             dbContext.ShopifyProductVariantLogEvents.Add(new ShopifyProductVariantLogEventEntity
             {
                 ShopifyProductVariantId = existing.ShopifyProductVariantId,
-                Message = $"SKU assigned: '{shopifyVariant.Sku}'."
+                Message = VariantLogMessages.SkuSet(shopifyVariant.Sku)
             });
         }
 
@@ -265,7 +265,7 @@ public class ProductsService(
             dbContext.ShopifyProductVariantLogEvents.Add(new ShopifyProductVariantLogEventEntity
             {
                 ShopifyProductVariantId = existing.ShopifyProductVariantId,
-                Message = $"Barcode assigned: '{shopifyVariant.Barcode}'."
+                Message = VariantLogMessages.BarcodeSet(shopifyVariant.Barcode)
             });
         }
 

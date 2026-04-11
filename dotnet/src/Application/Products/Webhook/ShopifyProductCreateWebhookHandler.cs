@@ -1,5 +1,6 @@
 using Application.Events;
 using Application.Products.Events;
+using Application.Products.Services;
 using Infrastructure.Database;
 using Infrastructure.Database.Entities;
 using Integration.Aws.Sqs;
@@ -54,7 +55,7 @@ public class ShopifyProductCreateWebhookHandler(
 
             newEntity.LogEvents.Add(new ShopifyProductVariantLogEventEntity
             {
-                Message = "Product variant was created."
+                Message = VariantLogMessages.VariantCreated()
             });
 
             entities.Add(newEntity);
