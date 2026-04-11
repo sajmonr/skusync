@@ -343,6 +343,113 @@ eventAccumulator.Enqueue(pendingEvents);    // only reached on success
 
 ---
 
+## Database Entities & Configuration
+
+Entities live in `src/Infrastructure/Database/Entities/`. Each entity has a corresponding `IEntityTypeConfiguration<T>` in `src/Infrastructure/Database/Configuration/`, which is auto-discovered via `modelBuilder.ApplyConfigurationsFromAssembly(...)`.
+
+### Naming conventions
+
+| Rule | Example |
+|---|---|
+| Entity class names end with `Entity` | `ShopifyProductVariantEntity` |
+| Table names are **plural** | `"ShopifyProductVariants"` |
+| Primary key property matches `{ClassName}Id` | `ShopifyProductVariantId` |
+| Timestamp properties are suffixed with `Utc` | `CreatedOnUtc`, `UpdatedOnUtc` |
+
+### Primary keys
+
+All primary keys are **UUIDv7**, set client-side via `Guid.CreateVersion7()` on the entity initializer and backed by a `uuidv7()` SQL default. Use the `HasUuidV7PrimaryKey` extension in the configuration class:
+
+```csharp
+builder.HasUuidV7PrimaryKey(x => x.ShopifyProductVariantId);
+```
+
+This calls `ValueGeneratedNever()` on the .NET side so EF Core does not attempt to auto-generate the value, while the SQL default covers database-side inserts.
+
+### Required vs optional columns
+
+**All columns are required by default.** Mark a property optional in the configuration only when there is an explicit domain reason for it to be nullable. Always call `.IsRequired()` explicitly in the configuration for clarity, even where EF Core would infer it.
+
+### Timestamps
+
+All datetime columns store **UTC** values. Use the `HasDefaultValueDateTimeNowUtcSql()` extension for columns that default to the current time on insert:
+
+```csharp
+builder.Property(x => x.CreatedOnUtc)
+    .IsRequired()
+    .HasDefaultValueDateTimeNowUtcSql();   // → now() at time zone 'utc'
+```
+
+The C# property should also default to `DateTime.UtcNow` so the value is correct when the entity is used in-memory before being persisted:
+
+```csharp
+public DateTime CreatedOnUtc { get; set; } = DateTime.UtcNow;
+```
+
+Never store local time. Never use `DateTime.Now`.
+
+### Entity class structure
+
+```csharp
+// Infrastructure/Database/Entities/ExampleEntity.cs
+namespace Infrastructure.Database.Entities;
+
+public class ExampleEntity
+{
+    public Guid ExampleId { get; set; } = Guid.CreateVersion7();
+
+    public string Name { get; set; } = "";
+
+    public DateTime CreatedOnUtc { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedOnUtc { get; set; } = DateTime.UtcNow;
+}
+```
+
+### Configuration class structure
+
+```csharp
+// Infrastructure/Database/Configuration/ExampleConfiguration.cs
+using Infrastructure.Database.Entities;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+
+namespace Infrastructure.Database.Configuration;
+
+public class ExampleConfiguration : IEntityTypeConfiguration<ExampleEntity>
+{
+    public void Configure(EntityTypeBuilder<ExampleEntity> builder)
+    {
+        builder.ToTable("Examples");                         // plural table name
+
+        builder.HasUuidV7PrimaryKey(x => x.ExampleId);
+
+        builder.Property(x => x.Name)
+            .IsRequired()
+            .HasMaxLength(255);
+
+        builder.Property(x => x.CreatedOnUtc)
+            .IsRequired()
+            .HasDefaultValueDateTimeNowUtcSql();
+
+        builder.Property(x => x.UpdatedOnUtc)
+            .IsRequired()
+            .HasDefaultValueDateTimeNowUtcSql();
+    }
+}
+```
+
+### DbContext
+
+Add an explicit `DbSet<T>` property to `ApplicationDbContext` for every entity that services need to query or write to directly:
+
+```csharp
+public DbSet<ExampleEntity> Examples { get; init; }
+```
+
+The configuration is discovered automatically — no manual `modelBuilder.Entity<T>()` call needed.
+
+---
+
 ## CI/CD
 
 - GitHub Actions: `.github/workflows/build.yml` (builds and tests the .NET solution only).

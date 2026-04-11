@@ -8,7 +8,7 @@ public class ShopifyProductVariantLogEventConfiguration : IEntityTypeConfigurati
 {
     public void Configure(EntityTypeBuilder<ShopifyProductVariantLogEventEntity> builder)
     {
-        builder.ToTable("ShopifyProductVariantLogEvent");
+        builder.ToTable("ShopifyProductVariantLogEvents");
 
         builder.HasUuidV7PrimaryKey(x => x.ShopifyProductVariantLogEventId);
 
