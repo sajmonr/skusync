@@ -11,12 +11,12 @@ namespace Integration.Skulabs.Items;
 /// Shopify listing associations. Base URL and API key are configured from
 /// <see cref="SkulabsApiOptions"/>.
 /// </summary>
-public class ItemClient
+public class SkulabsItemClient
 {
     private readonly HttpClient _client;
-    private readonly ILogger<ItemClient> _logger;
+    private readonly ILogger<SkulabsItemClient> _logger;
     
-    public ItemClient(HttpClient httpClient, IOptionsMonitor<SkulabsApiOptions> optionsMonitor, ILogger<ItemClient> logger)
+    public SkulabsItemClient(HttpClient httpClient, IOptionsMonitor<SkulabsApiOptions> optionsMonitor, ILogger<SkulabsItemClient> logger)
     {
         _logger = logger;
         _client = httpClient;
@@ -34,7 +34,7 @@ public class ItemClient
     public async Task<SkuLabsItem[]> GetAllItems()
     {
         const string fields = """
-                              {"name": 1, "sku": 1, "upc": 1, "listings": 1}
+                              {"_id": 1, "name": 1, "sku": 1, "upc": 1, "listings": 1}
                               """;
         var queryParams = new Dictionary<string, string>
             { { "fields", fields } };
@@ -51,4 +51,10 @@ public class ItemClient
 
         return finalItems;
     }
+
+    public Task<bool> UpdateItem()
+    {
+        return Task.FromResult(true);
+    }
+    
 }

@@ -4,10 +4,8 @@ using Application.Products.Services;
 using Infrastructure.Database;
 using Infrastructure.Database.Entities;
 using Integration.Aws.Sqs;
-using Integration.Shopify.Products;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Microsoft.FeatureManagement;
 
 namespace Application.Products.Webhook;
 
@@ -19,11 +17,9 @@ namespace Application.Products.Webhook;
 /// </summary>
 public class ShopifyProductUpdateWebhookHandler(
     ApplicationDbContext dbContext,
-    IShopifyProductService productService,
     ILogger<ShopifyProductUpdateWebhookHandler> logger,
-    IEventAccumulator<ProductChangedEvent> eventAccumulator,
-    IFeatureManager featureManager)
-    : ShopifyWebhookBase(productService), IShopifyWebhookHandler
+    IEventAccumulator<ProductChangedEvent> eventAccumulator)
+    : ShopifyWebhookBase, IShopifyWebhookHandler
 {
     /// <inheritdoc/>
     public string TopicName => "products/update";
@@ -37,7 +33,6 @@ public class ShopifyProductUpdateWebhookHandler(
     {
         var existingVariants = await dbContext.ShopifyProductVariants.Where(variant => variant.ProductId == product.Id)
             .ToArrayAsync();
-        var toUpdateInShopify = new List<ShopifyProductVariantEntity>();
 
         logger.LogDebug(
             "Loaded {Count} variants for product {ProductId} [{ProductTitle}]. We currently have {ExistingCount} variants.",
@@ -61,17 +56,17 @@ public class ShopifyProductUpdateWebhookHandler(
                 });
 
                 dbContext.ShopifyProductVariants.Add(newEntity);
-                toUpdateInShopify.Add(newEntity);
                 pendingEvents.Add(new ProductChangedEvent(variant.Id, ProductChangeType.Created));
             }
             else
             {
                 // Update it
-                UpdateEntity(entity, product, variant);
+                var didChange = UpdateEntity(entity, product, variant);
+                var didBarcodeOrSkuChange = DidBarcodeOrSkuChange(entity, variant);
 
-                if (RequiresUpdateInShopify(entity, product, variant))
+                if (!didChange && !didBarcodeOrSkuChange)
                 {
-                    toUpdateInShopify.Add(entity);
+                    continue;
                 }
 
                 pendingEvents.Add(new ProductChangedEvent(variant.Id, ProductChangeType.Updated));
@@ -82,22 +77,12 @@ public class ShopifyProductUpdateWebhookHandler(
 
         // Enqueue only after a successful save so no phantom events enter the queue.
         eventAccumulator.Enqueue(pendingEvents);
-
-        if (await featureManager.IsEnabledAsync(FeatureFlags.ShopifyWriteBack))
-        {
-            await SetBarcodeAndSkuInShopify(product.AdminGraphqlApiId, toUpdateInShopify);
-        }
-        else
-        {
-            logger.LogInformation(
-                "ShopifyWriteBack feature flag is disabled. Skipping Shopify update for product {ProductId}.",
-                product.AdminGraphqlApiId);
-        }
     }
 
-    private void UpdateEntity(ShopifyProductVariantEntity entity, SqsShopEventProduct product,
+    private bool UpdateEntity(ShopifyProductVariantEntity entity, SqsShopEventProduct product,
         SqsShopEventVariant variant)
     {
+        var changed = false;
         var oldFullTitle = entity.FullTitle;
 
         if (entity.ProductTitle != product.Title)
@@ -106,6 +91,7 @@ public class ShopifyProductUpdateWebhookHandler(
                 variant.Id, entity.ProductTitle, product.Title);
             entity.ProductTitle = product.Title;
             entity.UpdatedOnUtc = DateTime.UtcNow;
+            changed = true;
         }
 
         if (variant.Title != "Default Title" && entity.VariantTitle != variant.Title)
@@ -114,6 +100,7 @@ public class ShopifyProductUpdateWebhookHandler(
                 variant.Id, entity.VariantTitle, variant.Title);
             entity.VariantTitle = variant.Title;
             entity.UpdatedOnUtc = DateTime.UtcNow;
+            changed = true;
         }
 
         if (entity.FullTitle != oldFullTitle)
@@ -124,10 +111,11 @@ public class ShopifyProductUpdateWebhookHandler(
                 Message = VariantLogMessages.TitleUpdated(oldFullTitle, entity.FullTitle)
             });
         }
+        
+        return changed;
     }
 
-    private bool RequiresUpdateInShopify(ShopifyProductVariantEntity entity, SqsShopEventProduct product,
-        SqsShopEventVariant variant)
+    private bool DidBarcodeOrSkuChange(ShopifyProductVariantEntity entity, SqsShopEventVariant variant)
     {
         if (!string.IsNullOrEmpty(entity.Barcode) && entity.Barcode != variant.Barcode)
         {

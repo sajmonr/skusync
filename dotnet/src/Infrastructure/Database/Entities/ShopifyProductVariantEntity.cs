@@ -95,6 +95,8 @@ public class ShopifyProductVariantEntity
     /// </summary>
     public ICollection<ShopifyProductVariantLogEventEntity> LogEvents { get; set; } =
         new HashSet<ShopifyProductVariantLogEventEntity>();
+
+    public SkulabsItemEntity? SkulabsItem { get; set; }
     
     private void GenerateFullTitle()
     {

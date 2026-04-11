@@ -18,10 +18,20 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="2473acc7-8b17-4e30-b45b-750aea428ada" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/src/Application/Products/Webhook/ShopifyWebhookBase.cs" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/Infrastructure/Database/Configuration/SkulabsItemConfiguration.cs" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/Infrastructure/Database/Entities/SkulabsItemEntity.cs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/.idea.SkuSync/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/.idea.SkuSync/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Application/Products/Webhook/ShopifyProductCreateWebhookHandler.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/Products/Webhook/ShopifyProductCreateWebhookHandler.cs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/Application/Products/Webhook/ShopifyProductUpdateWebhookHandler.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/Products/Webhook/ShopifyProductUpdateWebhookHandler.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Application/Products/Webhook/ShopifyWebhookBase.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/Products/Webhook/ShopifyWebhookBase.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Infrastructure/Database/Configuration/ShopifyProductVariantConfiguration.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Infrastructure/Database/Configuration/ShopifyProductVariantConfiguration.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Infrastructure/Database/Configuration/ShopifyProductVariantLogEventConfiguration.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Infrastructure/Database/Configuration/ShopifyProductVariantLogEventConfiguration.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Infrastructure/Database/Entities/ShopifyProductVariantEntity.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Infrastructure/Database/Entities/ShopifyProductVariantEntity.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Infrastructure/Migrations/ApplicationDbContextModelSnapshot.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Infrastructure/Migrations/ApplicationDbContextModelSnapshot.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Integration/DependencyInjection.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Integration/DependencyInjection.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Integration/Integration.csproj" beforeDir="false" afterPath="$PROJECT_DIR$/src/Integration/Integration.csproj" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Integration/Skulabs/Items/ItemClient.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Integration/Skulabs/Items/SkulabsItemClient.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Web.Api/appsettings.Development.json" beforeDir="false" afterPath="$PROJECT_DIR$/src/Web.Api/appsettings.Development.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Web.Api/appsettings.json" beforeDir="false" afterPath="$PROJECT_DIR$/src/Web.Api/appsettings.json" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -71,7 +81,9 @@
     <setting file="file://$PROJECT_DIR$/src/Application/Products/Webhook/ShopifyWebhookBase.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/src/Infrastructure/Database/ApplicationDbContext.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/src/Infrastructure/Database/Configuration/ShopifyProductVariantConfiguration.cs" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/src/Infrastructure/Database/Configuration/SkulabsItemConfiguration.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/src/Infrastructure/Database/Entities/ShopifyProductVariantEntity.cs" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/src/Infrastructure/Database/Entities/SkulabsItemEntity.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/src/Infrastructure/Database/Extensions/EntityBuilderExtensions.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/src/Integration/Aws/Sqs/SqsOptions.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$PROJECT_DIR$/src/Integration/Aws/Sqs/SqsProductWebhookTypes.cs" root0="FORCE_HIGHLIGHTING" />

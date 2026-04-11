@@ -33,7 +33,7 @@ public class ShopifyProductVariantConfiguration : IEntityTypeConfiguration<Shopi
             .HasDefaultValueDateTimeNowUtcSql();
         
         builder.Property(x => x.Barcode).IsRequired()
-            .HasMaxLength(50);
+            .HasMaxLength(100);
         builder.Property(x => x.Sku).IsRequired()
             .HasMaxLength(100);
 

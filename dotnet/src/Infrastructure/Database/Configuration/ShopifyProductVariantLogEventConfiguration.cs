@@ -22,6 +22,7 @@ public class ShopifyProductVariantLogEventConfiguration : IEntityTypeConfigurati
         
         builder.HasOne(x => x.ShopifyProductVariant)
             .WithMany(x => x.LogEvents)
-            .HasForeignKey(x => x.ShopifyProductVariantId);
+            .HasForeignKey(x => x.ShopifyProductVariantId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }

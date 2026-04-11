@@ -1,10 +1,9 @@
 using Infrastructure.Database.Entities;
 using Integration.Aws.Sqs;
-using Integration.Shopify.Products;
 
 namespace Application.Products.Webhook;
 
-public abstract class ShopifyWebhookBase(IShopifyProductService productService)
+public abstract class ShopifyWebhookBase
 {
     protected static ShopifyProductVariantEntity ConstructEntity(SqsShopEventProduct product, SqsShopEventVariant variant)
     {
@@ -19,14 +18,5 @@ public abstract class ShopifyWebhookBase(IShopifyProductService productService)
             Sku = variant.Id.ToString(),
             Barcode = variant.Id.ToString()
         };
-    }
-
-    protected async Task SetBarcodeAndSkuInShopify(string productId, IEnumerable<ShopifyProductVariantEntity> entities)
-    {
-        var entitiesToUpdate = entities
-            .Select(e => new ShopifyUpdateProductVariant(e.GlobalVariantId, e.Sku, e.Barcode)).ToArray();
-
-        await productService.UpdateVariants(productId,
-            entitiesToUpdate);
     }
 }
