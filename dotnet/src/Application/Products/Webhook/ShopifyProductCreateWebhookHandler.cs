@@ -21,8 +21,9 @@ public class ShopifyProductCreateWebhookHandler(
     ILogger<ShopifyProductUpdateWebhookHandler> logger,
     IEventAccumulator<ProductChangedEvent> eventAccumulator,
     IFeatureManager featureManager)
-    : IShopifyWebhookHandler
+    : ShopifyWebhookBase(productService), IShopifyWebhookHandler
 {
+
     /// <inheritdoc/>
     public string TopicName => "products/create";
 
@@ -41,17 +42,7 @@ public class ShopifyProductCreateWebhookHandler(
                 "New variant {VariantId} [{VariantTitle} for product {ProductId} [{ProductTitle}] found.",
                 variant.Id, variant.Title, product.Id, product.Title);
 
-            var newEntity = new ShopifyProductVariantEntity
-            {
-                GlobalProductId = product.AdminGraphqlApiId,
-                ProductId = product.Id,
-                GlobalVariantId = variant.AdminGraphqlApiId,
-                VariantId = variant.Id,
-                ProductTitle = product.Title,
-                VariantTitle = variant.Title,
-                Sku = variant.Id.ToString(),
-                Barcode = variant.Id.ToString()
-            };
+            var newEntity = ConstructEntity(product, variant);
 
             newEntity.LogEvents.Add(new ShopifyProductVariantLogEventEntity
             {
@@ -72,7 +63,7 @@ public class ShopifyProductCreateWebhookHandler(
 
         if (await featureManager.IsEnabledAsync(FeatureFlags.ShopifyWriteBack))
         {
-            await CreateBarcodeAndSkuInShopify(product.AdminGraphqlApiId, entities);
+            await SetBarcodeAndSkuInShopify(product.AdminGraphqlApiId, entities);
         }
         else
         {
@@ -81,17 +72,4 @@ public class ShopifyProductCreateWebhookHandler(
                 product.AdminGraphqlApiId);
         }
     }
-
-    private async Task CreateBarcodeAndSkuInShopify(string productId, IEnumerable<ShopifyProductVariantEntity> entities)
-    {
-        var entitiesToUpdate = entities
-            .Select(e => new ShopifyUpdateProductVariant(e.GlobalVariantId, e.Sku, e.Barcode)).ToArray();
-
-        logger.LogDebug("Updating {Count} variants in Shopify from {TopicName} webhook.", entitiesToUpdate.Length,
-            TopicName);
-
-        await productService.UpdateVariants(productId,
-            entitiesToUpdate);
-    }
-
 }

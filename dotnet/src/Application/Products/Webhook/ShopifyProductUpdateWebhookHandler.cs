@@ -23,7 +23,7 @@ public class ShopifyProductUpdateWebhookHandler(
     ILogger<ShopifyProductUpdateWebhookHandler> logger,
     IEventAccumulator<ProductChangedEvent> eventAccumulator,
     IFeatureManager featureManager)
-    : IShopifyWebhookHandler
+    : ShopifyWebhookBase(productService), IShopifyWebhookHandler
 {
     /// <inheritdoc/>
     public string TopicName => "products/update";
@@ -53,7 +53,7 @@ public class ShopifyProductUpdateWebhookHandler(
 
             if (entity is null)
             {
-                var newEntity = CreateEntity(product, variant);
+                var newEntity = ConstructEntity(product, variant);
 
                 newEntity.LogEvents.Add(new ShopifyProductVariantLogEventEntity
                 {
@@ -85,7 +85,7 @@ public class ShopifyProductUpdateWebhookHandler(
 
         if (await featureManager.IsEnabledAsync(FeatureFlags.ShopifyWriteBack))
         {
-            await UpdateEntitiesInShopify(product.AdminGraphqlApiId, toUpdateInShopify);
+            await SetBarcodeAndSkuInShopify(product.AdminGraphqlApiId, toUpdateInShopify);
         }
         else
         {
@@ -93,18 +93,6 @@ public class ShopifyProductUpdateWebhookHandler(
                 "ShopifyWriteBack feature flag is disabled. Skipping Shopify update for product {ProductId}.",
                 product.AdminGraphqlApiId);
         }
-    }
-
-    private async Task UpdateEntitiesInShopify(string productId, IEnumerable<ShopifyProductVariantEntity> entities)
-    {
-        var entitiesToUpdate = entities
-            .Select(e => new ShopifyUpdateProductVariant(e.GlobalVariantId, e.Sku, e.Barcode)).ToArray();
-
-        logger.LogDebug("Updating {Count} variants in Shopify from {TopicName} webhook.", entitiesToUpdate.Length,
-            TopicName);
-
-        await productService.UpdateVariants(productId,
-            entitiesToUpdate);
     }
 
     private void UpdateEntity(ShopifyProductVariantEntity entity, SqsShopEventProduct product,
@@ -158,25 +146,5 @@ public class ShopifyProductUpdateWebhookHandler(
         }
 
         return false;
-    }
-
-    private ShopifyProductVariantEntity CreateEntity(SqsShopEventProduct product, SqsShopEventVariant variant)
-    {
-        logger.LogInformation(
-            "New variant {VariantId} [{VariantTitle} for product {ProductId} [{ProductTitle}] found.",
-            variant.Id, variant.Title, product.Id, product.Title);
-
-        // Create it
-        return new ShopifyProductVariantEntity
-        {
-            GlobalProductId = product.AdminGraphqlApiId,
-            ProductId = product.Id,
-            GlobalVariantId = variant.AdminGraphqlApiId,
-            VariantId = variant.Id,
-            ProductTitle = product.Title,
-            VariantTitle = variant.Title,
-            Sku = variant.Id.ToString(),
-            Barcode = variant.Id.ToString()
-        };
     }
 }
