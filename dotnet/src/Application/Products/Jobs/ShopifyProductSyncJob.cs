@@ -31,6 +31,7 @@ public class ShopifyProductSyncJob(
     /// <param name="context">The Quartz execution context providing trigger and timing metadata.</param>
     public async Task Execute(IJobExecutionContext context)
     {
+        
         logger.LogInformation("ShopifySyncJob started.");
         logger.LogDebug(
             "Triggered by '{TriggerKey}'. Scheduled fire time: {ScheduledFireTime}. Actual fire time: {FireTime}.",

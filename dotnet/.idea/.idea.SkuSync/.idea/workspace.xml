@@ -19,15 +19,9 @@
   <component name="ChangeListManager">
     <list default="true" id="2473acc7-8b17-4e30-b45b-750aea428ada" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/.idea.SkuSync/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/.idea.SkuSync/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Application/DependencyInjection.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/DependencyInjection.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Application/Events/EventAccumulator.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/Events/EventAccumulator.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Application/Jobs/ScheduledJobsOptions.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/Jobs/ScheduledJobsOptions.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Application/Products/Jobs/ProductDeduplicationJob.cs" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Application/Products/Jobs/ProductEventProcessorJob.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/Products/Jobs/ProductEventProcessorJob.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Application/Events/EventDispatcherExtensions.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/Events/EventDispatcherExtensions.cs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/Application/Products/Jobs/ShopifyProductSyncJob.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/Products/Jobs/ShopifyProductSyncJob.cs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/Application/Products/Services/ProductsService.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/Products/Services/ProductsService.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Web.Api/appsettings.Development.json" beforeDir="false" afterPath="$PROJECT_DIR$/src/Web.Api/appsettings.Development.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Web.Api/appsettings.json" beforeDir="false" afterPath="$PROJECT_DIR$/src/Web.Api/appsettings.json" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -67,6 +61,7 @@
     <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/DecompilerCache/decompiler/83add8f7267547cfb60a9d0fdc92f3bb368a8/20/e8bb4403/MessageEnvelope.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/SourcesCache/17a3a8d481919bdc3f1630b5a7deadb2cd394fa12fff3312e6abe29bfc4/IConfiguration.cs" root0="SKIP_HIGHLIGHTING" />
     <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/SourcesCache/1a34ca7d4cae141a11e98d56a86f50dfb7ea8c149c534eb024ed11d5c4e6/IServiceFactory.cs" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/SourcesCache/3f7928ea90e69336931ee773cd8c15e22960ad505897569f9047e4afcc776cc/JobRunShell.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/SourcesCache/44445fa8e755b688d9bd2164e9ba8e8fcd558d95fd4ad9539895eaa383479a/OptionsServiceCollectionExtensions.cs" root0="FORCE_HIGHLIGHTING" />
     <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/SourcesCache/60e67c8435f2f3e3a3a4e0848b36dee8fbe4b31162bc25f58ddcd628f7d8dc/IProductService.cs" root0="SKIP_HIGHLIGHTING" />
     <setting file="file://$APPLICATION_CONFIG_DIR$/resharper-host/SourcesCache/7b403145787ec043db942f5412faa174fe63b8c7bb5ac93242d5165d8e5b6a4/MigrationCommandExecutor.cs" root0="FORCE_HIGHLIGHTING" />
@@ -326,17 +321,17 @@
           <option name="timeStamp" value="3" />
         </breakpoint>
         <line-breakpoint enabled="true" type="DotNet Breakpoints">
-          <url>file://$PROJECT_DIR$/src/Application/Events/EventDispatcher.cs</url>
-          <line>9</line>
-          <properties documentPath="$PROJECT_DIR$/src/Application/Events/EventDispatcher.cs" containingFunctionPresentation="Method 'Dispatch'">
+          <url>file://$PROJECT_DIR$/src/Application/Products/Jobs/ProductEventProcessorJob.cs</url>
+          <line>52</line>
+          <properties documentPath="$PROJECT_DIR$/src/Application/Products/Jobs/ProductEventProcessorJob.cs" containingFunctionPresentation="Method 'Execute'">
             <startOffsets>
-              <option value="319" />
+              <option value="2158" />
             </startOffsets>
             <endOffsets>
-              <option value="347" />
+              <option value="2180" />
             </endOffsets>
           </properties>
-          <option name="timeStamp" value="16" />
+          <option name="timeStamp" value="23" />
         </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>

@@ -12,7 +12,7 @@ public class ProductsService(
     IShopifyProductService shopifyProductService,
     ApplicationDbContext dbContext,
     ILogger<ProductsService> logger,
-    IEventAccumulator<ProductChangedEvent> eventAccumulator) : IProductsService
+    IEventDispatcher eventDispatcher) : IProductsService
 {
     public async Task<ProductImportResult> ImportProductsFromShopify()
     {
@@ -94,17 +94,8 @@ public class ProductsService(
         }
 
         // Enqueue only after a successful save so no phantom events enter the queue.
-        foreach (var x in updatedEntities)
-        {
-            eventAccumulator.Enqueue(ProductChangedEvent.Updated(x.ShopifyProductVariantId));
-        }
-
-        foreach (var x in createdEntities)
-        {
-            eventAccumulator.Enqueue(ProductChangedEvent.Created(x.ShopifyProductVariantId));
-        }
-        //eventAccumulator.Enqueue(updatedEntities.Select(e => ProductChangedEvent.Updated(e.ShopifyProductVariantId)));
-        //eventDispatcher.Dispatch(createdEntities.Select(e => ProductChangedEvent.Created(e.ShopifyProductVariantId)));
+        eventDispatcher.DispatchMany(updatedEntities.Select(e => ProductChangedEvent.Updated(e.ShopifyProductVariantId)));
+        eventDispatcher.DispatchMany(createdEntities.Select(e => ProductChangedEvent.Created(e.ShopifyProductVariantId)));
 
         logger.LogDebug("Synchronization complete. Created: {Created}, Updated: {Updated}.", createdEntities.Count, updatedEntities.Count);
 

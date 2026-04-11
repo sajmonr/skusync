@@ -63,8 +63,15 @@ public class ProductEventProcessorJob(
             "Processing {Total} accumulated product change event(s): {Created} created, {Updated} updated.",
             events.Count, createdEvents.Length, updateEvents.Length);
 
-        await HandleCreatedProducts(createdEvents);
-        await HandleUpdatedProducts(updateEvents);
+        if (createdEvents.Length > 0)
+        {
+            await HandleCreatedProducts(createdEvents);   
+        }
+
+        if (updateEvents.Length > 0)
+        {
+            await HandleUpdatedProducts(updateEvents);
+        }
 
         logger.LogInformation(
             "ProductEventProcessorJob completed. Processed {Total} event(s).",

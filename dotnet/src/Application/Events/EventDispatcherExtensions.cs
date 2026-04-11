@@ -10,7 +10,7 @@ public static class EventDispatcherExtensions
         /// </summary>
         /// <typeparam name="TEvent">The type of the events to be dispatched.</typeparam>
         /// <param name="events">The collection of events to be dispatched.</param>
-        public void Dispatch<TEvent>(IEnumerable<TEvent> events)
+        public void DispatchMany<TEvent>(IEnumerable<TEvent> events)
         {
             foreach (var @event in events)
             {
