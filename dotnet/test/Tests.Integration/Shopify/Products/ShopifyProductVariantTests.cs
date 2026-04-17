@@ -15,7 +15,7 @@ public class ShopifyProductVariantTests
         var variant = new ShopifyProductVariant(
             GlobalProductId: "gid://shopify/Product/123456789",
             GlobalVariantId: "gid://shopify/ProductVariant/1",
-            ProductTitle: "", VariantTitle: "", Sku: "", Barcode: "");
+            DisplayName: "", Sku: "", Barcode: "");
 
         variant.ProductId.ShouldBe(123456789L);
     }
@@ -26,7 +26,7 @@ public class ShopifyProductVariantTests
         var variant = new ShopifyProductVariant(
             GlobalProductId: "gid://shopify/Product/abc",
             GlobalVariantId: "gid://shopify/ProductVariant/1",
-            ProductTitle: "", VariantTitle: "", Sku: "", Barcode: "");
+            DisplayName: "", Sku: "", Barcode: "");
 
         variant.ProductId.ShouldBe(0L);
     }
@@ -37,7 +37,7 @@ public class ShopifyProductVariantTests
         var variant = new ShopifyProductVariant(
             GlobalProductId: "",
             GlobalVariantId: "gid://shopify/ProductVariant/1",
-            ProductTitle: "", VariantTitle: "", Sku: "", Barcode: "");
+            DisplayName: "", Sku: "", Barcode: "");
 
         variant.ProductId.ShouldBe(0L);
     }
@@ -48,7 +48,7 @@ public class ShopifyProductVariantTests
         var variant = new ShopifyProductVariant(
             GlobalProductId: "gid://shopify/Product/",
             GlobalVariantId: "gid://shopify/ProductVariant/1",
-            ProductTitle: "", VariantTitle: "", Sku: "", Barcode: "");
+            DisplayName: "", Sku: "", Barcode: "");
 
         variant.ProductId.ShouldBe(0L);
     }
@@ -63,7 +63,7 @@ public class ShopifyProductVariantTests
         var variant = new ShopifyProductVariant(
             GlobalProductId: "gid://shopify/Product/1",
             GlobalVariantId: "gid://shopify/ProductVariant/987654321",
-            ProductTitle: "", VariantTitle: "", Sku: "", Barcode: "");
+            DisplayName: "", Sku: "", Barcode: "");
 
         variant.VariantId.ShouldBe(987654321L);
     }
@@ -74,7 +74,7 @@ public class ShopifyProductVariantTests
         var variant = new ShopifyProductVariant(
             GlobalProductId: "gid://shopify/Product/1",
             GlobalVariantId: "gid://shopify/ProductVariant/xyz",
-            ProductTitle: "", VariantTitle: "", Sku: "", Barcode: "");
+            DisplayName: "", Sku: "", Barcode: "");
 
         variant.VariantId.ShouldBe(0L);
     }
@@ -85,7 +85,7 @@ public class ShopifyProductVariantTests
         var variant = new ShopifyProductVariant(
             GlobalProductId: "gid://shopify/Product/1",
             GlobalVariantId: "",
-            ProductTitle: "", VariantTitle: "", Sku: "", Barcode: "");
+            DisplayName: "", Sku: "", Barcode: "");
 
         variant.VariantId.ShouldBe(0L);
     }
@@ -100,7 +100,7 @@ public class ShopifyProductVariantTests
         var variant = new ShopifyProductVariant(
             GlobalProductId: $"gid://shopify/Product/{long.MaxValue}",
             GlobalVariantId: "gid://shopify/ProductVariant/1",
-            ProductTitle: "", VariantTitle: "", Sku: "", Barcode: "");
+            DisplayName: "", Sku: "", Barcode: "");
 
         variant.ProductId.ShouldBe(long.MaxValue);
     }

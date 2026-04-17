@@ -35,9 +35,9 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
     [Fact]
     public async Task Handle_ShouldPersistOneEntity_PerVariant()
     {
-        var product = CreateProduct("gid://shopify/Product/100", 100, "T-Shirt",
-            CreateVariant("gid://shopify/ProductVariant/200", 200, "Large"),
-            CreateVariant("gid://shopify/ProductVariant/201", 201, "Small"));
+        var product = CreateProduct("gid://shopify/Product/100", 100,
+            CreateVariant("gid://shopify/ProductVariant/200", 200, "T-Shirt - Large"),
+            CreateVariant("gid://shopify/ProductVariant/201", 201, "T-Shirt - Small"));
 
         await CreateSut().Handle(product);
 
@@ -48,8 +48,8 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
     [Fact]
     public async Task Handle_ShouldSetAllEntityFields_FromProductAndVariant()
     {
-        var product = CreateProduct("gid://shopify/Product/100", 100, "T-Shirt",
-            CreateVariant("gid://shopify/ProductVariant/200", 200, "Large"));
+        var product = CreateProduct("gid://shopify/Product/100", 100,
+            CreateVariant("gid://shopify/ProductVariant/200", 200, "T-Shirt - Large"));
 
         await CreateSut().Handle(product);
 
@@ -58,15 +58,13 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
         entity.ProductId.ShouldBe(100L);
         entity.GlobalVariantId.ShouldBe("gid://shopify/ProductVariant/200");
         entity.VariantId.ShouldBe(200L);
-        entity.ProductTitle.ShouldBe("T-Shirt");
-        entity.VariantTitle.ShouldBe("Large");
     }
 
     [Fact]
     public async Task Handle_ShouldUseVariantId_AsInitialSkuAndBarcode()
     {
-        var product = CreateProduct("gid://shopify/Product/100", 100, "T-Shirt",
-            CreateVariant("gid://shopify/ProductVariant/200", 200, "Large"));
+        var product = CreateProduct("gid://shopify/Product/100", 100,
+            CreateVariant("gid://shopify/ProductVariant/200", 200, "T-Shirt - Large"));
 
         await CreateSut().Handle(product);
 
@@ -78,7 +76,7 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
     [Fact]
     public async Task Handle_ShouldPersistNoEntities_WhenProductHasNoVariants()
     {
-        var product = CreateProduct("gid://shopify/Product/100", 100, "T-Shirt");
+        var product = CreateProduct("gid://shopify/Product/100", 100);
 
         await CreateSut().Handle(product);
 
@@ -93,9 +91,9 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
     [Fact]
     public async Task Handle_ShouldDispatchCreatedEvent_PerPersistedVariant()
     {
-        var product = CreateProduct("gid://shopify/Product/100", 100, "T-Shirt",
-            CreateVariant("gid://shopify/ProductVariant/200", 200, "Large"),
-            CreateVariant("gid://shopify/ProductVariant/201", 201, "Small"));
+        var product = CreateProduct("gid://shopify/Product/100", 100,
+            CreateVariant("gid://shopify/ProductVariant/200", 200, "T-Shirt - Large"),
+            CreateVariant("gid://shopify/ProductVariant/201", 201, "T-Shirt - Small"));
 
         await CreateSut().Handle(product);
 
@@ -106,7 +104,7 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
     [Fact]
     public async Task Handle_ShouldNotDispatchAnyEvent_WhenProductHasNoVariants()
     {
-        var product = CreateProduct("gid://shopify/Product/100", 100, "T-Shirt");
+        var product = CreateProduct("gid://shopify/Product/100", 100);
 
         await CreateSut().Handle(product);
 
@@ -121,11 +119,11 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
         new(_dbContext, _logger, _eventDispatcher);
 
     private static SqsShopEventProduct CreateProduct(
-        string adminGraphqlApiId, long id, string title, params SqsShopEventVariant[] variants) =>
-        new(adminGraphqlApiId, id, title, variants);
+        string adminGraphqlApiId, long id, params SqsShopEventVariant[] variants) =>
+        new(adminGraphqlApiId, id, variants);
 
-    private static SqsShopEventVariant CreateVariant(string adminGraphqlApiId, long id, string title) =>
-        new(adminGraphqlApiId, Barcode: id.ToString(), id, ProductId: 100, Sku: id.ToString(), title);
+    private static SqsShopEventVariant CreateVariant(string adminGraphqlApiId, long id, string displayName) =>
+        new(adminGraphqlApiId, Barcode: id.ToString(), id, ProductId: 100, Sku: id.ToString(), displayName);
 
     private sealed class TestLogger<T> : ILogger<T>
     {

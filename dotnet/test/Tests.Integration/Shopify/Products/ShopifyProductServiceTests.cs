@@ -22,23 +22,21 @@ public class ShopifyProductServiceTests
                 endCursor: null,
                 CreateProduct(
                     id: "gid://shopify/Product/100",
-                    title: "Basic Tee",
                     CreateVariant(
                         id: "gid://shopify/ProductVariant/200",
-                        title: "Default Title",
+                        displayName: "Basic Tee",
                         sku: "SKU-1",
                         barcode: "BAR-1"),
                     CreateVariant(
                         id: "gid://shopify/ProductVariant/201",
-                        title: "Large",
+                        displayName: "Basic Tee - Large",
                         sku: null,
                         barcode: null)),
                 CreateProduct(
                     id: null,
-                    title: null,
                     CreateVariant(
                         id: null,
-                        title: null,
+                        displayName: null,
                         sku: null,
                         barcode: null))));
 
@@ -51,18 +49,15 @@ public class ShopifyProductServiceTests
             "gid://shopify/Product/100",
             "gid://shopify/ProductVariant/200",
             "Basic Tee",
-            string.Empty,
             "SKU-1",
             "BAR-1"));
         result[1].ShouldBe(new ShopifyProductVariant(
             "gid://shopify/Product/100",
             "gid://shopify/ProductVariant/201",
-            "Basic Tee",
-            "Large",
+            "Basic Tee - Large",
             string.Empty,
             string.Empty));
         result[2].ShouldBe(new ShopifyProductVariant(
-            string.Empty,
             string.Empty,
             string.Empty,
             string.Empty,
@@ -87,10 +82,9 @@ public class ShopifyProductServiceTests
                     endCursor: "cursor-1",
                     CreateProduct(
                         id: "gid://shopify/Product/1",
-                        title: "First product",
                         CreateVariant(
                             id: "gid://shopify/ProductVariant/11",
-                            title: "Default Title",
+                            displayName: "First product",
                             sku: "FIRST",
                             barcode: "111"))),
                 CreateResponse(
@@ -98,10 +92,9 @@ public class ShopifyProductServiceTests
                     endCursor: "cursor-2",
                     CreateProduct(
                         id: "gid://shopify/Product/2",
-                        title: "Second product",
                         CreateVariant(
                             id: "gid://shopify/ProductVariant/22",
-                            title: "Blue",
+                            displayName: "Second product - Blue",
                             sku: "SECOND",
                             barcode: "222"))));
 
@@ -123,7 +116,7 @@ public class ShopifyProductServiceTests
     }
 
     [Fact]
-    public async Task GetProducts_ShouldLogErrorAndRethrow_WhenGraphQlCallFails()
+    public async Task GetProducts_ShouldLogErrorAndReturnEmpty_WhenGraphQlCallFails()
     {
         var exception = new InvalidOperationException("boom");
         _graphQlService.ExecuteAsync<GetAllProductsGraphResponse>(Arg.Any<string>(), Arg.Any<IDictionary<string, object?>?>())
@@ -131,11 +124,9 @@ public class ShopifyProductServiceTests
 
         var sut = new ShopifyProductService(_graphQlService, _logger);
 
-        var action = () => sut.GetProducts();
+        var result = await sut.GetProducts();
 
-        var thrown = await Should.ThrowAsync<InvalidOperationException>(action);
-
-        thrown.ShouldBeSameAs(exception);
+        result.ShouldBeEmpty();
         var errorLogs = _logger.Entries.Where(entry => entry.LogLevel == LogLevel.Error).ToArray();
 
         errorLogs.Length.ShouldBe(1);
@@ -275,12 +266,11 @@ public class ShopifyProductServiceTests
         };
     }
 
-    private static Product CreateProduct(string? id, string? title, params ProductVariant[] variants)
+    private static Product CreateProduct(string? id, params ProductVariant[] variants)
     {
         return new Product
         {
             id = id,
-            title = title,
             variants = new ProductVariantConnection
             {
                 nodes = variants
@@ -288,12 +278,12 @@ public class ShopifyProductServiceTests
         };
     }
 
-    private static ProductVariant CreateVariant(string? id, string? title, string? sku, string? barcode)
+    private static ProductVariant CreateVariant(string? id, string? displayName, string? sku, string? barcode)
     {
         return new ProductVariant
         {
             id = id,
-            title = title,
+            displayName = displayName,
             sku = sku,
             barcode = barcode
         };

@@ -41,8 +41,7 @@ public class ProductsServiceTests : IDisposable
             new ShopifyProductVariant(
                 "gid://shopify/Product/100",
                 "gid://shopify/ProductVariant/200",
-                "Blue T-Shirt",
-                "Large",
+                "Blue T-Shirt - Large",
                 "SKU-1",
                 "BAR-1")
         ]);
@@ -57,16 +56,15 @@ public class ProductsServiceTests : IDisposable
         variants[0].GlobalVariantId.ShouldBe("gid://shopify/ProductVariant/200");
         variants[0].ProductId.ShouldBe(100L);
         variants[0].VariantId.ShouldBe(200L);
-        variants[0].ProductTitle.ShouldBe("Blue T-Shirt");
-        variants[0].VariantTitle.ShouldBe("Large");
+        variants[0].DisplayName.ShouldBe("Blue T-Shirt - Large");
         variants[0].Sku.ShouldBe("SKU-1");
         variants[0].Barcode.ShouldBe("BAR-1");
     }
 
     [Fact]
-    public async Task ImportProducts_ShouldUpdateTitle_WhenTitleDiffersFromDatabase()
+    public async Task ImportProducts_ShouldUpdateDisplayName_WhenDisplayNameDiffersFromDatabase()
     {
-        var existingVariant = SeedVariant("gid://shopify/ProductVariant/200", title: "Old Title", sku: "SKU-1", barcode: "BAR-1");
+        var existingVariant = SeedVariant("gid://shopify/ProductVariant/200", displayName: "Old Title", sku: "SKU-1", barcode: "BAR-1");
         await _dbContext.SaveChangesAsync();
 
         _shopifyProductService.GetProducts().Returns(
@@ -75,7 +73,6 @@ public class ProductsServiceTests : IDisposable
                 "gid://shopify/Product/100",
                 "gid://shopify/ProductVariant/200",
                 "New Title",
-                "",
                 "SKU-1",
                 "BAR-1")
         ]);
@@ -86,40 +83,14 @@ public class ProductsServiceTests : IDisposable
 
         var updated = await _dbContext.Set<ShopifyProductVariantEntity>()
             .SingleAsync(v => v.GlobalVariantId == "gid://shopify/ProductVariant/200");
-        updated.ProductTitle.ShouldBe("New Title");
+        updated.DisplayName.ShouldBe("New Title");
         updated.UpdatedOnUtc.ShouldBeGreaterThanOrEqualTo(existingVariant.UpdatedOnUtc);
-    }
-
-    [Fact]
-    public async Task ImportProducts_ShouldUpdateVariantTitle_WhenVariantTitleDiffersFromDatabase()
-    {
-        SeedVariant("gid://shopify/ProductVariant/200", title: "T-Shirt", variantTitle: "Small", sku: "SKU-1", barcode: "BAR-1");
-        await _dbContext.SaveChangesAsync();
-
-        _shopifyProductService.GetProducts().Returns(
-        [
-            new ShopifyProductVariant(
-                "gid://shopify/Product/100",
-                "gid://shopify/ProductVariant/200",
-                "T-Shirt",
-                "Large",
-                "SKU-1",
-                "BAR-1")
-        ]);
-
-        var sut = CreateSut();
-
-        await sut.ImportProductsFromShopify();
-
-        var updated = await _dbContext.Set<ShopifyProductVariantEntity>()
-            .SingleAsync(v => v.GlobalVariantId == "gid://shopify/ProductVariant/200");
-        updated.VariantTitle.ShouldBe("Large");
     }
 
     [Fact]
     public async Task ImportProducts_ShouldNotUpdateSku_WhenSkuAlreadySetInDatabase()
     {
-        SeedVariant("gid://shopify/ProductVariant/200", title: "T-Shirt", sku: "OLD-SKU", barcode: "BAR-1");
+        SeedVariant("gid://shopify/ProductVariant/200", displayName: "T-Shirt", sku: "OLD-SKU", barcode: "BAR-1");
         await _dbContext.SaveChangesAsync();
 
         _shopifyProductService.GetProducts().Returns(
@@ -128,7 +99,6 @@ public class ProductsServiceTests : IDisposable
                 "gid://shopify/Product/100",
                 "gid://shopify/ProductVariant/200",
                 "T-Shirt",
-                "",
                 "NEW-SKU",
                 "BAR-1")
         ]);
@@ -145,7 +115,7 @@ public class ProductsServiceTests : IDisposable
     [Fact]
     public async Task ImportProducts_ShouldUpdateSku_WhenSkuIsEmptyInDatabase()
     {
-        SeedVariant("gid://shopify/ProductVariant/200", title: "T-Shirt", sku: "", barcode: "BAR-1");
+        SeedVariant("gid://shopify/ProductVariant/200", displayName: "T-Shirt", sku: "", barcode: "BAR-1");
         await _dbContext.SaveChangesAsync();
 
         _shopifyProductService.GetProducts().Returns(
@@ -154,7 +124,6 @@ public class ProductsServiceTests : IDisposable
                 "gid://shopify/Product/100",
                 "gid://shopify/ProductVariant/200",
                 "T-Shirt",
-                "",
                 "NEW-SKU",
                 "BAR-1")
         ]);
@@ -171,7 +140,7 @@ public class ProductsServiceTests : IDisposable
     [Fact]
     public async Task ImportProducts_ShouldNotUpdateBarcode_WhenBarcodeAlreadySetInDatabase()
     {
-        SeedVariant("gid://shopify/ProductVariant/200", title: "T-Shirt", sku: "SKU-1", barcode: "OLD-BAR");
+        SeedVariant("gid://shopify/ProductVariant/200", displayName: "T-Shirt", sku: "SKU-1", barcode: "OLD-BAR");
         await _dbContext.SaveChangesAsync();
 
         _shopifyProductService.GetProducts().Returns(
@@ -180,7 +149,6 @@ public class ProductsServiceTests : IDisposable
                 "gid://shopify/Product/100",
                 "gid://shopify/ProductVariant/200",
                 "T-Shirt",
-                "",
                 "SKU-1",
                 "NEW-BAR")
         ]);
@@ -197,7 +165,7 @@ public class ProductsServiceTests : IDisposable
     [Fact]
     public async Task ImportProducts_ShouldUpdateBarcode_WhenBarcodeIsEmptyInDatabase()
     {
-        SeedVariant("gid://shopify/ProductVariant/200", title: "T-Shirt", sku: "SKU-1", barcode: "");
+        SeedVariant("gid://shopify/ProductVariant/200", displayName: "T-Shirt", sku: "SKU-1", barcode: "");
         await _dbContext.SaveChangesAsync();
 
         _shopifyProductService.GetProducts().Returns(
@@ -206,7 +174,6 @@ public class ProductsServiceTests : IDisposable
                 "gid://shopify/Product/100",
                 "gid://shopify/ProductVariant/200",
                 "T-Shirt",
-                "",
                 "SKU-1",
                 "NEW-BAR")
         ]);
@@ -223,7 +190,7 @@ public class ProductsServiceTests : IDisposable
     [Fact]
     public async Task ImportProducts_ShouldNotUpdateVariant_WhenAllFieldsMatch()
     {
-        var existingVariant = SeedVariant("gid://shopify/ProductVariant/200", title: "T-Shirt", variantTitle: "Large", sku: "SKU-1", barcode: "BAR-1");
+        var existingVariant = SeedVariant("gid://shopify/ProductVariant/200", displayName: "T-Shirt - Large", sku: "SKU-1", barcode: "BAR-1");
         var originalUpdatedOn = existingVariant.UpdatedOnUtc;
         await _dbContext.SaveChangesAsync();
 
@@ -232,8 +199,7 @@ public class ProductsServiceTests : IDisposable
             new ShopifyProductVariant(
                 "gid://shopify/Product/100",
                 "gid://shopify/ProductVariant/200",
-                "T-Shirt",
-                "Large",
+                "T-Shirt - Large",
                 "SKU-1",
                 "BAR-1")
         ]);
@@ -251,7 +217,7 @@ public class ProductsServiceTests : IDisposable
     public async Task ImportProducts_ShouldSetUpdatedOnUtc_WhenVariantIsUpdated()
     {
         var before = DateTime.UtcNow.AddSeconds(-1);
-        SeedVariant("gid://shopify/ProductVariant/200", title: "Old Title", sku: "SKU-1", barcode: "BAR-1");
+        SeedVariant("gid://shopify/ProductVariant/200", displayName: "Old Title", sku: "SKU-1", barcode: "BAR-1");
         await _dbContext.SaveChangesAsync();
 
         _shopifyProductService.GetProducts().Returns(
@@ -260,7 +226,6 @@ public class ProductsServiceTests : IDisposable
                 "gid://shopify/Product/100",
                 "gid://shopify/ProductVariant/200",
                 "New Title",
-                "",
                 "SKU-1",
                 "BAR-1")
         ]);
@@ -277,7 +242,7 @@ public class ProductsServiceTests : IDisposable
     [Fact]
     public async Task ImportProducts_ShouldHandleMixedCreateAndUpdate()
     {
-        SeedVariant("gid://shopify/ProductVariant/100", title: "Existing", sku: "SKU-A", barcode: "BAR-A");
+        SeedVariant("gid://shopify/ProductVariant/100", displayName: "Existing", sku: "SKU-A", barcode: "BAR-A");
         await _dbContext.SaveChangesAsync();
 
         _shopifyProductService.GetProducts().Returns(
@@ -286,14 +251,12 @@ public class ProductsServiceTests : IDisposable
                 "gid://shopify/Product/10",
                 "gid://shopify/ProductVariant/100",
                 "Updated Title",
-                "",
                 "SKU-A",
                 "BAR-A"),
             new ShopifyProductVariant(
                 "gid://shopify/Product/20",
                 "gid://shopify/ProductVariant/200",
                 "New Variant",
-                "",
                 "SKU-B",
                 "BAR-B")
         ]);
@@ -306,10 +269,10 @@ public class ProductsServiceTests : IDisposable
         variants.Count.ShouldBe(2);
 
         var existingVariant = variants.Single(v => v.GlobalVariantId == "gid://shopify/ProductVariant/100");
-        existingVariant.ProductTitle.ShouldBe("Updated Title");
+        existingVariant.DisplayName.ShouldBe("Updated Title");
 
         var newVariant = variants.Single(v => v.GlobalVariantId == "gid://shopify/ProductVariant/200");
-        newVariant.ProductTitle.ShouldBe("New Variant");
+        newVariant.DisplayName.ShouldBe("New Variant");
         newVariant.Sku.ShouldBe("SKU-B");
         newVariant.Barcode.ShouldBe("BAR-B");
     }
@@ -337,8 +300,8 @@ public class ProductsServiceTests : IDisposable
     {
         _shopifyProductService.GetProducts().Returns(
         [
-            new ShopifyProductVariant("gid://shopify/Product/1", "gid://shopify/ProductVariant/1", "Shirt", "", "SKU-1", "BAR-1"),
-            new ShopifyProductVariant("gid://shopify/Product/2", "gid://shopify/ProductVariant/2", "Pants", "", "SKU-2", "BAR-2")
+            new ShopifyProductVariant("gid://shopify/Product/1", "gid://shopify/ProductVariant/1", "Shirt", "SKU-1", "BAR-1"),
+            new ShopifyProductVariant("gid://shopify/Product/2", "gid://shopify/ProductVariant/2", "Pants", "SKU-2", "BAR-2")
         ]);
 
         var sut = CreateSut();
@@ -353,12 +316,12 @@ public class ProductsServiceTests : IDisposable
     [Fact]
     public async Task ImportProducts_ShouldReturnSuccessWithUpdatedCount_WhenExistingVariantsChanged()
     {
-        SeedVariant("gid://shopify/ProductVariant/200", title: "Old Title", sku: "SKU-1", barcode: "BAR-1");
+        SeedVariant("gid://shopify/ProductVariant/200", displayName: "Old Title", sku: "SKU-1", barcode: "BAR-1");
         await _dbContext.SaveChangesAsync();
 
         _shopifyProductService.GetProducts().Returns(
         [
-            new ShopifyProductVariant("gid://shopify/Product/100", "gid://shopify/ProductVariant/200", "New Title", "", "SKU-1", "BAR-1")
+            new ShopifyProductVariant("gid://shopify/Product/100", "gid://shopify/ProductVariant/200", "New Title", "SKU-1", "BAR-1")
         ]);
 
         var sut = CreateSut();
@@ -373,12 +336,12 @@ public class ProductsServiceTests : IDisposable
     [Fact]
     public async Task ImportProducts_ShouldReturnSuccessWithZeroCounts_WhenNoChanges()
     {
-        SeedVariant("gid://shopify/ProductVariant/200", title: "T-Shirt", variantTitle: "Large", sku: "SKU-1", barcode: "BAR-1");
+        SeedVariant("gid://shopify/ProductVariant/200", displayName: "T-Shirt - Large", sku: "SKU-1", barcode: "BAR-1");
         await _dbContext.SaveChangesAsync();
 
         _shopifyProductService.GetProducts().Returns(
         [
-            new ShopifyProductVariant("gid://shopify/Product/100", "gid://shopify/ProductVariant/200", "T-Shirt", "Large", "SKU-1", "BAR-1")
+            new ShopifyProductVariant("gid://shopify/Product/100", "gid://shopify/ProductVariant/200", "T-Shirt - Large", "SKU-1", "BAR-1")
         ]);
 
         var sut = CreateSut();
@@ -393,13 +356,13 @@ public class ProductsServiceTests : IDisposable
     [Fact]
     public async Task ImportProducts_ShouldReturnCorrectCounts_WhenMixedCreateAndUpdate()
     {
-        SeedVariant("gid://shopify/ProductVariant/100", title: "Old Title", sku: "SKU-A", barcode: "BAR-A");
+        SeedVariant("gid://shopify/ProductVariant/100", displayName: "Old Title", sku: "SKU-A", barcode: "BAR-A");
         await _dbContext.SaveChangesAsync();
 
         _shopifyProductService.GetProducts().Returns(
         [
-            new ShopifyProductVariant("gid://shopify/Product/10", "gid://shopify/ProductVariant/100", "New Title", "", "SKU-A", "BAR-A"),
-            new ShopifyProductVariant("gid://shopify/Product/20", "gid://shopify/ProductVariant/200", "Brand New", "", "SKU-B", "BAR-B")
+            new ShopifyProductVariant("gid://shopify/Product/10", "gid://shopify/ProductVariant/100", "New Title", "SKU-A", "BAR-A"),
+            new ShopifyProductVariant("gid://shopify/Product/20", "gid://shopify/ProductVariant/200", "Brand New", "SKU-B", "BAR-B")
         ]);
 
         var sut = CreateSut();
@@ -420,7 +383,6 @@ public class ProductsServiceTests : IDisposable
                 "gid://shopify/Product/100",
                 "gid://shopify/ProductVariant/200",
                 "T-Shirt",
-                "",
                 "SKU-1",
                 "BAR-1")
         ]);
@@ -650,7 +612,7 @@ public class ProductsServiceTests : IDisposable
     {
         _shopifyProductService.GetProducts().Returns(
         [
-            new ShopifyProductVariant("gid://shopify/Product/100", "gid://shopify/ProductVariant/200", "T-Shirt", "", "SKU-1", "BAR-1")
+            new ShopifyProductVariant("gid://shopify/Product/100", "gid://shopify/ProductVariant/200", "T-Shirt", "SKU-1", "BAR-1")
         ]);
 
         await CreateSut().ImportProductsFromShopify();
@@ -662,12 +624,12 @@ public class ProductsServiceTests : IDisposable
     [Fact]
     public async Task ImportProducts_ShouldEnqueueUpdatedEvent_WhenExistingVariantIsChanged()
     {
-        SeedVariant("gid://shopify/ProductVariant/200", title: "Old Title", sku: "SKU-1", barcode: "BAR-1", variantId: 200);
+        SeedVariant("gid://shopify/ProductVariant/200", displayName: "Old Title", sku: "SKU-1", barcode: "BAR-1", variantId: 200);
         await _dbContext.SaveChangesAsync();
 
         _shopifyProductService.GetProducts().Returns(
         [
-            new ShopifyProductVariant("gid://shopify/Product/100", "gid://shopify/ProductVariant/200", "New Title", "", "SKU-1", "BAR-1")
+            new ShopifyProductVariant("gid://shopify/Product/100", "gid://shopify/ProductVariant/200", "New Title", "SKU-1", "BAR-1")
         ]);
 
         await CreateSut().ImportProductsFromShopify();
@@ -679,12 +641,12 @@ public class ProductsServiceTests : IDisposable
     [Fact]
     public async Task ImportProducts_ShouldNotEnqueueAnyEvent_WhenNoChangesOccur()
     {
-        SeedVariant("gid://shopify/ProductVariant/200", title: "T-Shirt", variantTitle: "Large", sku: "SKU-1", barcode: "BAR-1", variantId: 200);
+        SeedVariant("gid://shopify/ProductVariant/200", displayName: "T-Shirt - Large", sku: "SKU-1", barcode: "BAR-1", variantId: 200);
         await _dbContext.SaveChangesAsync();
 
         _shopifyProductService.GetProducts().Returns(
         [
-            new ShopifyProductVariant("gid://shopify/Product/100", "gid://shopify/ProductVariant/200", "T-Shirt", "Large", "SKU-1", "BAR-1")
+            new ShopifyProductVariant("gid://shopify/Product/100", "gid://shopify/ProductVariant/200", "T-Shirt - Large", "SKU-1", "BAR-1")
         ]);
 
         await CreateSut().ImportProductsFromShopify();
@@ -695,14 +657,12 @@ public class ProductsServiceTests : IDisposable
     private ShopifyProductVariantEntity SeedVariant(
         string globalVariantId,
         string globalProductId = "gid://shopify/Product/100",
-        string title = "Variant",
-        string variantTitle = "",
+        string displayName = "Variant",
         string sku = "SKU",
         string barcode = "BAR",
         long variantId = 200,
         long productId = 100)
     {
-        var fullTitle = string.IsNullOrWhiteSpace(variantTitle) ? title : $"{title} ({variantTitle})";
         var entity = new ShopifyProductVariantEntity
         {
             ShopifyProductVariantId = Guid.NewGuid(),
@@ -710,9 +670,7 @@ public class ProductsServiceTests : IDisposable
             ProductId = productId,
             GlobalVariantId = globalVariantId,
             VariantId = variantId,
-            ProductTitle = title,
-            VariantTitle = variantTitle,
-            FullTitle = fullTitle,
+            DisplayName = displayName,
             Sku = sku,
             Barcode = barcode
         };

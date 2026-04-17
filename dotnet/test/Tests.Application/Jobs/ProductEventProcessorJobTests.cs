@@ -18,7 +18,6 @@ public class ProductEventProcessorJobTests : IDisposable
 {
     private readonly IEventAccumulator<ProductChangedEvent> _eventAccumulator =
         Substitute.For<IEventAccumulator<ProductChangedEvent>>();
-    private readonly IEventDispatcher _eventDispatcher = Substitute.For<IEventDispatcher>();
     private readonly IFeatureManager _featureManager = Substitute.For<IFeatureManager>();
     private readonly IShopifyProductService _shopifyProductService = Substitute.For<IShopifyProductService>();
     private readonly ApplicationDbContext _dbContext;
@@ -174,30 +173,6 @@ public class ProductEventProcessorJobTests : IDisposable
                     v.Barcode == "MY-BAR")));
     }
 
-    [Fact]
-    public async Task Execute_ShouldDispatchSkulabsImportEvent_WhenCreatedEventsAreProcessed()
-    {
-        var entity = SeedVariant("gid://shopify/ProductVariant/100", "gid://shopify/Product/10");
-        await _dbContext.SaveChangesAsync();
-        _eventAccumulator.DrainAll().Returns([ProductChangedEvent.Created(entity.ShopifyProductVariantId)]);
-
-        await CreateSut().Execute(_context);
-
-        _eventDispatcher.Received(1).Dispatch(Arg.Any<SkulabsProductImportEvent>());
-    }
-
-    [Fact]
-    public async Task Execute_ShouldNotDispatchSkulabsImportEvent_WhenOnlyUpdatedEventsAreProcessed()
-    {
-        var entity = SeedVariant("gid://shopify/ProductVariant/100", "gid://shopify/Product/10");
-        await _dbContext.SaveChangesAsync();
-        _eventAccumulator.DrainAll().Returns([ProductChangedEvent.Updated(entity.ShopifyProductVariantId)]);
-
-        await CreateSut().Execute(_context);
-
-        _eventDispatcher.DidNotReceive().Dispatch(Arg.Any<SkulabsProductImportEvent>());
-    }
-
     // -------------------------------------------------------------------------
     // Updated events
     // -------------------------------------------------------------------------
@@ -271,9 +246,7 @@ public class ProductEventProcessorJobTests : IDisposable
             ProductId = long.Parse(globalProductId.Split('/').Last()),
             GlobalVariantId = globalVariantId,
             VariantId = long.Parse(globalVariantId.Split('/').Last()),
-            ProductTitle = "Product",
-            VariantTitle = "",
-            FullTitle = "Product",
+            DisplayName = "Product",
             Sku = sku,
             Barcode = barcode
         };
@@ -282,5 +255,5 @@ public class ProductEventProcessorJobTests : IDisposable
     }
 
     private ProductEventProcessorJob CreateSut() =>
-        new(_eventAccumulator, _eventDispatcher, _logger, _featureManager, _shopifyProductService, _dbContext);
+        new(_eventAccumulator, _logger, _featureManager, _shopifyProductService, _dbContext);
 }

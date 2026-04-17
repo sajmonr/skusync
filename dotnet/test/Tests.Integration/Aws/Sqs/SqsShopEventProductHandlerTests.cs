@@ -34,12 +34,12 @@ public class SqsShopEventProductHandlerTests
         var handler = Substitute.For<IShopifyWebhookHandler>();
         handler.TopicName.Returns("products/create");
 
-        var envelope = CreateEnvelope("products/create", productId: 42, productTitle: "Blue Hoodie");
+        var envelope = CreateEnvelope("products/create", productId: 42);
 
         await CreateSut(handler).HandleAsync(envelope);
 
         await handler.Received(1).Handle(
-            Arg.Is<SqsShopEventProduct>(p => p.Id == 42 && p.Title == "Blue Hoodie"));
+            Arg.Is<SqsShopEventProduct>(p => p.Id == 42));
     }
 
     [Fact]
@@ -141,7 +141,7 @@ public class SqsShopEventProductHandlerTests
         new(handlers, _logger);
 
     private static MessageEnvelope<SqsShopEventProductMessage> CreateEnvelope(
-        string topic, long productId = 1, string productTitle = "Test Product")
+        string topic, long productId = 1)
     {
         var message = new SqsShopEventProductMessage(
             Version: "0",
@@ -156,7 +156,6 @@ public class SqsShopEventProductHandlerTests
                 Payload: new SqsShopEventProduct(
                     AdminGraphqlApiId: $"gid://shopify/Product/{productId}",
                     Id: productId,
-                    Title: productTitle,
                     Variants: []),
                 Metadata: new SqsShopEventMetadata(
                     ContentType: "application/json",

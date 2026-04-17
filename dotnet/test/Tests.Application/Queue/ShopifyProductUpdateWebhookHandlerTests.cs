@@ -36,8 +36,8 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
     [Fact]
     public async Task Handle_ShouldCreateEntity_WhenVariantDoesNotExistInDatabase()
     {
-        var product = CreateProduct(100, "T-Shirt",
-            CreateVariant(200, "Large", sku: "SKU-A", barcode: "BAR-A"));
+        var product = CreateProduct(100,
+            CreateVariant(200, "T-Shirt - Large", sku: "SKU-A", barcode: "BAR-A"));
 
         await CreateSut().Handle(product);
 
@@ -49,8 +49,8 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
     [Fact]
     public async Task Handle_ShouldDispatchCreatedEvent_WhenNewVariantIsSaved()
     {
-        var product = CreateProduct(100, "T-Shirt",
-            CreateVariant(200, "Large", sku: "SKU-A", barcode: "BAR-A"));
+        var product = CreateProduct(100,
+            CreateVariant(200, "T-Shirt - Large", sku: "SKU-A", barcode: "BAR-A"));
 
         await CreateSut().Handle(product);
 
@@ -59,52 +59,22 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
     }
 
     // -------------------------------------------------------------------------
-    // Title updates
+    // Display name updates
     // -------------------------------------------------------------------------
 
     [Fact]
-    public async Task Handle_ShouldUpdateProductTitle_WhenTitleChangedInShopify()
+    public async Task Handle_ShouldUpdateDisplayName_WhenDisplayNameChangedInShopify()
     {
-        SeedVariant(100, 200, productTitle: "Old Title", sku: "SKU-A", barcode: "BAR-A");
+        SeedVariant(100, 200, displayName: "Old Title", sku: "SKU-A", barcode: "BAR-A");
         await _dbContext.SaveChangesAsync();
 
-        var product = CreateProduct(100, "New Title",
-            CreateVariant(200, "Large", sku: "SKU-A", barcode: "BAR-A"));
+        var product = CreateProduct(100,
+            CreateVariant(200, "New Title", sku: "SKU-A", barcode: "BAR-A"));
 
         await CreateSut().Handle(product);
 
         var updated = await _dbContext.ShopifyProductVariants.SingleAsync();
-        updated.ProductTitle.ShouldBe("New Title");
-    }
-
-    [Fact]
-    public async Task Handle_ShouldUpdateVariantTitle_WhenTitleChangedInShopify()
-    {
-        SeedVariant(100, 200, variantTitle: "Small", sku: "SKU-A", barcode: "BAR-A");
-        await _dbContext.SaveChangesAsync();
-
-        var product = CreateProduct(100, "T-Shirt",
-            CreateVariant(200, "Large", sku: "SKU-A", barcode: "BAR-A"));
-
-        await CreateSut().Handle(product);
-
-        var updated = await _dbContext.ShopifyProductVariants.SingleAsync();
-        updated.VariantTitle.ShouldBe("Large");
-    }
-
-    [Fact]
-    public async Task Handle_ShouldNotUpdateVariantTitle_WhenIncomingTitleIsDefaultTitle()
-    {
-        SeedVariant(100, 200, variantTitle: "Large", sku: "SKU-A", barcode: "BAR-A");
-        await _dbContext.SaveChangesAsync();
-
-        var product = CreateProduct(100, "T-Shirt",
-            CreateVariant(200, "Default Title", sku: "SKU-A", barcode: "BAR-A"));
-
-        await CreateSut().Handle(product);
-
-        var updated = await _dbContext.ShopifyProductVariants.SingleAsync();
-        updated.VariantTitle.ShouldBe("Large");
+        updated.DisplayName.ShouldBe("New Title");
     }
 
     // -------------------------------------------------------------------------
@@ -117,8 +87,8 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
         SeedVariant(100, 200, sku: "SKU-A", barcode: "OLD-BAR");
         await _dbContext.SaveChangesAsync();
 
-        var product = CreateProduct(100, "T-Shirt",
-            CreateVariant(200, "Large", sku: "SKU-A", barcode: "NEW-BAR"));
+        var product = CreateProduct(100,
+            CreateVariant(200, "T-Shirt - Large", sku: "SKU-A", barcode: "NEW-BAR"));
 
         await CreateSut().Handle(product);
 
@@ -132,8 +102,8 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
         SeedVariant(100, 200, sku: "OLD-SKU", barcode: "BAR-A");
         await _dbContext.SaveChangesAsync();
 
-        var product = CreateProduct(100, "T-Shirt",
-            CreateVariant(200, "Large", sku: "NEW-SKU", barcode: "BAR-A"));
+        var product = CreateProduct(100,
+            CreateVariant(200, "T-Shirt - Large", sku: "NEW-SKU", barcode: "BAR-A"));
 
         await CreateSut().Handle(product);
 
@@ -144,12 +114,12 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
     [Fact]
     public async Task Handle_ShouldNotDispatchUpdatedEvent_WhenBarcodeIsEmptyInDatabase()
     {
-        // Title must match so UpdateEntity returns false; only DidBarcodeOrSkuChange is tested.
-        SeedVariant(100, 200, productTitle: "T-Shirt", variantTitle: "Large", sku: "SKU-A", barcode: "");
+        // Display name must match so UpdateEntity returns false; only DidBarcodeOrSkuChange is tested.
+        SeedVariant(100, 200, displayName: "T-Shirt - Large", sku: "SKU-A", barcode: "");
         await _dbContext.SaveChangesAsync();
 
-        var product = CreateProduct(100, "T-Shirt",
-            CreateVariant(200, "Large", sku: "SKU-A", barcode: "NEW-BAR"));
+        var product = CreateProduct(100,
+            CreateVariant(200, "T-Shirt - Large", sku: "SKU-A", barcode: "NEW-BAR"));
 
         await CreateSut().Handle(product);
 
@@ -159,12 +129,12 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
     [Fact]
     public async Task Handle_ShouldNotDispatchUpdatedEvent_WhenSkuIsEmptyInDatabase()
     {
-        // Title must match so UpdateEntity returns false; only DidBarcodeOrSkuChange is tested.
-        SeedVariant(100, 200, productTitle: "T-Shirt", variantTitle: "Large", sku: "", barcode: "BAR-A");
+        // Display name must match so UpdateEntity returns false; only DidBarcodeOrSkuChange is tested.
+        SeedVariant(100, 200, displayName: "T-Shirt - Large", sku: "", barcode: "BAR-A");
         await _dbContext.SaveChangesAsync();
 
-        var product = CreateProduct(100, "T-Shirt",
-            CreateVariant(200, "Large", sku: "NEW-SKU", barcode: "BAR-A"));
+        var product = CreateProduct(100,
+            CreateVariant(200, "T-Shirt - Large", sku: "NEW-SKU", barcode: "BAR-A"));
 
         await CreateSut().Handle(product);
 
@@ -174,11 +144,11 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
     [Fact]
     public async Task Handle_ShouldNotDispatchAnyEvent_WhenVariantIsFullyUpToDate()
     {
-        SeedVariant(100, 200, productTitle: "T-Shirt", variantTitle: "Large", sku: "SKU-A", barcode: "BAR-A");
+        SeedVariant(100, 200, displayName: "T-Shirt - Large", sku: "SKU-A", barcode: "BAR-A");
         await _dbContext.SaveChangesAsync();
 
-        var product = CreateProduct(100, "T-Shirt",
-            CreateVariant(200, "Large", sku: "SKU-A", barcode: "BAR-A"));
+        var product = CreateProduct(100,
+            CreateVariant(200, "T-Shirt - Large", sku: "SKU-A", barcode: "BAR-A"));
 
         await CreateSut().Handle(product);
 
@@ -192,12 +162,12 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
     [Fact]
     public async Task Handle_ShouldCreateAndUpdateVariants_InSameCall()
     {
-        SeedVariant(100, 200, productTitle: "T-Shirt", sku: "SKU-A", barcode: "BAR-A");
+        SeedVariant(100, 200, displayName: "T-Shirt", sku: "SKU-A", barcode: "BAR-A");
         await _dbContext.SaveChangesAsync();
 
-        var product = CreateProduct(100, "T-Shirt",
-            CreateVariant(200, "Large", sku: "SKU-A", barcode: "BAR-A"),  // existing
-            CreateVariant(201, "Small", sku: "SKU-B", barcode: "BAR-B")); // new
+        var product = CreateProduct(100,
+            CreateVariant(200, "T-Shirt - Large", sku: "SKU-A", barcode: "BAR-A"),  // existing
+            CreateVariant(201, "T-Shirt - Small", sku: "SKU-B", barcode: "BAR-B")); // new
 
         await CreateSut().Handle(product);
 
@@ -211,9 +181,9 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
         SeedVariant(100, 200, sku: "SKU-A", barcode: "BAR-A");
         await _dbContext.SaveChangesAsync();
 
-        var product = CreateProduct(100, "T-Shirt",
-            CreateVariant(200, "Large", sku: "SKU-A", barcode: "NEW-BAR"), // existing → Updated (barcode mismatch)
-            CreateVariant(201, "Small", sku: "SKU-B", barcode: "BAR-B")); // new → Created
+        var product = CreateProduct(100,
+            CreateVariant(200, "T-Shirt - Large", sku: "SKU-A", barcode: "NEW-BAR"), // existing → Updated (barcode mismatch)
+            CreateVariant(201, "T-Shirt - Small", sku: "SKU-B", barcode: "BAR-B")); // new → Created
 
         await CreateSut().Handle(product);
 
@@ -233,8 +203,7 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
     private void SeedVariant(
         long productId,
         long variantId,
-        string productTitle = "T-Shirt",
-        string variantTitle = "",
+        string displayName = "T-Shirt",
         string sku = "SKU",
         string barcode = "BAR")
     {
@@ -244,18 +213,17 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
             ProductId = productId,
             GlobalVariantId = $"gid://shopify/ProductVariant/{variantId}",
             VariantId = variantId,
-            ProductTitle = productTitle,
-            VariantTitle = variantTitle,
+            DisplayName = displayName,
             Sku = sku,
             Barcode = barcode
         });
     }
 
-    private static SqsShopEventProduct CreateProduct(long id, string title, params SqsShopEventVariant[] variants) =>
-        new($"gid://shopify/Product/{id}", id, title, variants);
+    private static SqsShopEventProduct CreateProduct(long id, params SqsShopEventVariant[] variants) =>
+        new($"gid://shopify/Product/{id}", id, variants);
 
-    private static SqsShopEventVariant CreateVariant(long id, string title, string sku, string barcode) =>
-        new($"gid://shopify/ProductVariant/{id}", barcode, id, ProductId: 100, sku, title);
+    private static SqsShopEventVariant CreateVariant(long id, string displayName, string sku, string barcode) =>
+        new($"gid://shopify/ProductVariant/{id}", barcode, id, ProductId: 100, sku, displayName);
 
     private sealed class TestLogger<T> : ILogger<T>
     {
