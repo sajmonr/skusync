@@ -35,8 +35,8 @@ public class ShopifyProductUpdateWebhookHandler(
             .ToArrayAsync();
 
         logger.LogDebug(
-            "Loaded {Count} variants for product {ProductId} [{ProductTitle}]. We currently have {ExistingCount} variants.",
-            product.Variants.Count, product.Id, product.Title, existingVariants.Length);
+            "Loaded {Count} variants for product {ProductId}. We currently have {ExistingCount} variants.",
+            product.Variants.Count, product.Id, existingVariants.Length);
 
         // Collect events before SaveChangesAsync so we only publish for persisted changes.
         var createdEntities = new List<ShopifyProductVariantEntity>();
@@ -85,33 +85,16 @@ public class ShopifyProductUpdateWebhookHandler(
         SqsShopEventVariant variant)
     {
         var changed = false;
-        var oldFullTitle = entity.FullTitle;
-
-        if (entity.ProductTitle != product.Title)
-        {
-            logger.LogDebug("Updating product title for variant {VariantId}: [{OldTitle}] -> [{NewTitle}].",
-                variant.Id, entity.ProductTitle, product.Title);
-            entity.ProductTitle = product.Title;
-            entity.UpdatedOnUtc = DateTime.UtcNow;
-            changed = true;
-        }
-
-        if (variant.Title != "Default Title" && entity.VariantTitle != variant.Title)
-        {
-            logger.LogDebug("Updating variant title for variant {VariantId}: [{OldTitle}] -> [{NewTitle}].",
-                variant.Id, entity.VariantTitle, variant.Title);
-            entity.VariantTitle = variant.Title;
-            entity.UpdatedOnUtc = DateTime.UtcNow;
-            changed = true;
-        }
-
-        if (entity.FullTitle != oldFullTitle)
+        
+        if (entity.DisplayName != variant.DisplayName)
         {
             dbContext.ShopifyProductVariantLogEvents.Add(new ShopifyProductVariantLogEventEntity
             {
                 ShopifyProductVariantId = entity.ShopifyProductVariantId,
-                Message = VariantLogMessages.TitleUpdated(oldFullTitle, entity.FullTitle)
+                Message = VariantLogMessages.TitleUpdated(entity.DisplayName, variant.DisplayName)
             });
+            logger.LogDebug("Updating display name for variant {VariantId}: [{OldName}] -> [{NewName}].", variant.Id, entity.DisplayName, variant.DisplayName);
+            entity.DisplayName = variant.DisplayName;
         }
         
         return changed;

@@ -5,20 +5,10 @@ namespace Integration.Shopify.Products;
 /// Numeric IDs are parsed from the Shopify Admin GraphQL global IDs on construction.
 /// </summary>
 public readonly record struct ShopifyProductVariant(
-    /// <summary>The Shopify Admin GraphQL global product ID, e.g. <c>gid://shopify/Product/123</c>.</summary>
     string GlobalProductId,
-    /// <summary>The Shopify Admin GraphQL global variant ID, e.g. <c>gid://shopify/ProductVariant/456</c>.</summary>
     string GlobalVariantId,
-    /// <summary>The display title of the parent product.</summary>
-    string ProductTitle,
-    /// <summary>
-    /// The display title of this specific variant (e.g. "Large / Blue").
-    /// Empty string when Shopify reports the default single-variant title.
-    /// </summary>
-    string VariantTitle,
-    /// <summary>The stock-keeping unit (SKU) assigned to this variant.</summary>
+    string DisplayName,
     string Sku,
-    /// <summary>The barcode (EAN/UPC) assigned to this variant.</summary>
     string Barcode)
 {
     /// <summary>

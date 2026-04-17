@@ -40,8 +40,7 @@ public record SqsShopEventProductMessage(
     {
         return $"""
                 Payload topic: {Detail.Metadata.Topic},
-                Item ID: {Detail.Payload.Id},
-                Item title: {Detail.Payload.Title}
+                Item ID: {Detail.Payload.Id}
                 """;
     }
 }
@@ -69,7 +68,6 @@ public record SqsShopEventMetadata(
 public record SqsShopEventProduct(
     [property: JsonPropertyName("admin_graphql_api_id")] string AdminGraphqlApiId,
     [property: JsonPropertyName("id")] long Id,
-    [property: JsonPropertyName("title")] string Title,
     [property: JsonPropertyName("variants")] IReadOnlyList<SqsShopEventVariant> Variants
 );
 
@@ -83,5 +81,5 @@ public record SqsShopEventVariant(
     [property: JsonPropertyName("id")] long Id,
     [property: JsonPropertyName("product_id")] long ProductId,
     [property: JsonPropertyName("sku")] string Sku,
-    [property: JsonPropertyName("title")] string Title
+    [property: JsonPropertyName("display_name")] string DisplayName
 );

@@ -24,7 +24,6 @@ namespace Application.Products.Jobs;
 [DisallowConcurrentExecution]
 public class ProductEventProcessorJob(
     IEventAccumulator<ProductChangedEvent> eventAccumulator,
-    IEventDispatcher eventDispatcher,
     ILogger<ProductEventProcessorJob> logger,
     IFeatureManager featureManager,
     IShopifyProductService shopifyProductService,
@@ -105,9 +104,6 @@ public class ProductEventProcessorJob(
                 group.Select(i => new ShopifyUpdateProductVariant(i.GlobalVariantId, i.Sku, i.Barcode));
             await shopifyProductService.UpdateVariants(productId, variantsToUpdate);
         }
-        
-        // Created product should trigger a new import to Skulabs.
-        eventDispatcher.Dispatch(new SkulabsProductImportEvent());
     }
 
     private async Task HandleUpdatedProducts(ProductChangedEvent[] events)

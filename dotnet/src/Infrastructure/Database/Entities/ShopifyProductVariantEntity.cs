@@ -6,8 +6,6 @@ namespace Infrastructure.Database.Entities;
 /// </summary>
 public class ShopifyProductVariantEntity
 {
-    private string _fullTitle = "";
-
     /// <summary>Gets or sets the surrogate primary key for this entity (UUIDv7).</summary>
     public Guid ShopifyProductVariantId { get; set; } = Guid.CreateVersion7();
 
@@ -29,59 +27,14 @@ public class ShopifyProductVariantEntity
     /// <summary>Gets or sets the numeric Shopify variant ID extracted from <see cref="GlobalVariantId"/>.</summary>
     public long VariantId { get; set; }
 
-    /// <summary>
-    /// Gets or sets the product title as shown in Shopify. Setting this value also
-    /// regenerates <see cref="FullTitle"/>.
-    /// </summary>
-    public string ProductTitle
-    {
-        get;
-        set
-        {
-            field = value;
-            GenerateFullTitle();
-        }
-    } = "";
-
-    /// <summary>
-    /// Gets or sets the variant title (e.g. "Large / Blue"). Shopify's default variant
-    /// title <c>"Default Title"</c> is normalised to an empty string. Setting this value
-    /// also regenerates <see cref="FullTitle"/>.
-    /// </summary>
-    public string VariantTitle
-    {
-        get;
-        set
-        {
-            if (value == "Default Title")
-            {
-                field = "";
-                return;
-            }
-
-            field = value;
-            GenerateFullTitle();
-        }
-    } = "";
-
-    /// <summary>
-    /// Gets the combined display title in the form <c>"{ProductTitle} ({VariantTitle})"</c>,
-    /// or just the product title when the variant title is empty.
-    /// This property is computed from <see cref="ProductTitle"/> and <see cref="VariantTitle"/>
-    /// and is stored as a denormalised column for efficient querying.
-    /// </summary>
-    public string FullTitle
-    {
-        get => _fullTitle;
-        init => _fullTitle = value;
-    }
-
     /// <summary>Gets or sets the stock-keeping unit (SKU) assigned to this variant.</summary>
     public string Sku { get; set; } = "";
 
     /// <summary>Gets or sets the barcode (EAN/UPC) assigned to this variant.</summary>
     public string Barcode { get; set; } = "";
 
+    public string DisplayName { get; set; } = "";
+    
     /// <summary>Gets or sets the UTC timestamp at which this record was first created.</summary>
     public DateTime CreatedOnUtc { get; set; } = DateTime.UtcNow;
 
@@ -97,9 +50,4 @@ public class ShopifyProductVariantEntity
         new HashSet<ShopifyProductVariantLogEventEntity>();
 
     public SkulabsItemEntity? SkulabsItem { get; set; }
-    
-    private void GenerateFullTitle()
-    {
-        _fullTitle = string.IsNullOrWhiteSpace(VariantTitle) ? ProductTitle : $"{ProductTitle} ({VariantTitle})";
-    }
 }

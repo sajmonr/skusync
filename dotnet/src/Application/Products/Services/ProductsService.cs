@@ -65,8 +65,7 @@ public class ProductsService(
                     ProductId = shopifyVariant.ProductId,
                     GlobalVariantId = shopifyVariant.GlobalVariantId,
                     VariantId = shopifyVariant.VariantId,
-                    ProductTitle = shopifyVariant.ProductTitle,
-                    VariantTitle = shopifyVariant.VariantTitle,
+                    DisplayName = shopifyVariant.DisplayName,
                     Sku = shopifyVariant.Sku,
                     Barcode = shopifyVariant.Barcode
                 };
@@ -221,26 +220,15 @@ public class ProductsService(
     private bool UpdateVariant(ShopifyProductVariantEntity existing, ShopifyProductVariant shopifyVariant)
     {
         var changed = false;
-        var oldFullTitle = existing.FullTitle;
-
-        if (existing.ProductTitle != shopifyVariant.ProductTitle)
+        
+        if(existing.DisplayName != shopifyVariant.DisplayName)
         {
-            existing.ProductTitle = shopifyVariant.ProductTitle;
+            existing.DisplayName = shopifyVariant.DisplayName;
             changed = true;
-        }
-
-        if (existing.VariantTitle != shopifyVariant.VariantTitle)
-        {
-            existing.VariantTitle = shopifyVariant.VariantTitle;
-            changed = true;
-        }
-
-        if (existing.FullTitle != oldFullTitle)
-        {
             dbContext.ShopifyProductVariantLogEvents.Add(new ShopifyProductVariantLogEventEntity
             {
                 ShopifyProductVariantId = existing.ShopifyProductVariantId,
-                Message = VariantLogMessages.TitleUpdated(oldFullTitle, existing.FullTitle)
+                Message = VariantLogMessages.TitleUpdated(existing.DisplayName, shopifyVariant.DisplayName)
             });
         }
 

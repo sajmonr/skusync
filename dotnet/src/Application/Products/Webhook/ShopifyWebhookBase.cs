@@ -13,8 +13,6 @@ public abstract class ShopifyWebhookBase
             ProductId = product.Id,
             GlobalVariantId = variant.AdminGraphqlApiId,
             VariantId = variant.Id,
-            ProductTitle = product.Title,
-            VariantTitle = variant.Title,
             Sku = variant.Id.ToString(),
             Barcode = variant.Id.ToString()
         };
