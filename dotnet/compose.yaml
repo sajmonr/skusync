@@ -4,7 +4,7 @@ services:
     build: .
     environment:
       - DOTNET_ENVIRONMENT
-      - Skulabs___Api__ApiKey
+      - Skulabs__Api__ApiKey
       - Skulabs__Admin__Username
       - Skulabs__Admin__Password
       - Shopify__ApiKey
