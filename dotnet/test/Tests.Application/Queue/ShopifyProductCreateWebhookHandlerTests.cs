@@ -1,19 +1,18 @@
-using Application.Events;
 using Application.Products.Events;
 using Application.Products.Webhook;
 using Infrastructure.Database;
 using Integration.Aws.Sqs;
-using Integration.Shopify.Products;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Shouldly;
+using SlimMessageBus;
 
 namespace Tests.Application.Queue;
 
 public class ShopifyProductCreateWebhookHandlerTests : IDisposable
 {
-    private readonly IEventDispatcher _eventDispatcher = Substitute.For<IEventDispatcher>();
+    private readonly IMessageBus _messageBus = Substitute.For<IMessageBus>();
     private readonly ApplicationDbContext _dbContext;
     private readonly TestLogger<ShopifyProductUpdateWebhookHandler> _logger = new();
 
@@ -85,11 +84,11 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
     }
 
     // -------------------------------------------------------------------------
-    // Event dispatching
+    // Event publishing
     // -------------------------------------------------------------------------
 
     [Fact]
-    public async Task Handle_ShouldDispatchCreatedEvent_PerPersistedVariant()
+    public async Task Handle_ShouldPublishCreatedEvent_PerPersistedVariant()
     {
         var product = CreateProduct("gid://shopify/Product/100", 100,
             CreateVariant("gid://shopify/ProductVariant/200", 200, "T-Shirt - Large"),
@@ -97,18 +96,22 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
 
         await CreateSut().Handle(product);
 
-        _eventDispatcher.Received(2).Dispatch(
-            Arg.Is<ProductChangedEvent>(e => e.ProductVariantId != Guid.Empty && e.ChangeType == ProductChangeType.Created));
+        await _messageBus.Received().Publish(
+            Arg.Is<IEnumerable<ProductVariantCreatedEvent>>(events =>
+                events.Count() == 2 && events.All(e => e.ProductVariantId != Guid.Empty)),
+            Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Handle_ShouldNotDispatchAnyEvent_WhenProductHasNoVariants()
+    public async Task Handle_ShouldNotPublishAnyEvent_WhenProductHasNoVariants()
     {
         var product = CreateProduct("gid://shopify/Product/100", 100);
 
         await CreateSut().Handle(product);
 
-        _eventDispatcher.DidNotReceive().Dispatch(Arg.Any<ProductChangedEvent>());
+        await _messageBus.DidNotReceive().Publish(
+            Arg.Is<IEnumerable<ProductVariantCreatedEvent>>(events => events.Any()),
+            Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
     }
 
     // -------------------------------------------------------------------------
@@ -116,7 +119,7 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
     // -------------------------------------------------------------------------
 
     private ShopifyProductCreateWebhookHandler CreateSut() =>
-        new(_dbContext, _logger, _eventDispatcher);
+        new(_dbContext, _logger, _messageBus);
 
     private static SqsShopEventProduct CreateProduct(
         string adminGraphqlApiId, long id, params SqsShopEventVariant[] variants) =>

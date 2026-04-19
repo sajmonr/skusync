@@ -1,4 +1,3 @@
-using Application.Events;
 using Application.Products.Events;
 using Application.Products.Services;
 using Infrastructure.Database;
@@ -9,13 +8,14 @@ using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Shouldly;
+using SlimMessageBus;
 
 namespace Tests.Application.Shopify;
 
 public class ProductsServiceTests : IDisposable
 {
     private readonly IShopifyProductService _shopifyProductService = Substitute.For<IShopifyProductService>();
-    private readonly IEventDispatcher _eventDispatcher = Substitute.For<IEventDispatcher>();
+    private readonly IMessageBus _messageBus = Substitute.For<IMessageBus>();
     private readonly ApplicationDbContext _dbContext;
     private readonly TestLogger<ProductsService> _logger = new();
 
@@ -608,7 +608,7 @@ public class ProductsServiceTests : IDisposable
     // -------------------------------------------------------------------------
 
     [Fact]
-    public async Task ImportProducts_ShouldEnqueueCreatedEvent_WhenNewVariantIsSaved()
+    public async Task ImportProducts_ShouldPublishCreatedEvent_WhenNewVariantIsSaved()
     {
         _shopifyProductService.GetProducts().Returns(
         [
@@ -617,12 +617,14 @@ public class ProductsServiceTests : IDisposable
 
         await CreateSut().ImportProductsFromShopify();
 
-        _eventDispatcher.Received(1).Dispatch(
-            Arg.Is<ProductChangedEvent>(e => e.ProductVariantId != Guid.Empty && e.ChangeType == ProductChangeType.Created));
+        await _messageBus.Received().Publish(
+            Arg.Is<IEnumerable<ProductVariantCreatedEvent>>(events =>
+                events.Count() == 1 && events.Single().ProductVariantId != Guid.Empty),
+            Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task ImportProducts_ShouldEnqueueUpdatedEvent_WhenExistingVariantIsChanged()
+    public async Task ImportProducts_ShouldPublishUpdatedEvent_WhenExistingVariantIsChanged()
     {
         SeedVariant("gid://shopify/ProductVariant/200", displayName: "Old Title", sku: "SKU-1", barcode: "BAR-1", variantId: 200);
         await _dbContext.SaveChangesAsync();
@@ -634,12 +636,14 @@ public class ProductsServiceTests : IDisposable
 
         await CreateSut().ImportProductsFromShopify();
 
-        _eventDispatcher.Received(1).Dispatch(
-            Arg.Is<ProductChangedEvent>(e => e.ProductVariantId != Guid.Empty && e.ChangeType == ProductChangeType.Updated));
+        await _messageBus.Received().Publish(
+            Arg.Is<IEnumerable<ProductVariantUpdatedEvent>>(events =>
+                events.Count() == 1 && events.Single().ProductVariantId != Guid.Empty),
+            Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task ImportProducts_ShouldNotEnqueueAnyEvent_WhenNoChangesOccur()
+    public async Task ImportProducts_ShouldNotPublishAnyEvent_WhenNoChangesOccur()
     {
         SeedVariant("gid://shopify/ProductVariant/200", displayName: "T-Shirt - Large", sku: "SKU-1", barcode: "BAR-1", variantId: 200);
         await _dbContext.SaveChangesAsync();
@@ -651,7 +655,12 @@ public class ProductsServiceTests : IDisposable
 
         await CreateSut().ImportProductsFromShopify();
 
-        _eventDispatcher.DidNotReceive().Dispatch(Arg.Any<ProductChangedEvent>());
+        await _messageBus.DidNotReceive().Publish(
+            Arg.Is<IEnumerable<ProductVariantCreatedEvent>>(events => events.Any()),
+            Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
+        await _messageBus.DidNotReceive().Publish(
+            Arg.Is<IEnumerable<ProductVariantUpdatedEvent>>(events => events.Any()),
+            Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
     }
 
     private ShopifyProductVariantEntity SeedVariant(
@@ -679,7 +688,7 @@ public class ProductsServiceTests : IDisposable
         return entity;
     }
 
-    private ProductsService CreateSut() => new(_shopifyProductService, _dbContext, _logger, _eventDispatcher);
+    private ProductsService CreateSut() => new(_shopifyProductService, _dbContext, _logger, _messageBus);
 
     private sealed class TestLogger<T> : ILogger<T>
     {

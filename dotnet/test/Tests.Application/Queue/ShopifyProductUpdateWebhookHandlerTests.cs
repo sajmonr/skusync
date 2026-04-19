@@ -1,20 +1,19 @@
-using Application.Events;
 using Application.Products.Events;
 using Application.Products.Webhook;
 using Infrastructure.Database;
 using Infrastructure.Database.Entities;
 using Integration.Aws.Sqs;
-using Integration.Shopify.Products;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Shouldly;
+using SlimMessageBus;
 
 namespace Tests.Application.Queue;
 
 public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
 {
-    private readonly IEventDispatcher _eventDispatcher = Substitute.For<IEventDispatcher>();
+    private readonly IMessageBus _messageBus = Substitute.For<IMessageBus>();
     private readonly ApplicationDbContext _dbContext;
     private readonly TestLogger<ShopifyProductUpdateWebhookHandler> _logger = new();
 
@@ -47,15 +46,17 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
     }
 
     [Fact]
-    public async Task Handle_ShouldDispatchCreatedEvent_WhenNewVariantIsSaved()
+    public async Task Handle_ShouldPublishCreatedEvent_WhenNewVariantIsSaved()
     {
         var product = CreateProduct(100,
             CreateVariant(200, "T-Shirt - Large", sku: "SKU-A", barcode: "BAR-A"));
 
         await CreateSut().Handle(product);
 
-        _eventDispatcher.Received(1).Dispatch(
-            Arg.Is<ProductChangedEvent>(e => e.ProductVariantId != Guid.Empty && e.ChangeType == ProductChangeType.Created));
+        await _messageBus.Received().Publish(
+            Arg.Is<IEnumerable<ProductVariantCreatedEvent>>(events =>
+                events.Count() == 1 && events.Single().ProductVariantId != Guid.Empty),
+            Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
     }
 
     // -------------------------------------------------------------------------
@@ -82,7 +83,7 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
     // -------------------------------------------------------------------------
 
     [Fact]
-    public async Task Handle_ShouldDispatchUpdatedEvent_WhenBarcodeDoesNotMatch()
+    public async Task Handle_ShouldPublishUpdatedEvent_WhenBarcodeDoesNotMatch()
     {
         SeedVariant(100, 200, sku: "SKU-A", barcode: "OLD-BAR");
         await _dbContext.SaveChangesAsync();
@@ -92,12 +93,14 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
 
         await CreateSut().Handle(product);
 
-        _eventDispatcher.Received(1).Dispatch(
-            Arg.Is<ProductChangedEvent>(e => e.ProductVariantId != Guid.Empty && e.ChangeType == ProductChangeType.Updated));
+        await _messageBus.Received().Publish(
+            Arg.Is<IEnumerable<ProductVariantUpdatedEvent>>(events =>
+                events.Count() == 1 && events.Single().ProductVariantId != Guid.Empty),
+            Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Handle_ShouldDispatchUpdatedEvent_WhenSkuDoesNotMatch()
+    public async Task Handle_ShouldPublishUpdatedEvent_WhenSkuDoesNotMatch()
     {
         SeedVariant(100, 200, sku: "OLD-SKU", barcode: "BAR-A");
         await _dbContext.SaveChangesAsync();
@@ -107,12 +110,14 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
 
         await CreateSut().Handle(product);
 
-        _eventDispatcher.Received(1).Dispatch(
-            Arg.Is<ProductChangedEvent>(e => e.ProductVariantId != Guid.Empty && e.ChangeType == ProductChangeType.Updated));
+        await _messageBus.Received().Publish(
+            Arg.Is<IEnumerable<ProductVariantUpdatedEvent>>(events =>
+                events.Count() == 1 && events.Single().ProductVariantId != Guid.Empty),
+            Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Handle_ShouldNotDispatchUpdatedEvent_WhenBarcodeIsEmptyInDatabase()
+    public async Task Handle_ShouldNotPublishUpdatedEvent_WhenBarcodeIsEmptyInDatabase()
     {
         // Display name must match so UpdateEntity returns false; only DidBarcodeOrSkuChange is tested.
         SeedVariant(100, 200, displayName: "T-Shirt - Large", sku: "SKU-A", barcode: "");
@@ -123,11 +128,11 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
 
         await CreateSut().Handle(product);
 
-        _eventDispatcher.DidNotReceive().Dispatch(Arg.Any<ProductChangedEvent>());
+        await AssertNoEventsPublished();
     }
 
     [Fact]
-    public async Task Handle_ShouldNotDispatchUpdatedEvent_WhenSkuIsEmptyInDatabase()
+    public async Task Handle_ShouldNotPublishUpdatedEvent_WhenSkuIsEmptyInDatabase()
     {
         // Display name must match so UpdateEntity returns false; only DidBarcodeOrSkuChange is tested.
         SeedVariant(100, 200, displayName: "T-Shirt - Large", sku: "", barcode: "BAR-A");
@@ -138,11 +143,11 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
 
         await CreateSut().Handle(product);
 
-        _eventDispatcher.DidNotReceive().Dispatch(Arg.Any<ProductChangedEvent>());
+        await AssertNoEventsPublished();
     }
 
     [Fact]
-    public async Task Handle_ShouldNotDispatchAnyEvent_WhenVariantIsFullyUpToDate()
+    public async Task Handle_ShouldNotPublishAnyEvent_WhenVariantIsFullyUpToDate()
     {
         SeedVariant(100, 200, displayName: "T-Shirt - Large", sku: "SKU-A", barcode: "BAR-A");
         await _dbContext.SaveChangesAsync();
@@ -152,7 +157,7 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
 
         await CreateSut().Handle(product);
 
-        _eventDispatcher.DidNotReceive().Dispatch(Arg.Any<ProductChangedEvent>());
+        await AssertNoEventsPublished();
     }
 
     // -------------------------------------------------------------------------
@@ -176,7 +181,7 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
     }
 
     [Fact]
-    public async Task Handle_ShouldDispatchOneEventPerVariant_WhenMixedCreatedAndUpdated()
+    public async Task Handle_ShouldPublishOneEventPerVariant_WhenMixedCreatedAndUpdated()
     {
         SeedVariant(100, 200, sku: "SKU-A", barcode: "BAR-A");
         await _dbContext.SaveChangesAsync();
@@ -187,10 +192,12 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
 
         await CreateSut().Handle(product);
 
-        _eventDispatcher.Received(1).Dispatch(
-            Arg.Is<ProductChangedEvent>(e => e.ChangeType == ProductChangeType.Updated));
-        _eventDispatcher.Received(1).Dispatch(
-            Arg.Is<ProductChangedEvent>(e => e.ChangeType == ProductChangeType.Created));
+        await _messageBus.Received().Publish(
+            Arg.Is<IEnumerable<ProductVariantUpdatedEvent>>(events => events.Count() == 1),
+            Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
+        await _messageBus.Received().Publish(
+            Arg.Is<IEnumerable<ProductVariantCreatedEvent>>(events => events.Count() == 1),
+            Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
     }
 
     // -------------------------------------------------------------------------
@@ -198,7 +205,17 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
     // -------------------------------------------------------------------------
 
     private ShopifyProductUpdateWebhookHandler CreateSut() =>
-        new(_dbContext, _logger, _eventDispatcher);
+        new(_dbContext, _logger, _messageBus);
+
+    private async Task AssertNoEventsPublished()
+    {
+        await _messageBus.DidNotReceive().Publish(
+            Arg.Is<IEnumerable<ProductVariantCreatedEvent>>(events => events.Any()),
+            Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
+        await _messageBus.DidNotReceive().Publish(
+            Arg.Is<IEnumerable<ProductVariantUpdatedEvent>>(events => events.Any()),
+            Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
+    }
 
     private void SeedVariant(
         long productId,
