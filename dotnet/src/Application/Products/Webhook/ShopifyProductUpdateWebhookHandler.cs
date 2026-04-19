@@ -1,4 +1,3 @@
-using Application.Events;
 using Application.Products.Events;
 using Application.Products.Services;
 using Infrastructure.Database;
@@ -6,6 +5,7 @@ using Infrastructure.Database.Entities;
 using Integration.Aws.Sqs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using SlimMessageBus;
 
 namespace Application.Products.Webhook;
 
@@ -18,7 +18,7 @@ namespace Application.Products.Webhook;
 public class ShopifyProductUpdateWebhookHandler(
     ApplicationDbContext dbContext,
     ILogger<ShopifyProductUpdateWebhookHandler> logger,
-    IEventDispatcher eventDispatcher)
+    IMessageBus messageBus)
     : ShopifyWebhookBase, IShopifyWebhookHandler
 {
     /// <inheritdoc/>
@@ -77,8 +77,8 @@ public class ShopifyProductUpdateWebhookHandler(
         await dbContext.SaveChangesAsync();
 
         // Enqueue only after a successful save so no phantom events enter the queue.
-        eventDispatcher.DispatchMany(updatedEntities.Select(e => ProductChangedEvent.Updated(e.ShopifyProductVariantId)));
-        eventDispatcher.DispatchMany(createdEntities.Select(e => ProductChangedEvent.Created(e.ShopifyProductVariantId)));
+        await messageBus.Publish(updatedEntities.Select(e => new ProductVariantUpdatedEvent(e.ShopifyProductVariantId)));
+        await messageBus.Publish(createdEntities.Select(e => new ProductVariantCreatedEvent(e.ShopifyProductVariantId)));
     }
 
     private bool UpdateEntity(ShopifyProductVariantEntity entity, SqsShopEventProduct product,

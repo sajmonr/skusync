@@ -1,10 +1,10 @@
-using Application.Events;
 using Application.Products.Events;
 using Application.Products.Services;
 using Infrastructure.Database;
 using Infrastructure.Database.Entities;
 using Integration.Aws.Sqs;
 using Microsoft.Extensions.Logging;
+using SlimMessageBus;
 
 namespace Application.Products.Webhook;
 
@@ -16,7 +16,7 @@ namespace Application.Products.Webhook;
 public class ShopifyProductCreateWebhookHandler(
     ApplicationDbContext dbContext,
     ILogger<ShopifyProductUpdateWebhookHandler> logger,
-    IEventDispatcher eventDispatcher)
+    IMessageBus messageBus)
     : ShopifyWebhookBase, IShopifyWebhookHandler
 {
 
@@ -50,11 +50,8 @@ public class ShopifyProductCreateWebhookHandler(
 
         await dbContext.ShopifyProductVariants.AddRangeAsync(entities);
         await dbContext.SaveChangesAsync();
-
+        
         // Enqueue only after a successful save so no phantom events enter the queue.
-        foreach (var entity in entities)
-        {
-            eventDispatcher.Dispatch(ProductChangedEvent.Created(entity.ShopifyProductVariantId));
-        }
+        await messageBus.Publish(entities.Select(e => new ProductVariantCreatedEvent(e.ShopifyProductVariantId)));
     }
 }
