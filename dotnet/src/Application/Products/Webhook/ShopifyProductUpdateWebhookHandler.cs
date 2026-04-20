@@ -77,8 +77,11 @@ public class ShopifyProductUpdateWebhookHandler(
         await dbContext.SaveChangesAsync();
 
         // Enqueue only after a successful save so no phantom events enter the queue.
-        await messageBus.Publish(updatedEntities.Select(e => new ProductVariantUpdatedEvent(e.ShopifyProductVariantId)));
-        await messageBus.Publish(createdEntities.Select(e => new ProductVariantCreatedEvent(e.ShopifyProductVariantId)));
+        var updatedEvents = updatedEntities.Select(e => new ProductVariantUpdatedEvent(e.ShopifyProductVariantId));
+        var createdEvents = createdEntities.Select(e => new ProductVariantCreatedEvent(e.ShopifyProductVariantId));
+        
+        await messageBus.Publish(updatedEvents);
+        await messageBus.Publish(createdEvents);
     }
 
     private bool UpdateEntity(ShopifyProductVariantEntity entity, SqsShopEventProduct product,

@@ -93,8 +93,11 @@ public class ProductsService(
         }
 
         // Enqueue only after a successful save so no phantom events enter the queue.
-        await messageBus.Publish(updatedEntities.Select(e => new ProductVariantUpdatedEvent(e.ShopifyProductVariantId)));
-        await messageBus.Publish(createdEntities.Select(e => new ProductVariantCreatedEvent(e.ShopifyProductVariantId)));
+        var createdEvents = createdEntities.Select(e => new ProductVariantCreatedEvent(e.ShopifyProductVariantId));
+        var updatedEvents = updatedEntities.Select(e => new ProductVariantUpdatedEvent(e.ShopifyProductVariantId));
+        
+        await messageBus.Publish(updatedEvents);
+        await messageBus.Publish(createdEvents);
 
         logger.LogDebug("Synchronization complete. Created: {Created}, Updated: {Updated}.", createdEntities.Count, updatedEntities.Count);
 
