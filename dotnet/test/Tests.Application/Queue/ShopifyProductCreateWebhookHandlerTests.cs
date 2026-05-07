@@ -1,6 +1,7 @@
 using Application.Products.Events;
 using Application.Products.Webhook;
 using Infrastructure.Database;
+using Infrastructure.Database.Entities;
 using Integration.Aws.Sqs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -84,6 +85,79 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
     }
 
     // -------------------------------------------------------------------------
+    // Duplicate-variant filtering
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task Handle_ShouldOnlyPersistNewVariants_WhenSomeAlreadyTracked()
+    {
+        SeedVariant(productId: 100, variantId: 200);
+        await _dbContext.SaveChangesAsync();
+
+        var product = CreateProduct("gid://shopify/Product/100", 100,
+            CreateVariant("gid://shopify/ProductVariant/200", 200, "T-Shirt - Large"),
+            CreateVariant("gid://shopify/ProductVariant/201", 201, "T-Shirt - Small"));
+
+        await CreateSut().Handle(product);
+
+        var saved = await _dbContext.ShopifyProductVariants
+            .OrderBy(v => v.VariantId)
+            .ToListAsync();
+        saved.Select(v => v.VariantId).ShouldBe(new[] { 200L, 201L });
+    }
+
+    [Fact]
+    public async Task Handle_ShouldPublishEventOnlyForNewVariants_WhenSomeAlreadyTracked()
+    {
+        SeedVariant(productId: 100, variantId: 200);
+        await _dbContext.SaveChangesAsync();
+
+        var product = CreateProduct("gid://shopify/Product/100", 100,
+            CreateVariant("gid://shopify/ProductVariant/200", 200, "T-Shirt - Large"),
+            CreateVariant("gid://shopify/ProductVariant/201", 201, "T-Shirt - Small"));
+
+        await CreateSut().Handle(product);
+
+        await _messageBus.Received().Publish(
+            Arg.Is<IEnumerable<ProductVariantCreatedEvent>>(events =>
+                events.Count() == 1 && events.Single().ProductVariantId != Guid.Empty),
+            Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_ShouldPersistNothing_WhenAllVariantsAlreadyTracked()
+    {
+        SeedVariant(productId: 100, variantId: 200);
+        SeedVariant(productId: 100, variantId: 201);
+        await _dbContext.SaveChangesAsync();
+
+        var product = CreateProduct("gid://shopify/Product/100", 100,
+            CreateVariant("gid://shopify/ProductVariant/200", 200, "T-Shirt - Large"),
+            CreateVariant("gid://shopify/ProductVariant/201", 201, "T-Shirt - Small"));
+
+        await CreateSut().Handle(product);
+
+        var saved = await _dbContext.ShopifyProductVariants.ToListAsync();
+        saved.Count.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task Handle_ShouldNotPublishAnyEvent_WhenAllVariantsAlreadyTracked()
+    {
+        SeedVariant(productId: 100, variantId: 200);
+        await _dbContext.SaveChangesAsync();
+
+        var product = CreateProduct("gid://shopify/Product/100", 100,
+            CreateVariant("gid://shopify/ProductVariant/200", 200, "T-Shirt - Large"));
+
+        await CreateSut().Handle(product);
+
+        await _messageBus.DidNotReceive().Publish(
+            Arg.Is<IEnumerable<ProductVariantCreatedEvent>>(events => events.Any()),
+            Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
+    }
+
+    // -------------------------------------------------------------------------
     // Event publishing
     // -------------------------------------------------------------------------
 
@@ -120,6 +194,20 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
 
     private ShopifyProductCreateWebhookHandler CreateSut() =>
         new(_dbContext, _logger, _messageBus);
+
+    private void SeedVariant(long productId, long variantId)
+    {
+        _dbContext.ShopifyProductVariants.Add(new ShopifyProductVariantEntity
+        {
+            GlobalProductId = $"gid://shopify/Product/{productId}",
+            ProductId = productId,
+            GlobalVariantId = $"gid://shopify/ProductVariant/{variantId}",
+            VariantId = variantId,
+            DisplayName = "Existing",
+            Sku = variantId.ToString(),
+            Barcode = variantId.ToString()
+        });
+    }
 
     private static SqsShopEventProduct CreateProduct(
         string adminGraphqlApiId, long id, params SqsShopEventVariant[] variants) =>
