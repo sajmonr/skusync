@@ -7,7 +7,9 @@ public class SkulabsItemEntity
 
     public Guid ShopifyProductVariantId { get; set; } = Guid.Empty;
     
-    public string SkulabsSourceId { get; set; } = string.Empty;
+    public string SkulabsSourceItemId { get; set; } = string.Empty;
+
+    public string SkulabsSourceListingId { get; set; } = string.Empty;
 
     public string Title { get; set; } = string.Empty;
 
