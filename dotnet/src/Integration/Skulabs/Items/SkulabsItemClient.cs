@@ -85,7 +85,7 @@ public class SkulabsItemClient
         {
             _logger.LogWarning(
                 "Item {Id} has multiple listings in SkuLabs.",
-                response.Id);
+                response.ItemId);
         }
     }
 }
