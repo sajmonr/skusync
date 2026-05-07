@@ -15,16 +15,18 @@ public class SkulabsItemClient
 {
     private readonly HttpClient _client;
     private readonly ILogger<SkulabsItemClient> _logger;
-    
-    public SkulabsItemClient(HttpClient httpClient, IOptionsMonitor<SkulabsApiOptions> optionsMonitor, ILogger<SkulabsItemClient> logger)
+
+    public SkulabsItemClient(HttpClient httpClient, IOptionsMonitor<SkulabsApiOptions> optionsMonitor,
+        ILogger<SkulabsItemClient> logger)
     {
         _logger = logger;
         _client = httpClient;
-        
+
         _client.BaseAddress = new Uri(optionsMonitor.CurrentValue.BaseUrl);
-        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", optionsMonitor.CurrentValue.ApiKey);
+        _client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", optionsMonitor.CurrentValue.ApiKey);
     }
-    
+
     /// <summary>
     /// Fetches all SkuLabs inventory items that have at least one Shopify channel listing.
     /// Only the <c>name</c>, <c>sku</c>, <c>upc</c>, and <c>listings</c> fields are
@@ -41,20 +43,49 @@ public class SkulabsItemClient
         var queryString = string.Join("&", queryParams.Select(kvp =>
             $"{Uri.EscapeDataString(kvp.Key)}={Uri.EscapeDataString(kvp.Value)}"));
         var response = await _client.GetAsync($"item/get?{queryString}");
-        
+
         response.EnsureSuccessStatusCode();
-        
-        var content = await response.Content.ReadFromJsonAsync<SkulabsItemResponse[]>();
-        var finalItems = content?
-            .Where(item => item.Listings.Length > 0)
-            .Select(SkuLabsItem.FromResponse).ToArray() ?? [];
 
-        return finalItems;
+        try
+        {
+            var content = await response.Content.ReadFromJsonAsync<SkulabsItemResponse[]>();
+
+            if (content is null)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                _logger.LogWarning("Response from SkuLabs API was empty. Response body: {ResponseBody}", body);
+                return [];
+            }
+
+            DetectAndWarnAboutMultipleListings(content);
+
+            var finalItems = content?
+                .Where(item => item.Listings.Length > 0)
+                .Select(SkuLabsItem.FromResponse).ToArray() ?? [];
+
+            return finalItems;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "Failed to parse SkuLabs item response.");
+            return [];
+        }
     }
 
-    public Task<bool> UpdateItem()
+    private void DetectAndWarnAboutMultipleListings(SkulabsItemResponse[] responses)
     {
-        return Task.FromResult(true);
+        var multipleListings = responses.Where(r => r.Listings.Length > 1).ToArray();
+
+        if (multipleListings.Length == 0)
+        {
+            return;
+        }
+
+        foreach (var response in multipleListings)
+        {
+            _logger.LogWarning(
+                "Item {Id} has multiple listings in SkuLabs.",
+                response.Id);
+        }
     }
-    
 }
