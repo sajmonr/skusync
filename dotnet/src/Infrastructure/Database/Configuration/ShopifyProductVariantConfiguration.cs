@@ -36,5 +36,6 @@ public class ShopifyProductVariantConfiguration : IEntityTypeConfiguration<Shopi
             .HasMaxLength(100);
 
         builder.HasIndex(x => x.GlobalVariantId).IsUnique();
+        builder.HasIndex(x => x.VariantId).IsUnique();
     }
 }
