@@ -16,15 +16,20 @@ public class SkulabsItemClient
     private readonly HttpClient _client;
     private readonly ILogger<SkulabsItemClient> _logger;
 
-    public SkulabsItemClient(HttpClient httpClient, IOptionsMonitor<SkulabsApiOptions> optionsMonitor,
-        ILogger<SkulabsItemClient> logger)
+    public SkulabsItemClient(
+        HttpClient httpClient,
+        IOptionsMonitor<SkulabsApiOptions> optionsMonitor,
+        ILogger<SkulabsItemClient> logger
+    )
     {
         _logger = logger;
         _client = httpClient;
 
         _client.BaseAddress = new Uri(optionsMonitor.CurrentValue.BaseUrl);
-        _client.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", optionsMonitor.CurrentValue.ApiKey);
+        _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer",
+            optionsMonitor.CurrentValue.ApiKey
+        );
     }
 
     /// <summary>
@@ -36,12 +41,15 @@ public class SkulabsItemClient
     public async Task<SkuLabsItem[]> GetAllItems()
     {
         const string fields = """
-                              {"_id": 1, "name": 1, "sku": 1, "upc": 1, "listings": 1}
-                              """;
-        var queryParams = new Dictionary<string, string>
-            { { "fields", fields } };
-        var queryString = string.Join("&", queryParams.Select(kvp =>
-            $"{Uri.EscapeDataString(kvp.Key)}={Uri.EscapeDataString(kvp.Value)}"));
+            {"_id": 1, "name": 1, "sku": 1, "upc": 1, "listings": 1}
+            """;
+        var queryParams = new Dictionary<string, string> { { "fields", fields } };
+        var queryString = string.Join(
+            "&",
+            queryParams.Select(kvp =>
+                $"{Uri.EscapeDataString(kvp.Key)}={Uri.EscapeDataString(kvp.Value)}"
+            )
+        );
         var response = await _client.GetAsync($"item/get?{queryString}");
 
         response.EnsureSuccessStatusCode();
@@ -53,15 +61,21 @@ public class SkulabsItemClient
             if (content is null)
             {
                 var body = await response.Content.ReadAsStringAsync();
-                _logger.LogWarning("Response from SkuLabs API was empty. Response body: {ResponseBody}", body);
+                _logger.LogWarning(
+                    "Response from SkuLabs API was empty. Response body: {ResponseBody}",
+                    body
+                );
                 return [];
             }
 
             DetectAndWarnAboutMultipleListings(content);
 
-            var finalItems = content?
-                .Where(item => item.Listings.Length > 0)
-                .Select(SkuLabsItem.FromResponse).ToArray() ?? [];
+            var finalItems =
+                content
+                    ?.Where(item => item.Listings.Length == 1)
+                    .Select(SkuLabsItem.FromResponse)
+                    .ToArray()
+                ?? [];
 
             return finalItems;
         }
@@ -83,9 +97,7 @@ public class SkulabsItemClient
 
         foreach (var response in multipleListings)
         {
-            _logger.LogWarning(
-                "Item {Id} has multiple listings in SkuLabs.",
-                response.ItemId);
+            _logger.LogWarning("Item {Id} has multiple listings in SkuLabs.", response.ItemId);
         }
     }
 }

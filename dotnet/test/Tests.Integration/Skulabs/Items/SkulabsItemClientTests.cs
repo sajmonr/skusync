@@ -67,6 +67,7 @@ public class SkulabsItemClientTests
                             [
                               {
                                 "_id": "item-1",
+                                "name": "Item One",
                                 "sku": "SKU-1",
                                 "upc": "UPC-1",
                                 "listings": [
@@ -75,12 +76,14 @@ public class SkulabsItemClientTests
                               },
                               {
                                 "_id": "item-2",
+                                "name": "Item Two",
                                 "sku": "SKU-2",
                                 "upc": "UPC-2",
                                 "listings": []
                               },
                               {
                                 "_id": "item-3",
+                                "name": "Item Three",
                                 "sku": "SKU-3",
                                 "upc": "UPC-3",
                                 "listings": [
@@ -95,8 +98,8 @@ public class SkulabsItemClientTests
         var result = await sut.GetAllItems();
 
         result.Length.ShouldBe(2);
-        result[0].ShouldBe(new SkuLabsItem("item-1", "var-1", "prod-1", "SKU-1", "UPC-1"));
-        result[1].ShouldBe(new SkuLabsItem("item-3", "var-3", "prod-3", "SKU-3", "UPC-3"));
+        result[0].ShouldBe(new SkuLabsItem("item-1", "listing-1", "var-1", "SKU-1", "UPC-1", "Item One"));
+        result[1].ShouldBe(new SkuLabsItem("item-3", "listing-3", "var-3", "SKU-3", "UPC-3", "Item Three"));
     }
 
     [Fact]
@@ -138,6 +141,7 @@ public class SkulabsItemClientTests
                             [
                               {
                                 "_id": "item-multi",
+                                "name": "Multi",
                                 "sku": "SKU-M",
                                 "upc": "UPC-M",
                                 "listings": [
@@ -147,6 +151,7 @@ public class SkulabsItemClientTests
                               },
                               {
                                 "_id": "item-single",
+                                "name": "Single",
                                 "sku": "SKU-S",
                                 "upc": "UPC-S",
                                 "listings": [
@@ -160,7 +165,9 @@ public class SkulabsItemClientTests
 
         var result = await sut.GetAllItems();
 
-        result.Length.ShouldBe(2);
+        result.Length.ShouldBe(1);
+        result[0].ShouldBe(new SkuLabsItem("item-single", "l-c", "var-c", "SKU-S", "UPC-S", "Single"));
+
         var warnings = _logger.Entries
             .Where(e => e.LogLevel == LogLevel.Warning && e.Message.Contains("multiple listings"))
             .ToArray();
@@ -169,12 +176,13 @@ public class SkulabsItemClientTests
     }
 
     [Fact]
-    public async Task GetAllItems_ShouldUseFirstListing_WhenItemHasMultipleListings()
+    public async Task GetAllItems_ShouldSkipItem_AndWarn_WhenItemHasMultipleListings()
     {
         const string json = """
                             [
                               {
                                 "_id": "item-multi",
+                                "name": "Multi",
                                 "sku": "SKU-M",
                                 "upc": "UPC-M",
                                 "listings": [
@@ -189,8 +197,11 @@ public class SkulabsItemClientTests
 
         var result = await sut.GetAllItems();
 
-        result.Length.ShouldBe(1);
-        result[0].ShouldBe(new SkuLabsItem("item-multi", "var-first", "prod-first", "SKU-M", "UPC-M"));
+        result.ShouldBeEmpty();
+        _logger.Entries.ShouldContain(entry =>
+            entry.LogLevel == LogLevel.Warning &&
+            entry.Message.Contains("multiple listings") &&
+            entry.Message.Contains("item-multi"));
     }
 
     [Fact]
