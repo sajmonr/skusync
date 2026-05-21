@@ -10,4 +10,5 @@
   <Project Path="test/ArchitectureTests/ArchitectureTests.csproj" />
   <Project Path="test/Tests.Application/Tests.Application.csproj" />
   <Project Path="test/Tests.Integration/Tests.Integration.csproj" />
+  <Project Path="test/Tests.E2E/Tests.E2E.csproj" />
 </Solution>

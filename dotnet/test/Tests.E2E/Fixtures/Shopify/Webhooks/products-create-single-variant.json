@@ -1,0 +1,14 @@
+{
+  "admin_graphql_api_id": "gid://shopify/Product/8000000000001",
+  "id": 8000000000001,
+  "variants": [
+    {
+      "admin_graphql_api_id": "gid://shopify/ProductVariant/9000000000001",
+      "barcode": "",
+      "id": 9000000000001,
+      "product_id": 8000000000001,
+      "sku": "",
+      "display_name": "E2E Test Tee - Large"
+    }
+  ]
+}
