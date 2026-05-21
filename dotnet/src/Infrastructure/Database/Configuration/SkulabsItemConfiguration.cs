@@ -20,10 +20,5 @@ public class SkulabsItemConfiguration : IEntityTypeConfiguration<SkulabsItemEnti
         
         builder.HasIndex(x => x.SkulabsSourceItemId).IsUnique();
         builder.HasIndex(x => x.SkulabsSourceListingId).IsUnique();
-        
-        builder.HasOne(x => x.ShopifyProductVariant)
-            .WithOne(x => x.SkulabsItem)
-            .HasForeignKey<SkulabsItemEntity>(x => x.SkulabsItemId)
-            .OnDelete(DeleteBehavior.Cascade);
     }
 }

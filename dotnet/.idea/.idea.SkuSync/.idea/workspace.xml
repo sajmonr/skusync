@@ -19,9 +19,9 @@
   <component name="ChangeListManager">
     <list default="true" id="2473acc7-8b17-4e30-b45b-750aea428ada" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/.idea.SkuSync/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/.idea.SkuSync/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Application/Products/Services/ProductsService.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/Products/Services/ProductsService.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Application/Products/Webhook/ShopifyProductCreateWebhookHandler.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/Products/Webhook/ShopifyProductCreateWebhookHandler.cs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/Application/Products/Webhook/ShopifyProductUpdateWebhookHandler.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Application/Products/Webhook/ShopifyProductUpdateWebhookHandler.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Infrastructure/Database/Configuration/SkulabsItemConfiguration.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Infrastructure/Database/Configuration/SkulabsItemConfiguration.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/Integration/Skulabs/Items/SkulabsItemClient.cs" beforeDir="false" afterPath="$PROJECT_DIR$/src/Integration/Skulabs/Items/SkulabsItemClient.cs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/test/Tests.Integration/Skulabs/Items/SkulabsItemClientTests.cs" beforeDir="false" afterPath="$PROJECT_DIR$/test/Tests.Integration/Skulabs/Items/SkulabsItemClientTests.cs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -34,11 +34,16 @@
       <option value="repository" />
     </option>
   </component>
+  <component name="CopilotPersistence">
+    <persistenceIdMap>
+      <entry key="_/Users/adamsimonicek/repos/sajmonr/skusync/dotnet" value="3Bg8SUW3V8AVnUmG4VfuepHrlNY" />
+    </persistenceIdMap>
+  </component>
   <component name="DpaMonitoringSettings">
     <option name="firstShow" value="false" />
   </component>
   <component name="EmbeddingIndexingInfo">
-    <option name="cachedIndexableFilesCount" value="4" />
+    <option name="cachedIndexableFilesCount" value="6" />
     <option name="fileBasedEmbeddingIndicesEnabled" value="true" />
   </component>
   <component name="Git.Settings">
@@ -130,6 +135,7 @@
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
     ".NET Launch Settings Profile.Web.Api: http.executor": "Run",
+    "Git.Working.Tree.Tab.closed.by.user": "closed",
     "HTTP Request.Web.Api | #1.executor": "Run",
     "HTTP Request.Web.Api | #2.executor": "Run",
     "ModuleVcsDetector.initialDetectionPerformed": "true",
@@ -144,6 +150,7 @@
     "codeWithMe.voiceChat.enabledByDefault": "false",
     "com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultModelSelectionForGA.v1": "true",
     "git-widget-placeholder": "develop",
+    "git.auto.fetch.suggestion.counter": "1",
     "junie.onboarding.icon.badge.shown": "true",
     "node.js.detected.package.eslint": "true",
     "node.js.detected.package.tslint": "true",
@@ -281,6 +288,7 @@
       <workItem from="1776209244646" duration="2417000" />
       <workItem from="1776387006601" duration="1727000" />
       <workItem from="1776461571342" duration="7181000" />
+      <workItem from="1779397484220" duration="1606000" />
     </task>
     <servers />
   </component>
@@ -304,6 +312,39 @@
   </component>
   <component name="UnityCheckinConfiguration" checkUnsavedScenes="true" />
   <component name="UnityProjectConfiguration" hasMinimizedUI="false" />
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="OPEN_GENERIC_TABS">
+      <map>
+        <entry key="6c1be3a0-145a-43b1-afa6-b96a6d561f90" value="TOOL_WINDOW" />
+      </map>
+    </option>
+    <option name="TAB_STATES">
+      <map>
+        <entry key="6c1be3a0-145a-43b1-afa6-b96a6d561f90">
+          <value>
+            <State />
+          </value>
+        </entry>
+        <entry key="MAIN">
+          <value>
+            <State>
+              <option name="FILTERS">
+                <map>
+                  <entry key="branch">
+                    <value>
+                      <list>
+                        <option value="claude/quizzical-gauss-accff2" />
+                      </list>
+                    </value>
+                  </entry>
+                </map>
+              </option>
+            </State>
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
   <component name="VcsManagerConfiguration">
     <option name="CLEAR_INITIAL_COMMIT_MESSAGE" value="true" />
   </component>
