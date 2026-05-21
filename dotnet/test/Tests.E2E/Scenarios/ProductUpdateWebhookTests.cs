@@ -10,17 +10,19 @@ using Tests.E2E.Infrastructure;
 namespace Tests.E2E.Scenarios;
 
 [Collection(E2ETestCollection.Name)]
-public class ProductCreateWebhookTests(E2EWebApplicationFactory factory) : IAsyncLifetime
+public class ProductUpdateWebhookTests(E2EWebApplicationFactory factory) : IAsyncLifetime
 {
     public Task InitializeAsync() => factory.ResetAsync();
     public Task DisposeAsync() => Task.CompletedTask;
 
     [Fact]
-    public async Task ProductsCreateWebhook_PersistsVariant_AndPushesSkuAndBarcodeBackToShopify()
+    public async Task ProductsUpdateWebhook_PersistsVariant_AndPushesSkuAndBarcodeBackToShopify_WhenVariantIsNew()
     {
-        // arrange — full Shopify webhook envelope with X-Shopify-Topic: products/create
+        // arrange — same Shopify webhook envelope as products/create but topic = products/update.
+        // The variant is not in our DB, so the update handler should create it and publish a
+        // Created event (the update path also creates entities for previously-unknown variants).
         var envelope = await FixtureLoader.LoadAsync<SqsShopEventProductMessage>(
-            "Shopify/Webhooks/products-create-single-variant.json");
+            "Shopify/Webhooks/products-update-single-variant.json");
         var payload = envelope.Detail.Payload;
 
         factory.ShopifyGraphQl
@@ -29,7 +31,7 @@ public class ProductCreateWebhookTests(E2EWebApplicationFactory factory) : IAsyn
                 Arg.Any<IDictionary<string, object?>>())
             .Returns(new UpdateVariantsGraphResponse(null));
 
-        // act — dispatch through the real SqsShopEventProductHandler so topic routing runs
+        // act
         await factory.DispatchWebhookAsync(envelope);
 
         // assert — variant persisted with VariantId as initial SKU and Barcode

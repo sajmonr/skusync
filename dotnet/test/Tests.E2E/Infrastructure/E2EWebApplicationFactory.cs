@@ -1,9 +1,14 @@
+using AWS.Messaging;
+using Infrastructure.Database;
+using Integration.Aws.Sqs;
 using Integration.Shopify.GraphQl;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Testcontainers.PostgreSql;
 using WireMock.Server;
@@ -107,6 +112,43 @@ public class E2EWebApplicationFactory : WebApplicationFactory<Program>, IAsyncLi
         foreach (var descriptor in toRemove)
         {
             services.Remove(descriptor);
+        }
+    }
+
+    /// <summary>
+    /// Wipes the variant + log-event tables and resets recorded calls on the Shopify GraphQL
+    /// substitute. Call from each test's <c>InitializeAsync</c> so state doesn't leak across
+    /// tests in the same class fixture.
+    /// </summary>
+    public async Task ResetAsync()
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        await db.ShopifyProductVariantLogEvents.ExecuteDeleteAsync();
+        await db.ShopifyProductVariants.ExecuteDeleteAsync();
+
+        ShopifyGraphQl.ClearReceivedCalls();
+    }
+
+    /// <summary>
+    /// Dispatches a Shopify webhook message through the real <see cref="SqsShopEventProductHandler"/>,
+    /// exercising the same topic-routing path used in production. Throws on handler failure.
+    /// </summary>
+    public async Task DispatchWebhookAsync(SqsShopEventProductMessage message)
+    {
+        using var scope = Services.CreateScope();
+        var webhookHandlers = scope.ServiceProvider.GetServices<IShopifyWebhookHandler>();
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<SqsShopEventProductHandler>>();
+
+        var handler = new SqsShopEventProductHandler(webhookHandlers, logger);
+        var envelope = new MessageEnvelope<SqsShopEventProductMessage> { Message = message };
+
+        var status = await handler.HandleAsync(envelope);
+        if (status != MessageProcessStatus.Success())
+        {
+            throw new InvalidOperationException(
+                $"SqsShopEventProductHandler returned non-success status for topic " +
+                $"'{message.Detail.Metadata.Topic}'.");
         }
     }
 }

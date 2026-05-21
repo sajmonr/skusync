@@ -74,7 +74,7 @@
     },
     "metadata": {
       "Content-Type": "application/json",
-      "X-Shopify-Topic": "products/create",
+      "X-Shopify-Topic": "products/update",
       "X-Shopify-Shop-Domain": "ivyandlavyboutique.myshopify.com",
       "X-Shopify-Product-Id": "8521775284385",
       "X-Shopify-Hmac-SHA256": "hLFW5Xzd1BWneV1LSOsIPOS4gv53CgOCJTM+0pyVIcg=",
