@@ -53,9 +53,8 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
 
         await CreateSut().Handle(product);
 
-        await _messageBus.Received().Publish(
-            Arg.Is<IEnumerable<ProductVariantCreatedEvent>>(events =>
-                events.Count() == 1 && events.Single().ProductVariantId != Guid.Empty),
+        await _messageBus.Received(1).Publish(
+            Arg.Is<ProductVariantCreatedEvent>(e => e.ProductVariantId != Guid.Empty),
             Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
     }
 
@@ -93,9 +92,8 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
 
         await CreateSut().Handle(product);
 
-        await _messageBus.Received().Publish(
-            Arg.Is<IEnumerable<ProductVariantUpdatedEvent>>(events =>
-                events.Count() == 1 && events.Single().ProductVariantId != Guid.Empty),
+        await _messageBus.Received(1).Publish(
+            Arg.Is<ProductVariantUpdatedEvent>(e => e.ProductVariantId != Guid.Empty),
             Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
     }
 
@@ -110,9 +108,8 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
 
         await CreateSut().Handle(product);
 
-        await _messageBus.Received().Publish(
-            Arg.Is<IEnumerable<ProductVariantUpdatedEvent>>(events =>
-                events.Count() == 1 && events.Single().ProductVariantId != Guid.Empty),
+        await _messageBus.Received(1).Publish(
+            Arg.Is<ProductVariantUpdatedEvent>(e => e.ProductVariantId != Guid.Empty),
             Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
     }
 
@@ -192,11 +189,11 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
 
         await CreateSut().Handle(product);
 
-        await _messageBus.Received().Publish(
-            Arg.Is<IEnumerable<ProductVariantUpdatedEvent>>(events => events.Count() == 1),
+        await _messageBus.Received(1).Publish(
+            Arg.Any<ProductVariantUpdatedEvent>(),
             Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
-        await _messageBus.Received().Publish(
-            Arg.Is<IEnumerable<ProductVariantCreatedEvent>>(events => events.Count() == 1),
+        await _messageBus.Received(1).Publish(
+            Arg.Any<ProductVariantCreatedEvent>(),
             Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
     }
 
@@ -210,10 +207,10 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
     private async Task AssertNoEventsPublished()
     {
         await _messageBus.DidNotReceive().Publish(
-            Arg.Is<IEnumerable<ProductVariantCreatedEvent>>(events => events.Any()),
+            Arg.Any<ProductVariantCreatedEvent>(),
             Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
         await _messageBus.DidNotReceive().Publish(
-            Arg.Is<IEnumerable<ProductVariantUpdatedEvent>>(events => events.Any()),
+            Arg.Any<ProductVariantUpdatedEvent>(),
             Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
     }
 

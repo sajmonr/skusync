@@ -74,7 +74,7 @@ public class ShopifyProductCreateWebhookHandler(
         await dbContext.SaveChangesAsync();
 
         // Enqueue only after a successful save so no phantom events enter the queue.
-        var events = entities.Select(e => new ProductVariantCreatedEvent(e.ShopifyProductVariantId));
-        await messageBus.Publish(events);
+        await messageBus.PublishBatch(
+            entities.Select(e => new ProductVariantCreatedEvent(e.ShopifyProductVariantId)));
     }
 }

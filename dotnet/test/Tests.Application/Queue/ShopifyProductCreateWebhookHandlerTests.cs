@@ -118,9 +118,8 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
 
         await CreateSut().Handle(product);
 
-        await _messageBus.Received().Publish(
-            Arg.Is<IEnumerable<ProductVariantCreatedEvent>>(events =>
-                events.Count() == 1 && events.Single().ProductVariantId != Guid.Empty),
+        await _messageBus.Received(1).Publish(
+            Arg.Is<ProductVariantCreatedEvent>(e => e.ProductVariantId != Guid.Empty),
             Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
     }
 
@@ -153,7 +152,7 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
         await CreateSut().Handle(product);
 
         await _messageBus.DidNotReceive().Publish(
-            Arg.Is<IEnumerable<ProductVariantCreatedEvent>>(events => events.Any()),
+            Arg.Any<ProductVariantCreatedEvent>(),
             Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
     }
 
@@ -170,9 +169,8 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
 
         await CreateSut().Handle(product);
 
-        await _messageBus.Received().Publish(
-            Arg.Is<IEnumerable<ProductVariantCreatedEvent>>(events =>
-                events.Count() == 2 && events.All(e => e.ProductVariantId != Guid.Empty)),
+        await _messageBus.Received(2).Publish(
+            Arg.Is<ProductVariantCreatedEvent>(e => e.ProductVariantId != Guid.Empty),
             Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
     }
 
@@ -184,7 +182,7 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
         await CreateSut().Handle(product);
 
         await _messageBus.DidNotReceive().Publish(
-            Arg.Is<IEnumerable<ProductVariantCreatedEvent>>(events => events.Any()),
+            Arg.Any<ProductVariantCreatedEvent>(),
             Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
     }
 
