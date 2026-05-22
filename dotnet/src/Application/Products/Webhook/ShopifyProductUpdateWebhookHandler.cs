@@ -1,4 +1,3 @@
-using Application.Events;
 using Application.Products.Events;
 using Application.Products.Services;
 using Infrastructure.Database;
@@ -6,6 +5,7 @@ using Infrastructure.Database.Entities;
 using Integration.Aws.Sqs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using SlimMessageBus;
 
 namespace Application.Products.Webhook;
 
@@ -18,7 +18,7 @@ namespace Application.Products.Webhook;
 public class ShopifyProductUpdateWebhookHandler(
     ApplicationDbContext dbContext,
     ILogger<ShopifyProductUpdateWebhookHandler> logger,
-    IEventDispatcher eventDispatcher)
+    IMessageBus messageBus)
     : ShopifyWebhookBase, IShopifyWebhookHandler
 {
     /// <inheritdoc/>
@@ -35,8 +35,8 @@ public class ShopifyProductUpdateWebhookHandler(
             .ToArrayAsync();
 
         logger.LogDebug(
-            "Loaded {Count} variants for product {ProductId} [{ProductTitle}]. We currently have {ExistingCount} variants.",
-            product.Variants.Count, product.Id, product.Title, existingVariants.Length);
+            "Loaded {Count} variants for product {ProductId}. We currently have {ExistingCount} variants.",
+            product.Variants.Count, product.Id, existingVariants.Length);
 
         // Collect events before SaveChangesAsync so we only publish for persisted changes.
         var createdEntities = new List<ShopifyProductVariantEntity>();
@@ -77,43 +77,31 @@ public class ShopifyProductUpdateWebhookHandler(
         await dbContext.SaveChangesAsync();
 
         // Enqueue only after a successful save so no phantom events enter the queue.
-        eventDispatcher.DispatchMany(updatedEntities.Select(e => ProductChangedEvent.Updated(e.ShopifyProductVariantId)));
-        eventDispatcher.DispatchMany(createdEntities.Select(e => ProductChangedEvent.Created(e.ShopifyProductVariantId)));
+        await messageBus.PublishBatch(
+            updatedEntities.Select(e => new ProductVariantUpdatedEvent(e.ShopifyProductVariantId)));
+        await messageBus.PublishBatch(
+            createdEntities.Select(e => new ProductVariantCreatedEvent(e.ShopifyProductVariantId)));
     }
 
     private bool UpdateEntity(ShopifyProductVariantEntity entity, SqsShopEventProduct product,
         SqsShopEventVariant variant)
     {
         var changed = false;
-        var oldFullTitle = entity.FullTitle;
 
-        if (entity.ProductTitle != product.Title)
-        {
-            logger.LogDebug("Updating product title for variant {VariantId}: [{OldTitle}] -> [{NewTitle}].",
-                variant.Id, entity.ProductTitle, product.Title);
-            entity.ProductTitle = product.Title;
-            entity.UpdatedOnUtc = DateTime.UtcNow;
-            changed = true;
-        }
-
-        if (variant.Title != "Default Title" && entity.VariantTitle != variant.Title)
-        {
-            logger.LogDebug("Updating variant title for variant {VariantId}: [{OldTitle}] -> [{NewTitle}].",
-                variant.Id, entity.VariantTitle, variant.Title);
-            entity.VariantTitle = variant.Title;
-            entity.UpdatedOnUtc = DateTime.UtcNow;
-            changed = true;
-        }
-
-        if (entity.FullTitle != oldFullTitle)
+        var newDisplayName = ResolveDisplayName(product, variant);
+        if (entity.DisplayName != newDisplayName)
         {
             dbContext.ShopifyProductVariantLogEvents.Add(new ShopifyProductVariantLogEventEntity
             {
                 ShopifyProductVariantId = entity.ShopifyProductVariantId,
-                Message = VariantLogMessages.TitleUpdated(oldFullTitle, entity.FullTitle)
+                Message = VariantLogMessages.TitleUpdated(entity.DisplayName, newDisplayName)
             });
+            logger.LogDebug("Updating display name for variant {VariantId}: [{OldName}] -> [{NewName}].",
+                variant.Id, entity.DisplayName, newDisplayName);
+            entity.DisplayName = newDisplayName;
+            changed = true;
         }
-        
+
         return changed;
     }
 

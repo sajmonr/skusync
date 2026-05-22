@@ -12,16 +12,13 @@ public class SkulabsItemConfiguration : IEntityTypeConfiguration<SkulabsItemEnti
 
         builder.HasUuidV7PrimaryKey(x => x.SkulabsItemId);
         
-        builder.Property(x => x.SkulabsSourceId).IsRequired().HasMaxLength(50);
+        builder.Property(x => x.SkulabsSourceItemId).IsRequired().HasMaxLength(50);
+        builder.Property(x => x.SkulabsSourceListingId).IsRequired().HasMaxLength(50);
         builder.Property(x => x.Title).IsRequired().HasMaxLength(1000);
         builder.Property(x => x.Sku).IsRequired().HasMaxLength(100);
         builder.Property(x => x.Barcode).IsRequired().HasMaxLength(100);
         
-        builder.HasIndex(x => x.SkulabsSourceId).IsUnique();
-        
-        builder.HasOne(x => x.ShopifyProductVariant)
-            .WithOne(x => x.SkulabsItem)
-            .HasForeignKey<SkulabsItemEntity>(x => x.SkulabsItemId)
-            .OnDelete(DeleteBehavior.Cascade);
+        builder.HasIndex(x => x.SkulabsSourceItemId).IsUnique();
+        builder.HasIndex(x => x.SkulabsSourceListingId).IsUnique();
     }
 }

@@ -40,8 +40,7 @@ public record SqsShopEventProductMessage(
     {
         return $"""
                 Payload topic: {Detail.Metadata.Topic},
-                Item ID: {Detail.Payload.Id},
-                Item title: {Detail.Payload.Title}
+                Item ID: {Detail.Payload.Id}
                 """;
     }
 }
@@ -75,7 +74,9 @@ public record SqsShopEventProduct(
 
 /// <summary>
 /// Represents a single product variant within a Shopify shop-event webhook payload,
-/// carrying identifiers, SKU, barcode, and display title.
+/// carrying identifiers, SKU, barcode, and the variant's title (e.g. "Default Title"
+/// or "Large", "Red", etc.). The full display name is composed from the product title
+/// and this variant title; see <c>ShopifyWebhookBase.ResolveDisplayName</c>.
 /// </summary>
 public record SqsShopEventVariant(
     [property: JsonPropertyName("admin_graphql_api_id")] string AdminGraphqlApiId,

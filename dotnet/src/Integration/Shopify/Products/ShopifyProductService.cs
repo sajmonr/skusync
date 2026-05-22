@@ -44,7 +44,7 @@ internal class ShopifyProductService(IShopifyGraphQlService graphQlService, ILog
         catch (Exception ex)
         {
             logger.LogError(ex, "Failed to fetch products from Shopify.");
-            throw;
+            return [];
         }
     }
 
@@ -104,20 +104,9 @@ internal class ShopifyProductService(IShopifyGraphQlService graphQlService, ILog
             new ShopifyProductVariant(
                 product.id ?? string.Empty,
                 variant!.id ?? string.Empty,
-                product.title ?? string.Empty,
-                GetVariantTitle(variant),
+                variant.displayName ?? string.Empty,
                 variant.sku ?? string.Empty,
                 variant.barcode ?? string.Empty));
-
-        string GetVariantTitle(ProductVariant variant)
-        {
-            if (string.IsNullOrWhiteSpace(variant.title) || variant.title == "Default Title")
-            {
-                return string.Empty;
-            }
-
-            return variant.title;
-        }
     }
 
     private const string BulkUpdateVariantsQuery = """
@@ -136,13 +125,13 @@ internal class ShopifyProductService(IShopifyGraphQlService graphQlService, ILog
                                                    products(first: 250, after: $after){
                                                        nodes{
                                                            id
-                                                           title
                                                            variants(first: 50){
                                                                nodes{
                                                                    id
                                                                    title
                                                                    barcode
                                                                    sku
+                                                                   displayName
                                                                }
                                                            }
                                                        }

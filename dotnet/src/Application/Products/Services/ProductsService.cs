@@ -1,10 +1,10 @@
-using Application.Events;
 using Application.Products.Events;
 using Infrastructure.Database;
 using Infrastructure.Database.Entities;
 using Integration.Shopify.Products;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using SlimMessageBus;
 
 namespace Application.Products.Services;
 
@@ -12,7 +12,7 @@ public class ProductsService(
     IShopifyProductService shopifyProductService,
     ApplicationDbContext dbContext,
     ILogger<ProductsService> logger,
-    IEventDispatcher eventDispatcher) : IProductsService
+    IMessageBus messageBus) : IProductsService
 {
     public async Task<ProductImportResult> ImportProductsFromShopify()
     {
@@ -65,8 +65,7 @@ public class ProductsService(
                     ProductId = shopifyVariant.ProductId,
                     GlobalVariantId = shopifyVariant.GlobalVariantId,
                     VariantId = shopifyVariant.VariantId,
-                    ProductTitle = shopifyVariant.ProductTitle,
-                    VariantTitle = shopifyVariant.VariantTitle,
+                    DisplayName = shopifyVariant.DisplayName,
                     Sku = shopifyVariant.Sku,
                     Barcode = shopifyVariant.Barcode
                 };
@@ -94,8 +93,10 @@ public class ProductsService(
         }
 
         // Enqueue only after a successful save so no phantom events enter the queue.
-        eventDispatcher.DispatchMany(updatedEntities.Select(e => ProductChangedEvent.Updated(e.ShopifyProductVariantId)));
-        eventDispatcher.DispatchMany(createdEntities.Select(e => ProductChangedEvent.Created(e.ShopifyProductVariantId)));
+        await messageBus.PublishBatch(
+            updatedEntities.Select(e => new ProductVariantUpdatedEvent(e.ShopifyProductVariantId)));
+        await messageBus.PublishBatch(
+            createdEntities.Select(e => new ProductVariantCreatedEvent(e.ShopifyProductVariantId)));
 
         logger.LogDebug("Synchronization complete. Created: {Created}, Updated: {Updated}.", createdEntities.Count, updatedEntities.Count);
 
@@ -221,26 +222,15 @@ public class ProductsService(
     private bool UpdateVariant(ShopifyProductVariantEntity existing, ShopifyProductVariant shopifyVariant)
     {
         var changed = false;
-        var oldFullTitle = existing.FullTitle;
-
-        if (existing.ProductTitle != shopifyVariant.ProductTitle)
+        
+        if(existing.DisplayName != shopifyVariant.DisplayName)
         {
-            existing.ProductTitle = shopifyVariant.ProductTitle;
+            existing.DisplayName = shopifyVariant.DisplayName;
             changed = true;
-        }
-
-        if (existing.VariantTitle != shopifyVariant.VariantTitle)
-        {
-            existing.VariantTitle = shopifyVariant.VariantTitle;
-            changed = true;
-        }
-
-        if (existing.FullTitle != oldFullTitle)
-        {
             dbContext.ShopifyProductVariantLogEvents.Add(new ShopifyProductVariantLogEventEntity
             {
                 ShopifyProductVariantId = existing.ShopifyProductVariantId,
-                Message = VariantLogMessages.TitleUpdated(oldFullTitle, existing.FullTitle)
+                Message = VariantLogMessages.TitleUpdated(existing.DisplayName, shopifyVariant.DisplayName)
             });
         }
 

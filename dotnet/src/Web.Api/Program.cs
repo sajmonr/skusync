@@ -42,3 +42,5 @@ app.MapHealthChecks("_health", new HealthCheckOptions
 app.UseSerilogRequestLogging();
 
 await app.RunAsync();
+
+public partial class Program;

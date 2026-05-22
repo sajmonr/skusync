@@ -1,19 +1,19 @@
-using Application.Events;
 using Application.Products.Events;
 using Application.Products.Webhook;
 using Infrastructure.Database;
+using Infrastructure.Database.Entities;
 using Integration.Aws.Sqs;
-using Integration.Shopify.Products;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Shouldly;
+using SlimMessageBus;
 
 namespace Tests.Application.Queue;
 
 public class ShopifyProductCreateWebhookHandlerTests : IDisposable
 {
-    private readonly IEventDispatcher _eventDispatcher = Substitute.For<IEventDispatcher>();
+    private readonly IMessageBus _messageBus = Substitute.For<IMessageBus>();
     private readonly ApplicationDbContext _dbContext;
     private readonly TestLogger<ShopifyProductUpdateWebhookHandler> _logger = new();
 
@@ -35,9 +35,9 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
     [Fact]
     public async Task Handle_ShouldPersistOneEntity_PerVariant()
     {
-        var product = CreateProduct("gid://shopify/Product/100", 100, "T-Shirt",
-            CreateVariant("gid://shopify/ProductVariant/200", 200, "Large"),
-            CreateVariant("gid://shopify/ProductVariant/201", 201, "Small"));
+        var product = CreateProduct("gid://shopify/Product/100", 100,
+            CreateVariant("gid://shopify/ProductVariant/200", 200, "T-Shirt - Large"),
+            CreateVariant("gid://shopify/ProductVariant/201", 201, "T-Shirt - Small"));
 
         await CreateSut().Handle(product);
 
@@ -48,8 +48,8 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
     [Fact]
     public async Task Handle_ShouldSetAllEntityFields_FromProductAndVariant()
     {
-        var product = CreateProduct("gid://shopify/Product/100", 100, "T-Shirt",
-            CreateVariant("gid://shopify/ProductVariant/200", 200, "Large"));
+        var product = CreateProduct("gid://shopify/Product/100", 100,
+            CreateVariant("gid://shopify/ProductVariant/200", 200, "T-Shirt - Large"));
 
         await CreateSut().Handle(product);
 
@@ -58,15 +58,13 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
         entity.ProductId.ShouldBe(100L);
         entity.GlobalVariantId.ShouldBe("gid://shopify/ProductVariant/200");
         entity.VariantId.ShouldBe(200L);
-        entity.ProductTitle.ShouldBe("T-Shirt");
-        entity.VariantTitle.ShouldBe("Large");
     }
 
     [Fact]
     public async Task Handle_ShouldUseVariantId_AsInitialSkuAndBarcode()
     {
-        var product = CreateProduct("gid://shopify/Product/100", 100, "T-Shirt",
-            CreateVariant("gid://shopify/ProductVariant/200", 200, "Large"));
+        var product = CreateProduct("gid://shopify/Product/100", 100,
+            CreateVariant("gid://shopify/ProductVariant/200", 200, "T-Shirt - Large"));
 
         await CreateSut().Handle(product);
 
@@ -78,7 +76,7 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
     [Fact]
     public async Task Handle_ShouldPersistNoEntities_WhenProductHasNoVariants()
     {
-        var product = CreateProduct("gid://shopify/Product/100", 100, "T-Shirt");
+        var product = CreateProduct("gid://shopify/Product/100", 100);
 
         await CreateSut().Handle(product);
 
@@ -87,30 +85,105 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
     }
 
     // -------------------------------------------------------------------------
-    // Event dispatching
+    // Duplicate-variant filtering
     // -------------------------------------------------------------------------
 
     [Fact]
-    public async Task Handle_ShouldDispatchCreatedEvent_PerPersistedVariant()
+    public async Task Handle_ShouldOnlyPersistNewVariants_WhenSomeAlreadyTracked()
     {
-        var product = CreateProduct("gid://shopify/Product/100", 100, "T-Shirt",
-            CreateVariant("gid://shopify/ProductVariant/200", 200, "Large"),
-            CreateVariant("gid://shopify/ProductVariant/201", 201, "Small"));
+        SeedVariant(productId: 100, variantId: 200);
+        await _dbContext.SaveChangesAsync();
+
+        var product = CreateProduct("gid://shopify/Product/100", 100,
+            CreateVariant("gid://shopify/ProductVariant/200", 200, "T-Shirt - Large"),
+            CreateVariant("gid://shopify/ProductVariant/201", 201, "T-Shirt - Small"));
 
         await CreateSut().Handle(product);
 
-        _eventDispatcher.Received(2).Dispatch(
-            Arg.Is<ProductChangedEvent>(e => e.ProductVariantId != Guid.Empty && e.ChangeType == ProductChangeType.Created));
+        var saved = await _dbContext.ShopifyProductVariants
+            .OrderBy(v => v.VariantId)
+            .ToListAsync();
+        saved.Select(v => v.VariantId).ShouldBe(new[] { 200L, 201L });
     }
 
     [Fact]
-    public async Task Handle_ShouldNotDispatchAnyEvent_WhenProductHasNoVariants()
+    public async Task Handle_ShouldPublishEventOnlyForNewVariants_WhenSomeAlreadyTracked()
     {
-        var product = CreateProduct("gid://shopify/Product/100", 100, "T-Shirt");
+        SeedVariant(productId: 100, variantId: 200);
+        await _dbContext.SaveChangesAsync();
+
+        var product = CreateProduct("gid://shopify/Product/100", 100,
+            CreateVariant("gid://shopify/ProductVariant/200", 200, "T-Shirt - Large"),
+            CreateVariant("gid://shopify/ProductVariant/201", 201, "T-Shirt - Small"));
 
         await CreateSut().Handle(product);
 
-        _eventDispatcher.DidNotReceive().Dispatch(Arg.Any<ProductChangedEvent>());
+        await _messageBus.Received(1).Publish(
+            Arg.Is<ProductVariantCreatedEvent>(e => e.ProductVariantId != Guid.Empty),
+            Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_ShouldPersistNothing_WhenAllVariantsAlreadyTracked()
+    {
+        SeedVariant(productId: 100, variantId: 200);
+        SeedVariant(productId: 100, variantId: 201);
+        await _dbContext.SaveChangesAsync();
+
+        var product = CreateProduct("gid://shopify/Product/100", 100,
+            CreateVariant("gid://shopify/ProductVariant/200", 200, "T-Shirt - Large"),
+            CreateVariant("gid://shopify/ProductVariant/201", 201, "T-Shirt - Small"));
+
+        await CreateSut().Handle(product);
+
+        var saved = await _dbContext.ShopifyProductVariants.ToListAsync();
+        saved.Count.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task Handle_ShouldNotPublishAnyEvent_WhenAllVariantsAlreadyTracked()
+    {
+        SeedVariant(productId: 100, variantId: 200);
+        await _dbContext.SaveChangesAsync();
+
+        var product = CreateProduct("gid://shopify/Product/100", 100,
+            CreateVariant("gid://shopify/ProductVariant/200", 200, "T-Shirt - Large"));
+
+        await CreateSut().Handle(product);
+
+        await _messageBus.DidNotReceive().Publish(
+            Arg.Any<ProductVariantCreatedEvent>(),
+            Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
+    }
+
+    // -------------------------------------------------------------------------
+    // Event publishing
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task Handle_ShouldPublishCreatedEvent_PerPersistedVariant()
+    {
+        var product = CreateProduct("gid://shopify/Product/100", 100,
+            CreateVariant("gid://shopify/ProductVariant/200", 200, "T-Shirt - Large"),
+            CreateVariant("gid://shopify/ProductVariant/201", 201, "T-Shirt - Small"));
+
+        await CreateSut().Handle(product);
+
+        await _messageBus.Received(2).Publish(
+            Arg.Is<ProductVariantCreatedEvent>(e => e.ProductVariantId != Guid.Empty),
+            Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_ShouldNotPublishAnyEvent_WhenProductHasNoVariants()
+    {
+        var product = CreateProduct("gid://shopify/Product/100", 100);
+
+        await CreateSut().Handle(product);
+
+        await _messageBus.DidNotReceive().Publish(
+            Arg.Any<ProductVariantCreatedEvent>(),
+            Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
     }
 
     // -------------------------------------------------------------------------
@@ -118,14 +191,28 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
     // -------------------------------------------------------------------------
 
     private ShopifyProductCreateWebhookHandler CreateSut() =>
-        new(_dbContext, _logger, _eventDispatcher);
+        new(_dbContext, _logger, _messageBus);
+
+    private void SeedVariant(long productId, long variantId)
+    {
+        _dbContext.ShopifyProductVariants.Add(new ShopifyProductVariantEntity
+        {
+            GlobalProductId = $"gid://shopify/Product/{productId}",
+            ProductId = productId,
+            GlobalVariantId = $"gid://shopify/ProductVariant/{variantId}",
+            VariantId = variantId,
+            DisplayName = "Existing",
+            Sku = variantId.ToString(),
+            Barcode = variantId.ToString()
+        });
+    }
 
     private static SqsShopEventProduct CreateProduct(
-        string adminGraphqlApiId, long id, string title, params SqsShopEventVariant[] variants) =>
-        new(adminGraphqlApiId, id, title, variants);
+        string adminGraphqlApiId, long id, params SqsShopEventVariant[] variants) =>
+        new(adminGraphqlApiId, id, "T-Shirt", variants);
 
-    private static SqsShopEventVariant CreateVariant(string adminGraphqlApiId, long id, string title) =>
-        new(adminGraphqlApiId, Barcode: id.ToString(), id, ProductId: 100, Sku: id.ToString(), title);
+    private static SqsShopEventVariant CreateVariant(string adminGraphqlApiId, long id, string variantTitle) =>
+        new(adminGraphqlApiId, Barcode: id.ToString(), id, ProductId: 100, Sku: id.ToString(), variantTitle);
 
     private sealed class TestLogger<T> : ILogger<T>
     {

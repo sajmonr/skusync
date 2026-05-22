@@ -1,10 +1,11 @@
-using Application.Events;
 using Application.Products.Events;
 using Application.Products.Services;
 using Infrastructure.Database;
 using Infrastructure.Database.Entities;
 using Integration.Aws.Sqs;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using SlimMessageBus;
 
 namespace Application.Products.Webhook;
 
@@ -16,7 +17,7 @@ namespace Application.Products.Webhook;
 public class ShopifyProductCreateWebhookHandler(
     ApplicationDbContext dbContext,
     ILogger<ShopifyProductUpdateWebhookHandler> logger,
-    IEventDispatcher eventDispatcher)
+    IMessageBus messageBus)
     : ShopifyWebhookBase, IShopifyWebhookHandler
 {
 
@@ -30,13 +31,29 @@ public class ShopifyProductCreateWebhookHandler(
     /// <param name="product">The product payload from the <c>products/create</c> webhook.</param>
     public async Task Handle(SqsShopEventProduct product)
     {
+        // Shopify can redeliver products/create webhooks (e.g. retries, replays) and the second
+        // delivery may carry a different variant set. Skip variants we already track so we don't
+        // violate the unique GlobalVariantId index, but still persist any genuinely new ones.
+        var existingVariantIds = await dbContext.ShopifyProductVariants
+            .Where(v => v.ProductId == product.Id)
+            .Select(v => v.VariantId)
+            .ToHashSetAsync();
+
         var entities = new List<ShopifyProductVariantEntity>();
-        
+
         foreach (var variant in product.Variants)
         {
+            if (existingVariantIds.Contains(variant.Id))
+            {
+                logger.LogInformation(
+                    "Skipping variant {VariantId} for product {ProductId} — already tracked locally.",
+                    variant.Id, product.Id);
+                continue;
+            }
+
             logger.LogInformation(
-                "New variant {VariantId} [{VariantTitle} for product {ProductId} [{ProductTitle}] found.",
-                variant.Id, variant.Title, product.Id, product.Title);
+                "New variant {VariantId} [{VariantTitle}] for product {ProductId} found.",
+                variant.Id, variant.Title, product.Id);
 
             var newEntity = ConstructEntity(product, variant);
 
@@ -48,13 +65,16 @@ public class ShopifyProductCreateWebhookHandler(
             entities.Add(newEntity);
         }
 
+        if (entities.Count == 0)
+        {
+            return;
+        }
+
         await dbContext.ShopifyProductVariants.AddRangeAsync(entities);
         await dbContext.SaveChangesAsync();
 
         // Enqueue only after a successful save so no phantom events enter the queue.
-        foreach (var entity in entities)
-        {
-            eventDispatcher.Dispatch(ProductChangedEvent.Created(entity.ShopifyProductVariantId));
-        }
+        await messageBus.PublishBatch(
+            entities.Select(e => new ProductVariantCreatedEvent(e.ShopifyProductVariantId)));
     }
 }

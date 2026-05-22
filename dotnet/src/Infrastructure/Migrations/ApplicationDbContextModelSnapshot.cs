@@ -38,7 +38,7 @@ namespace Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasDefaultValueSql("now() at time zone 'utc'");
 
-                    b.Property<string>("FullTitle")
+                    b.Property<string>("DisplayName")
                         .IsRequired()
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
@@ -56,11 +56,6 @@ namespace Infrastructure.Migrations
                     b.Property<long>("ProductId")
                         .HasColumnType("bigint");
 
-                    b.Property<string>("ProductTitle")
-                        .IsRequired()
-                        .HasMaxLength(400)
-                        .HasColumnType("character varying(400)");
-
                     b.Property<string>("Sku")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -74,14 +69,12 @@ namespace Infrastructure.Migrations
                     b.Property<long>("VariantId")
                         .HasColumnType("bigint");
 
-                    b.Property<string>("VariantTitle")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
                     b.HasKey("ShopifyProductVariantId");
 
                     b.HasIndex("GlobalVariantId")
+                        .IsUnique();
+
+                    b.HasIndex("VariantId")
                         .IsUnique();
 
                     b.ToTable("ShopifyProductVariants", (string)null);
@@ -132,7 +125,12 @@ namespace Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
-                    b.Property<string>("SkulabsSourceId")
+                    b.Property<string>("SkulabsSourceItemId")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("SkulabsSourceListingId")
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
@@ -144,7 +142,13 @@ namespace Infrastructure.Migrations
 
                     b.HasKey("SkulabsItemId");
 
-                    b.HasIndex("SkulabsSourceId")
+                    b.HasIndex("ShopifyProductVariantId")
+                        .IsUnique();
+
+                    b.HasIndex("SkulabsSourceItemId")
+                        .IsUnique();
+
+                    b.HasIndex("SkulabsSourceListingId")
                         .IsUnique();
 
                     b.ToTable("SkulabsItems", (string)null);
@@ -165,7 +169,7 @@ namespace Infrastructure.Migrations
                 {
                     b.HasOne("Infrastructure.Database.Entities.ShopifyProductVariantEntity", "ShopifyProductVariant")
                         .WithOne("SkulabsItem")
-                        .HasForeignKey("Infrastructure.Database.Entities.SkulabsItemEntity", "SkulabsItemId")
+                        .HasForeignKey("Infrastructure.Database.Entities.SkulabsItemEntity", "ShopifyProductVariantId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
