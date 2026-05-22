@@ -52,8 +52,8 @@ public class ShopifyProductCreateWebhookHandler(
             }
 
             logger.LogInformation(
-                "New variant {VariantId} [{VariantTitle} for product {ProductId} found.",
-                variant.Id, variant.DisplayName, product.Id);
+                "New variant {VariantId} [{VariantTitle}] for product {ProductId} found.",
+                variant.Id, variant.Title, product.Id);
 
             var newEntity = ConstructEntity(product, variant);
 

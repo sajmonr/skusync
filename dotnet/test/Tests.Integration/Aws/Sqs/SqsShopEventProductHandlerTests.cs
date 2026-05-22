@@ -156,6 +156,7 @@ public class SqsShopEventProductHandlerTests
                 Payload: new SqsShopEventProduct(
                     AdminGraphqlApiId: $"gid://shopify/Product/{productId}",
                     Id: productId,
+                    Title: "Test Product",
                     Variants: []),
                 Metadata: new SqsShopEventMetadata(
                     ContentType: "application/json",

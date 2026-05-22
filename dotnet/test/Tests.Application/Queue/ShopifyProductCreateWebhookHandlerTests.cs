@@ -209,10 +209,10 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
 
     private static SqsShopEventProduct CreateProduct(
         string adminGraphqlApiId, long id, params SqsShopEventVariant[] variants) =>
-        new(adminGraphqlApiId, id, variants);
+        new(adminGraphqlApiId, id, "T-Shirt", variants);
 
-    private static SqsShopEventVariant CreateVariant(string adminGraphqlApiId, long id, string displayName) =>
-        new(adminGraphqlApiId, Barcode: id.ToString(), id, ProductId: 100, Sku: id.ToString(), displayName);
+    private static SqsShopEventVariant CreateVariant(string adminGraphqlApiId, long id, string variantTitle) =>
+        new(adminGraphqlApiId, Barcode: id.ToString(), id, ProductId: 100, Sku: id.ToString(), variantTitle);
 
     private sealed class TestLogger<T> : ILogger<T>
     {

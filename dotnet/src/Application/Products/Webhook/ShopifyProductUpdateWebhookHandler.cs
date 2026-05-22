@@ -87,18 +87,21 @@ public class ShopifyProductUpdateWebhookHandler(
         SqsShopEventVariant variant)
     {
         var changed = false;
-        
-        if (entity.DisplayName != variant.DisplayName)
+
+        var newDisplayName = ResolveDisplayName(product, variant);
+        if (entity.DisplayName != newDisplayName)
         {
             dbContext.ShopifyProductVariantLogEvents.Add(new ShopifyProductVariantLogEventEntity
             {
                 ShopifyProductVariantId = entity.ShopifyProductVariantId,
-                Message = VariantLogMessages.TitleUpdated(entity.DisplayName, variant.DisplayName)
+                Message = VariantLogMessages.TitleUpdated(entity.DisplayName, newDisplayName)
             });
-            logger.LogDebug("Updating display name for variant {VariantId}: [{OldName}] -> [{NewName}].", variant.Id, entity.DisplayName, variant.DisplayName);
-            entity.DisplayName = variant.DisplayName;
+            logger.LogDebug("Updating display name for variant {VariantId}: [{OldName}] -> [{NewName}].",
+                variant.Id, entity.DisplayName, newDisplayName);
+            entity.DisplayName = newDisplayName;
+            changed = true;
         }
-        
+
         return changed;
     }
 

@@ -68,12 +68,15 @@ public record SqsShopEventMetadata(
 public record SqsShopEventProduct(
     [property: JsonPropertyName("admin_graphql_api_id")] string AdminGraphqlApiId,
     [property: JsonPropertyName("id")] long Id,
+    [property: JsonPropertyName("title")] string Title,
     [property: JsonPropertyName("variants")] IReadOnlyList<SqsShopEventVariant> Variants
 );
 
 /// <summary>
 /// Represents a single product variant within a Shopify shop-event webhook payload,
-/// carrying identifiers, SKU, barcode, and display title.
+/// carrying identifiers, SKU, barcode, and the variant's title (e.g. "Default Title"
+/// or "Large", "Red", etc.). The full display name is composed from the product title
+/// and this variant title; see <c>ShopifyWebhookBase.ResolveDisplayName</c>.
 /// </summary>
 public record SqsShopEventVariant(
     [property: JsonPropertyName("admin_graphql_api_id")] string AdminGraphqlApiId,
@@ -81,5 +84,5 @@ public record SqsShopEventVariant(
     [property: JsonPropertyName("id")] long Id,
     [property: JsonPropertyName("product_id")] long ProductId,
     [property: JsonPropertyName("sku")] string Sku,
-    [property: JsonPropertyName("display_name")] string DisplayName
+    [property: JsonPropertyName("title")] string Title
 );
