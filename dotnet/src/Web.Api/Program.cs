@@ -1,10 +1,8 @@
 using Application;
-using HealthChecks.UI.Client;
 using Infrastructure;
 using Infrastructure.Database;
 using Integration;
 using Integration.Shopify.Products;
-using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Serilog;
 using Web.Api;
 
@@ -34,10 +32,7 @@ if (app.Environment.IsDevelopment())
 
 app.ApplyDatabaseMigrations();
 
-app.MapHealthChecks("_health", new HealthCheckOptions
-{
-    ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
-});
+app.MapHealthCheckEndpoints();
 
 app.UseSerilogRequestLogging();
 

@@ -1,5 +1,12 @@
 ﻿# syntax=docker/dockerfile:1.7-labs
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
+# Install curl as root so the compose / orchestrator HEALTHCHECK can probe /_health/live.
+# The aspnet base image doesn't ship with curl or wget, and there is no out-of-the-box
+# way to issue an HTTP request from inside the container otherwise.
+USER root
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
 USER $APP_UID
 WORKDIR /app
 
