@@ -20,14 +20,9 @@ public class ScheduledJobsOptions
 
     /// <summary>
     /// Gets the schedule configuration for the SkuLabs item synchronization job.
-    /// Defaults to every 10 minutes with an immediate run on startup.
     /// </summary>
     [Required]
-    public JobScheduleOptions SkulabsItemSync { get; init; } = new()
-    {
-        CronExpression = "0 0/10 * * * ?",
-        RunOnStart = true
-    };
+    public JobScheduleOptions SkulabsItemSync { get; init; } = JobScheduleOptions.Disabled;
 }
 
 /// <summary>
@@ -59,5 +54,4 @@ public class JobScheduleOptions
     /// explicitly disabled by setting the <see cref="Enabled"/> property to <c>false</c>.
     /// </summary>
     public static JobScheduleOptions Disabled => new() { Enabled = false };
-    
 }
