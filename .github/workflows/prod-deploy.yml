@@ -7,7 +7,7 @@ on:
     paths:
       - 'dotnet/**'
       - '!dotnet/test/**'
-      - '.github/workflows/deploy.yml'
+      - '.github/workflows/prod-deploy.yml'
   workflow_dispatch:
 
 defaults:
