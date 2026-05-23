@@ -13,7 +13,7 @@ public static class QuartzJobRegistrationExtensions
     /// <list type="bullet">
     ///   <item><description>When <see cref="JobScheduleOptions.Enabled"/> is <c>false</c>, no job or trigger is registered.</description></item>
     ///   <item><description>A cron trigger is always added using <see cref="JobScheduleOptions.CronExpression"/>.</description></item>
-    ///   <item><description>When <see cref="JobScheduleOptions.RunOnStart"/> is <c>true</c>, an additional one-shot trigger fires as soon as the scheduler starts.</description></item>
+    ///   <item><description>When <see cref="JobScheduleOptions.RunOnStart"/> is <c>true</c>, an additional one-shot trigger fires when the scheduler starts. If <see cref="JobScheduleOptions.StartupJitterMs"/> is non-zero, a uniformly random offset in <c>[0, StartupJitterMs]</c> milliseconds is added to that trigger's start time so multiple jobs with <c>RunOnStart</c> don't hammer downstreams simultaneously at boot.</description></item>
     /// </list>
     /// </summary>
     /// <typeparam name="TJob">The <see cref="IJob"/> implementation to register.</typeparam>
@@ -41,13 +41,28 @@ public static class QuartzJobRegistrationExtensions
 
         if (options.RunOnStart)
         {
+            var startAt = DateTimeOffset.UtcNow + SampleJitter(options.StartupJitterMs);
             quartz.AddTrigger(opts => opts
                 .ForJob(jobKey)
                 .WithIdentity($"{jobKey.Name}-startup")
-                .StartNow()
+                .StartAt(startAt)
                 .WithSimpleSchedule(s => s.WithRepeatCount(0)));
         }
 
         return quartz;
+    }
+
+    /// <summary>
+    /// Returns a uniformly random <see cref="TimeSpan"/> in <c>[0, maxMs]</c> milliseconds.
+    /// Negative or zero inputs return <see cref="TimeSpan.Zero"/> so callers can pass the
+    /// configured value through unconditionally.
+    /// </summary>
+    private static TimeSpan SampleJitter(int maxMs)
+    {
+        if (maxMs <= 0)
+        {
+            return TimeSpan.Zero;
+        }
+        return TimeSpan.FromMilliseconds(Random.Shared.NextDouble() * maxMs);
     }
 }
