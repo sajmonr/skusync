@@ -3,6 +3,8 @@ using Application.Jobs;
 using Application.Products.Jobs;
 using Application.Products.Services;
 using Application.Products.Webhook;
+using Application.Skulabs.Jobs;
+using Application.Skulabs.Services;
 using Integration.Aws.Sqs;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -28,7 +30,8 @@ public static class DependencyInjection
         {
             builder.Services.AddFeatureManagement();
 
-            return builder.AddApplicationServicesServices()
+            return builder
+                .AddApplicationServicesServices()
                 .AddShopifyWebhooks()
                 .AddMessageBus()
                 .AddScheduledJobs();
@@ -36,8 +39,14 @@ public static class DependencyInjection
 
         private T AddShopifyWebhooks()
         {
-            builder.Services.AddTransient<IShopifyWebhookHandler, ShopifyProductUpdateWebhookHandler>();
-            builder.Services.AddTransient<IShopifyWebhookHandler, ShopifyProductCreateWebhookHandler>();
+            builder.Services.AddTransient<
+                IShopifyWebhookHandler,
+                ShopifyProductUpdateWebhookHandler
+            >();
+            builder.Services.AddTransient<
+                IShopifyWebhookHandler,
+                ShopifyProductCreateWebhookHandler
+            >();
 
             return builder;
         }
@@ -45,6 +54,7 @@ public static class DependencyInjection
         private T AddApplicationServicesServices()
         {
             builder.Services.AddTransient<IProductsService, ProductsService>();
+            builder.Services.AddTransient<ISkulabsItemSyncService, SkulabsItemSyncService>();
 
             return builder;
         }
@@ -53,7 +63,11 @@ public static class DependencyInjection
         {
             builder.Services.AddSlimMessageBus(busBuilder =>
             {
-                busBuilder.WithProviderMemory(config => { config.EnableBlockingPublish = false; })
+                busBuilder
+                    .WithProviderMemory(config =>
+                    {
+                        config.EnableBlockingPublish = false;
+                    })
                     .AutoDeclareFrom(Assembly.GetExecutingAssembly());
             });
 
@@ -62,23 +76,30 @@ public static class DependencyInjection
 
         private T AddScheduledJobs()
         {
-            builder.AddOptionsFromConfiguration<ScheduledJobsOptions>(ScheduledJobsOptions.SectionKey);
-            var scheduledJobsOptions =
-                builder.GetRequiredConfigValue<ScheduledJobsOptions>(ScheduledJobsOptions.SectionKey);
-
-            builder.Services.AddSingleton<MutexGroupRegistry>();
-            builder.Services.AddSingleton<MutexGroupListener>();
+            builder.AddOptionsFromConfiguration<ScheduledJobsOptions>(
+                ScheduledJobsOptions.SectionKey
+            );
+            var scheduledJobsOptions = builder.GetRequiredConfigValue<ScheduledJobsOptions>(
+                ScheduledJobsOptions.SectionKey
+            );
 
             builder.Services.AddQuartz(quartz =>
             {
-                //quartz.AddTriggerListener<MutexGroupListener>(GroupMatcher<TriggerKey>.AnyGroup());
-                //quartz.AddJobListener<MutexGroupListener>(GroupMatcher<JobKey>.AnyGroup());
+                quartz.AddScheduledJob<ShopifyProductSyncJob>(
+                    ShopifyProductSyncJob.Key,
+                    scheduledJobsOptions.ShopifyProductSync
+                );
 
-                quartz.AddScheduledJob<ShopifyProductSyncJob>(ShopifyProductSyncJob.Key,
-                    scheduledJobsOptions.ShopifyProductSync);
+                quartz.AddScheduledJob<SkulabsItemSyncJob>(
+                    SkulabsItemSyncJob.Key,
+                    scheduledJobsOptions.SkulabsItemSync
+                );
             });
 
-            builder.Services.AddQuartzHostedService(options => { options.WaitForJobsToComplete = true; });
+            builder.Services.AddQuartzHostedService(options =>
+            {
+                options.WaitForJobsToComplete = true;
+            });
 
             return builder;
         }

@@ -12,10 +12,10 @@ namespace Application.Products.Jobs;
 /// than the configured cron interval.
 /// </summary>
 [DisallowConcurrentExecution]
-[MutexGroup("shopify-sync")]
 public class ShopifyProductSyncJob(
     IProductsService productsService,
-    ILogger<ShopifyProductSyncJob> logger) : IJob
+    ILogger<ShopifyProductSyncJob> logger
+) : IJob
 {
     /// <summary>
     /// The stable Quartz job key used to identify and reference this job when registering
@@ -31,13 +31,13 @@ public class ShopifyProductSyncJob(
     /// <param name="context">The Quartz execution context providing trigger and timing metadata.</param>
     public async Task Execute(IJobExecutionContext context)
     {
-        
         logger.LogInformation("ShopifySyncJob started.");
         logger.LogDebug(
             "Triggered by '{TriggerKey}'. Scheduled fire time: {ScheduledFireTime}. Actual fire time: {FireTime}.",
             context.Trigger.Key,
             context.ScheduledFireTimeUtc?.ToString("o") ?? "N/A",
-            context.FireTimeUtc.ToString("o"));
+            context.FireTimeUtc.ToString("o")
+        );
 
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         try
@@ -48,25 +48,33 @@ public class ShopifyProductSyncJob(
             {
                 await productsService.DeduplicateProducts();
             }
-            
+
             stopwatch.Stop();
 
             if (!importResult.IsSuccess)
             {
-                logger.LogError("Shopify product import failed with error: {ErrorMessage}", importResult.Error);
+                logger.LogError(
+                    "Shopify product import failed with error: {ErrorMessage}",
+                    importResult.Error
+                );
                 return;
             }
-            
+
             logger.LogInformation("ShopifySyncJob completed successfully.");
             logger.LogDebug(
                 "Job finished in {ElapsedMs}ms. Next scheduled fire time: {NextFireTime}.",
                 stopwatch.ElapsedMilliseconds,
-                context.NextFireTimeUtc?.ToString("o") ?? "none");
+                context.NextFireTimeUtc?.ToString("o") ?? "none"
+            );
         }
         catch (Exception ex)
         {
             stopwatch.Stop();
-            logger.LogError(ex, "ShopifySyncJob failed after {ElapsedMs}ms.", stopwatch.ElapsedMilliseconds);
+            logger.LogError(
+                ex,
+                "ShopifySyncJob failed after {ElapsedMs}ms.",
+                stopwatch.ElapsedMilliseconds
+            );
             throw new JobExecutionException(ex, refireImmediately: false);
         }
     }

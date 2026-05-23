@@ -36,4 +36,16 @@ internal static class VariantLogMessages
     /// <param name="newBarcode">The replacement barcode value.</param>
     public static string BarcodeUpdated(string oldBarcode, string newBarcode) =>
         $"Barcode changed from '{oldBarcode}' to '{newBarcode}'.";
+
+    /// <summary>Returns a message indicating that a SkuLabs item was newly linked to this variant.</summary>
+    /// <param name="skulabsItemId">The SkuLabs source item id of the newly linked item.</param>
+    public static string SkulabsLinked(string skulabsItemId) =>
+        $"Linked to SkuLabs item '{skulabsItemId}'.";
+
+    /// <summary>Returns a message indicating that the SkuLabs item previously linked to this
+    /// variant is no longer linked (either because it moved to a different variant or because a
+    /// different SkuLabs item now claims this variant).</summary>
+    /// <param name="skulabsItemId">The SkuLabs source item id that was unlinked.</param>
+    public static string SkulabsUnlinked(string skulabsItemId) =>
+        $"Unlinked from SkuLabs item '{skulabsItemId}'.";
 }

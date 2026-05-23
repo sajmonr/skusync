@@ -66,6 +66,13 @@ public class E2EWebApplicationFactory : WebApplicationFactory<Program>, IAsyncLi
         SetEnv("ScheduledJobs__ShopifyProductSync__Enabled", "false");
         SetEnv("ScheduledJobs__ShopifyProductSync__RunOnStart", "false");
         SetEnv("ScheduledJobs__ShopifyProductSync__CronExpression", "0 0 0 * * ?");
+        // Keep the SkulabsItemSync job *enabled* so its type lands in DI (AddScheduledJob skips
+        // registration entirely when Enabled=false). RunOnStart is disabled and the cron is set
+        // to a far-future time so no triggers fire — and the Quartz hosted service is removed
+        // below anyway. Tests resolve the job from DI and execute it directly.
+        SetEnv("ScheduledJobs__SkulabsItemSync__Enabled", "true");
+        SetEnv("ScheduledJobs__SkulabsItemSync__RunOnStart", "false");
+        SetEnv("ScheduledJobs__SkulabsItemSync__CronExpression", "0 0 0 * * ?");
 
         // Force the host to build now so DI overrides apply and migrations run against the container.
         _ = Services;
@@ -124,6 +131,7 @@ public class E2EWebApplicationFactory : WebApplicationFactory<Program>, IAsyncLi
     {
         using var scope = Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        await db.SkulabsItems.ExecuteDeleteAsync();
         await db.ShopifyProductVariantLogEvents.ExecuteDeleteAsync();
         await db.ShopifyProductVariants.ExecuteDeleteAsync();
 

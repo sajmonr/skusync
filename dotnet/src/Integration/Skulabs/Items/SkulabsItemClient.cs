@@ -7,11 +7,22 @@ using Microsoft.Extensions.Options;
 namespace Integration.Skulabs.Items;
 
 /// <summary>
+/// Abstraction over the SkuLabs Items API client to enable substitution in tests.
+/// </summary>
+public interface ISkulabsItemClient
+{
+    /// <summary>
+    /// Fetches all SkuLabs inventory items that have exactly one Shopify channel listing.
+    /// </summary>
+    Task<SkuLabsItem[]> GetAllItems();
+}
+
+/// <summary>
 /// HTTP client for the SkuLabs Items API. Retrieves inventory items along with their
 /// Shopify listing associations. Base URL and API key are configured from
 /// <see cref="SkulabsApiOptions"/>.
 /// </summary>
-public class SkulabsItemClient
+public class SkulabsItemClient : ISkulabsItemClient
 {
     private readonly HttpClient _client;
     private readonly ILogger<SkulabsItemClient> _logger;
