@@ -5,6 +5,7 @@ using Infrastructure.Database.Entities;
 using Integration.Aws.Sqs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.FeatureManagement;
 using SlimMessageBus;
 
 namespace Application.Products.Webhook;
@@ -17,7 +18,8 @@ namespace Application.Products.Webhook;
 public class ShopifyProductCreateWebhookHandler(
     ApplicationDbContext dbContext,
     ILogger<ShopifyProductUpdateWebhookHandler> logger,
-    IMessageBus messageBus)
+    IMessageBus messageBus,
+    IFeatureManager featureManager)
     : ShopifyWebhookBase, IShopifyWebhookHandler
 {
 
@@ -31,6 +33,14 @@ public class ShopifyProductCreateWebhookHandler(
     /// <param name="product">The product payload from the <c>products/create</c> webhook.</param>
     public async Task Handle(SqsShopEventProduct product)
     {
+        if (!await featureManager.IsEnabledAsync(FeatureFlags.ShopifySyncEnabled))
+        {
+            logger.LogDebug(
+                "{Flag} is disabled. Ignoring products/create webhook for product {ProductId}.",
+                FeatureFlags.ShopifySyncEnabled, product.Id);
+            return;
+        }
+
         // Shopify can redeliver products/create webhooks (e.g. retries, replays) and the second
         // delivery may carry a different variant set. Skip variants we already track so we don't
         // violate the unique GlobalVariantId index, but still persist any genuinely new ones.

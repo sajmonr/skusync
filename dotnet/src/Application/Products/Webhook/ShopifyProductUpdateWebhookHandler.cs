@@ -5,6 +5,7 @@ using Infrastructure.Database.Entities;
 using Integration.Aws.Sqs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.FeatureManagement;
 using SlimMessageBus;
 
 namespace Application.Products.Webhook;
@@ -18,7 +19,8 @@ namespace Application.Products.Webhook;
 public class ShopifyProductUpdateWebhookHandler(
     ApplicationDbContext dbContext,
     ILogger<ShopifyProductUpdateWebhookHandler> logger,
-    IMessageBus messageBus)
+    IMessageBus messageBus,
+    IFeatureManager featureManager)
     : ShopifyWebhookBase, IShopifyWebhookHandler
 {
     /// <inheritdoc/>
@@ -31,6 +33,14 @@ public class ShopifyProductUpdateWebhookHandler(
     /// <param name="product">The product payload from the <c>products/update</c> webhook.</param>
     public async Task Handle(SqsShopEventProduct product)
     {
+        if (!await featureManager.IsEnabledAsync(FeatureFlags.ShopifySyncEnabled))
+        {
+            logger.LogDebug(
+                "{Flag} is disabled. Ignoring products/update webhook for product {ProductId}.",
+                FeatureFlags.ShopifySyncEnabled, product.Id);
+            return;
+        }
+
         var existingVariants = await dbContext.ShopifyProductVariants.Where(variant => variant.ProductId == product.Id)
             .ToArrayAsync();
 

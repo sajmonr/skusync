@@ -1,3 +1,4 @@
+using Application;
 using Application.Products.Events;
 using Application.Products.Webhook;
 using Infrastructure.Database;
@@ -5,6 +6,7 @@ using Infrastructure.Database.Entities;
 using Integration.Aws.Sqs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.FeatureManagement;
 using NSubstitute;
 using Shouldly;
 using SlimMessageBus;
@@ -14,6 +16,7 @@ namespace Tests.Application.Queue;
 public class ShopifyProductCreateWebhookHandlerTests : IDisposable
 {
     private readonly IMessageBus _messageBus = Substitute.For<IMessageBus>();
+    private readonly IFeatureManager _featureManager = Substitute.For<IFeatureManager>();
     private readonly ApplicationDbContext _dbContext;
     private readonly TestLogger<ShopifyProductUpdateWebhookHandler> _logger = new();
 
@@ -24,6 +27,9 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
             .Options;
 
         _dbContext = new ApplicationDbContext(options);
+
+        // Default to enabled for existing behavioural tests. Override per-test if needed.
+        _featureManager.IsEnabledAsync(FeatureFlags.ShopifySyncEnabled).Returns(true);
     }
 
     public void Dispose() => _dbContext.Dispose();
@@ -187,11 +193,30 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
     }
 
     // -------------------------------------------------------------------------
+    // Feature flag
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task Handle_ShouldDoNothing_WhenShopifySyncFeatureFlagIsDisabled()
+    {
+        _featureManager.IsEnabledAsync(FeatureFlags.ShopifySyncEnabled).Returns(false);
+        var product = CreateProduct("gid://shopify/Product/100", 100,
+            CreateVariant("gid://shopify/ProductVariant/200", 200, "T-Shirt - Large"));
+
+        await CreateSut().Handle(product);
+
+        (await _dbContext.ShopifyProductVariants.CountAsync()).ShouldBe(0);
+        await _messageBus.DidNotReceive().Publish(
+            Arg.Any<ProductVariantCreatedEvent>(),
+            Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 
     private ShopifyProductCreateWebhookHandler CreateSut() =>
-        new(_dbContext, _logger, _messageBus);
+        new(_dbContext, _logger, _messageBus, _featureManager);
 
     private void SeedVariant(long productId, long variantId)
     {

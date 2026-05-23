@@ -1,3 +1,4 @@
+using Application;
 using Application.Products.Events;
 using Application.Products.Webhook;
 using Infrastructure.Database;
@@ -5,6 +6,7 @@ using Infrastructure.Database.Entities;
 using Integration.Aws.Sqs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.FeatureManagement;
 using NSubstitute;
 using Shouldly;
 using SlimMessageBus;
@@ -14,6 +16,7 @@ namespace Tests.Application.Queue;
 public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
 {
     private readonly IMessageBus _messageBus = Substitute.For<IMessageBus>();
+    private readonly IFeatureManager _featureManager = Substitute.For<IFeatureManager>();
     private readonly ApplicationDbContext _dbContext;
     private readonly TestLogger<ShopifyProductUpdateWebhookHandler> _logger = new();
 
@@ -24,6 +27,9 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
             .Options;
 
         _dbContext = new ApplicationDbContext(options);
+
+        // Default to enabled for existing behavioural tests. Override per-test if needed.
+        _featureManager.IsEnabledAsync(FeatureFlags.ShopifySyncEnabled).Returns(true);
     }
 
     public void Dispose() => _dbContext.Dispose();
@@ -213,11 +219,28 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
     }
 
     // -------------------------------------------------------------------------
+    // Feature flag
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task Handle_ShouldDoNothing_WhenShopifySyncFeatureFlagIsDisabled()
+    {
+        _featureManager.IsEnabledAsync(FeatureFlags.ShopifySyncEnabled).Returns(false);
+        var product = CreateProduct(100,
+            CreateVariant(200, variantTitle: "Large", sku: "SKU-A", barcode: "BAR-A"));
+
+        await CreateSut().Handle(product);
+
+        (await _dbContext.ShopifyProductVariants.CountAsync()).ShouldBe(0);
+        await AssertNoEventsPublished();
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 
     private ShopifyProductUpdateWebhookHandler CreateSut() =>
-        new(_dbContext, _logger, _messageBus);
+        new(_dbContext, _logger, _messageBus, _featureManager);
 
     private async Task AssertNoEventsPublished()
     {

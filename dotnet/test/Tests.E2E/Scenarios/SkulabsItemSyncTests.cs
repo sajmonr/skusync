@@ -5,6 +5,7 @@ using Infrastructure.Database.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.FeatureManagement;
 using NSubstitute;
 using Quartz;
 using Shouldly;
@@ -142,8 +143,9 @@ public class SkulabsItemSyncTests(E2EWebApplicationFactory factory) : IAsyncLife
         using var scope = factory.Services.CreateScope();
         var syncService = scope.ServiceProvider.GetRequiredService<ISkulabsItemSyncService>();
         var messageBus = scope.ServiceProvider.GetRequiredService<IMessageBus>();
+        var featureManager = scope.ServiceProvider.GetRequiredService<IFeatureManager>();
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<SkulabsItemSyncJob>>();
-        var job = new SkulabsItemSyncJob(syncService, messageBus, logger);
+        var job = new SkulabsItemSyncJob(syncService, messageBus, featureManager, logger);
 
         var context = Substitute.For<IJobExecutionContext>();
         var trigger = Substitute.For<ITrigger>();

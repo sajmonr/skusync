@@ -2,6 +2,7 @@ using Application.Jobs;
 using Application.Products.Events;
 using Application.Skulabs.Services;
 using Microsoft.Extensions.Logging;
+using Microsoft.FeatureManagement;
 using Quartz;
 using SlimMessageBus;
 
@@ -16,6 +17,7 @@ namespace Application.Skulabs.Jobs;
 public class SkulabsItemSyncJob(
     ISkulabsItemSyncService syncService,
     IMessageBus messageBus,
+    IFeatureManager featureManager,
     ILogger<SkulabsItemSyncJob> logger
 ) : IJob
 {
@@ -23,6 +25,14 @@ public class SkulabsItemSyncJob(
 
     public async Task Execute(IJobExecutionContext context)
     {
+        if (!await featureManager.IsEnabledAsync(FeatureFlags.SkulabsSyncEnabled))
+        {
+            logger.LogDebug(
+                "{Flag} is disabled. SkulabsItemSyncJob fired but is doing nothing.",
+                FeatureFlags.SkulabsSyncEnabled);
+            return;
+        }
+
         logger.LogInformation("SkulabsItemSyncJob started.");
         logger.LogDebug(
             "Triggered by '{TriggerKey}'. Scheduled fire time: {ScheduledFireTime}. Actual fire time: {FireTime}.",

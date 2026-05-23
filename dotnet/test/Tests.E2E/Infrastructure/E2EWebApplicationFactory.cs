@@ -63,6 +63,8 @@ public class E2EWebApplicationFactory : WebApplicationFactory<Program>, IAsyncLi
         SetEnv("Aws__Auth__Region", "us-east-1");
         SetEnv("Aws__Sqs__QueueUrl", "https://localhost/test-queue");
         SetEnv("FeatureManagement__ShopifyWriteBack", "true");
+        SetEnv("FeatureManagement__ShopifySyncEnabled", "true");
+        SetEnv("FeatureManagement__SkulabsSyncEnabled", "true");
         SetEnv("ScheduledJobs__ShopifyProductSync__Enabled", "false");
         SetEnv("ScheduledJobs__ShopifyProductSync__RunOnStart", "false");
         SetEnv("ScheduledJobs__ShopifyProductSync__CronExpression", "0 0 0 * * ?");

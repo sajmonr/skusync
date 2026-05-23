@@ -1,7 +1,9 @@
+using Application;
 using Application.Products.Events;
 using Application.Skulabs.Jobs;
 using Application.Skulabs.Services;
 using Microsoft.Extensions.Logging;
+using Microsoft.FeatureManagement;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Quartz;
@@ -14,8 +16,15 @@ public class SkulabsItemSyncJobTests
 {
     private readonly ISkulabsItemSyncService _syncService = Substitute.For<ISkulabsItemSyncService>();
     private readonly IMessageBus _messageBus = Substitute.For<IMessageBus>();
+    private readonly IFeatureManager _featureManager = Substitute.For<IFeatureManager>();
     private readonly IJobExecutionContext _context = Substitute.For<IJobExecutionContext>();
     private readonly TestLogger<SkulabsItemSyncJob> _logger = new();
+
+    public SkulabsItemSyncJobTests()
+    {
+        // Default to enabled for existing behavioural tests. Disabled-path is asserted separately.
+        _featureManager.IsEnabledAsync(FeatureFlags.SkulabsSyncEnabled).Returns(true);
+    }
 
     [Fact]
     public async Task Execute_ShouldCallSyncService()
@@ -86,7 +95,21 @@ public class SkulabsItemSyncJobTests
             Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
     }
 
-    private SkulabsItemSyncJob CreateSut() => new(_syncService, _messageBus, _logger);
+    [Fact]
+    public async Task Execute_ShouldDoNothing_WhenSkulabsSyncFeatureFlagIsDisabled()
+    {
+        _featureManager.IsEnabledAsync(FeatureFlags.SkulabsSyncEnabled).Returns(false);
+        var sut = CreateSut();
+
+        await sut.Execute(_context);
+
+        await _syncService.DidNotReceive().Sync(Arg.Any<CancellationToken>());
+        await _messageBus.DidNotReceive().Publish(
+            Arg.Any<SkulabsProductImportedEvent>(),
+            Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
+    }
+
+    private SkulabsItemSyncJob CreateSut() => new(_syncService, _messageBus, _featureManager, _logger);
 
     private sealed class TestLogger<T> : ILogger<T>
     {
