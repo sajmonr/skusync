@@ -10,6 +10,7 @@
         <PackageReference Include="AWS.Messaging" />
         <PackageReference Include="AWSSDK.Extensions.NETCore.Setup" />
         <PackageReference Include="Microsoft.Extensions.Http" />
+        <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
         <PackageReference Include="ShopifySharp" />
         <PackageReference Include="ShopifySharp.Extensions.DependencyInjection" />
     </ItemGroup>

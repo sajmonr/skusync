@@ -46,6 +46,14 @@ public class SkulabsItemSyncJob(
         {
             var result = await syncService.Sync(context.CancellationToken);
 
+            var affectedCount = result.CreatedSkulabsItemIds.Count + result.UpdatedSkulabsItemIds.Count;
+            if (affectedCount > 0)
+            {
+                logger.LogDebug(
+                    "Publishing {Count} SkulabsProductImported event(s) ({Created} created + {Updated} re-linked).",
+                    affectedCount, result.CreatedSkulabsItemIds.Count, result.UpdatedSkulabsItemIds.Count);
+            }
+
             var affected = result.CreatedSkulabsItemIds.Concat(result.UpdatedSkulabsItemIds);
             await messageBus.PublishBatch(
                 affected.Select(id => new SkulabsProductImportedEvent(id))
@@ -53,10 +61,12 @@ public class SkulabsItemSyncJob(
 
             stopwatch.Stop();
             logger.LogInformation(
-                "SkulabsItemSyncJob completed successfully in {ElapsedMs}ms. Created: {Created}, Updated: {Updated}.",
+                "SkulabsItemSyncJob completed in {ElapsedMs}ms. Created: {Created}, Re-linked: {Updated}, Unmatched: {Unmatched}, Skipped: {Skipped}.",
                 stopwatch.ElapsedMilliseconds,
                 result.CreatedSkulabsItemIds.Count,
-                result.UpdatedSkulabsItemIds.Count
+                result.UpdatedSkulabsItemIds.Count,
+                result.UnmatchedCount,
+                result.SkippedCount
             );
         }
         catch (Exception exception)

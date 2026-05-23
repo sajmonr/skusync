@@ -61,7 +61,28 @@ public class SkulabsItemClient : ISkulabsItemClient
                 $"{Uri.EscapeDataString(kvp.Key)}={Uri.EscapeDataString(kvp.Value)}"
             )
         );
-        var response = await _client.GetAsync($"item/get?{queryString}");
+        var requestPath = $"item/get?{queryString}";
+        _logger.LogDebug("Requesting all items from SkuLabs at {RequestPath}.", requestPath);
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var response = await _client.GetAsync(requestPath);
+        stopwatch.Stop();
+
+        if (!response.IsSuccessStatusCode)
+        {
+            // The resilience handler has already exhausted retries on transient failures, so
+            // anything that reaches here is either a permanent 4xx or a sustained 5xx. Log the
+            // status before EnsureSuccessStatusCode throws so the exception in the upstream
+            // catch has context (HttpRequestException's message alone hides which call failed).
+            _logger.LogError(
+                "SkuLabs items request to {RequestPath} failed with status {StatusCode} after {ElapsedMs}ms.",
+                requestPath, (int)response.StatusCode, stopwatch.ElapsedMilliseconds);
+        }
+        else
+        {
+            _logger.LogDebug(
+                "SkuLabs items request completed with status {StatusCode} in {ElapsedMs}ms.",
+                (int)response.StatusCode, stopwatch.ElapsedMilliseconds);
+        }
 
         response.EnsureSuccessStatusCode();
 
@@ -87,6 +108,10 @@ public class SkulabsItemClient : ISkulabsItemClient
                     .Select(SkuLabsItem.FromResponse)
                     .ToArray()
                 ?? [];
+
+            _logger.LogInformation(
+                "SkuLabs returned {RawCount} item(s); {Usable} usable (single Shopify listing), {Filtered} filtered out.",
+                content.Length, finalItems.Length, content.Length - finalItems.Length);
 
             return finalItems;
         }

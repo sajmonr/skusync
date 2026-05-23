@@ -21,16 +21,22 @@ public class SkulabsItemSyncService(
 {
     public async Task<SkulabsItemSyncResult> Sync(CancellationToken cancellationToken = default)
     {
+        logger.LogDebug("Starting SkuLabs item sync.");
+
         var apiItems = await skulabsClient.GetAllItems();
-        logger.LogDebug("Fetched {Count} item(s) from SkuLabs.", apiItems.Length);
+        logger.LogDebug("Reconciler received {Count} usable item(s) from the SkuLabs client.", apiItems.Length);
 
         if (apiItems.Length == 0)
         {
+            logger.LogInformation("SkuLabs returned no usable items. Sync finished with nothing to do.");
             return SkulabsItemSyncResult.Empty;
         }
 
         var variantLookup = await LoadVariantLookupAsync(cancellationToken);
         var indexes = await LoadExistingItemIndexesAsync(cancellationToken);
+        logger.LogDebug(
+            "Loaded {VariantCount} Shopify variant(s) and {ExistingItemCount} existing SkuLabs item(s) from the database.",
+            variantLookup.Count, indexes.Count);
 
         var accumulator = new ReconciliationAccumulator();
         foreach (var apiItem in apiItems)
@@ -38,7 +44,24 @@ public class SkulabsItemSyncService(
             ReconcileItem(apiItem, variantLookup, indexes, accumulator);
         }
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+        logger.LogDebug(
+            "Reconciliation done. About to persist — Created: {Created}, Re-linked: {Relinked}, Severed: {Severed}, Unmatched: {Unmatched}, Skipped: {Skipped}.",
+            accumulator.Created.Count, accumulator.Updated.Count, accumulator.Severed,
+            accumulator.Unmatched, accumulator.Skipped);
+
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            // Re-throw — the job catches at the top — but attach the planned change counts so
+            // the eventual error log explains *what* was being saved when it failed.
+            logger.LogError(exception,
+                "SaveChanges failed mid-sync. Planned writes — Created: {Created}, Re-linked: {Relinked}, Severed: {Severed}.",
+                accumulator.Created.Count, accumulator.Updated.Count, accumulator.Severed);
+            throw;
+        }
 
         logger.LogInformation(
             "SkuLabs item sync finished. Created: {Created}, Re-linked: {Relinked}, Severed: {Severed}, Unmatched: {Unmatched}, Skipped: {Skipped}.",
@@ -155,6 +178,11 @@ public class SkulabsItemSyncService(
 
         if (!variantLookup.TryGetValue(numericVariantId, out variantGuid))
         {
+            // Per-item Debug level only — at 2000+ items this would otherwise drown info logs.
+            // Aggregate "Unmatched: N" appears in the summary at Information level.
+            logger.LogDebug(
+                "SkuLabs item {SkulabsItemId} references Shopify variant id {VariantId} which is not in the database. Skipping.",
+                apiItem.SkulabsItemId, numericVariantId);
             reason = NonMatchReason.Unmatched;
             return false;
         }
@@ -186,6 +214,9 @@ public class SkulabsItemSyncService(
         indexes.Add(entity);
         AddVariantLog(variantGuid, VariantLogMessages.SkulabsLinked(apiItem.SkulabsItemId));
         accumulator.Created.Add(entity.SkulabsItemId);
+        logger.LogDebug(
+            "Creating link: variant {VariantGuid} ↔ SkuLabs item {SkulabsItemId}.",
+            variantGuid, apiItem.SkulabsItemId);
     }
 
     /// <summary>
@@ -213,6 +244,9 @@ public class SkulabsItemSyncService(
         AddVariantLog(oldVariantGuid, VariantLogMessages.SkulabsUnlinked(apiItem.SkulabsItemId));
         AddVariantLog(newVariantGuid, VariantLogMessages.SkulabsLinked(apiItem.SkulabsItemId));
         accumulator.Updated.Add(entity.SkulabsItemId);
+        logger.LogDebug(
+            "Re-linking SkuLabs item {SkulabsItemId}: variant {OldVariantGuid} → {NewVariantGuid}.",
+            apiItem.SkulabsItemId, oldVariantGuid, newVariantGuid);
     }
 
     /// <summary>
@@ -230,6 +264,9 @@ public class SkulabsItemSyncService(
         indexes.Remove(entity);
         AddVariantLog(variantGuid, VariantLogMessages.SkulabsUnlinked(skulabsItemId));
         accumulator.Severed++;
+        logger.LogDebug(
+            "Severing link: variant {VariantGuid} ↮ SkuLabs item {SkulabsItemId}.",
+            variantGuid, skulabsItemId);
     }
 
     private void AddVariantLog(Guid variantGuid, string message)
@@ -278,6 +315,9 @@ public class SkulabsItemSyncService(
     {
         private readonly Dictionary<string, SkulabsItemEntity> _byItemId = new(StringComparer.Ordinal);
         private readonly Dictionary<Guid, SkulabsItemEntity> _byVariantGuid = new();
+
+        /// <summary>Number of distinct SkuLabs items currently indexed.</summary>
+        public int Count => _byItemId.Count;
 
         public void Add(SkulabsItemEntity entity)
         {
