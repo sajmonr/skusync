@@ -30,8 +30,7 @@ namespace Tests.E2E.Infrastructure;
 /// </remarks>
 public class E2EWebApplicationFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
-        .WithImage("postgres:18.3")
+    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:18.3")
         .Build();
 
     /// <summary>Local WireMock server for outbound HTTP we own (Skulabs). Started per-fixture.</summary>
