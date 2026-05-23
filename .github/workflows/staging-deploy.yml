@@ -33,7 +33,7 @@ jobs:
         run: dotnet restore SkuSync.slnx
 
       - name: Build solution
-        run: dotnet build SkuSync.slnx --no-restore --configuration Release
+        run: dotnet build SkuSync.slnx --no-restore --configuration Release --warnaserror
 
       - name: Run unit tests
         run: |
