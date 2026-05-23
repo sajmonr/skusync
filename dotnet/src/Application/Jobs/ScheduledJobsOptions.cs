@@ -19,13 +19,6 @@ public class ScheduledJobsOptions
     public JobScheduleOptions ShopifyProductSync { get; init; } = JobScheduleOptions.Disabled;
 
     /// <summary>
-    /// Gets the schedule configuration for the product change event processor job.
-    /// Defaults to every 5 minutes (<c>0 0/5 * * * ?</c>).
-    /// </summary>
-    [Required]
-    public JobScheduleOptions ProductEventProcessor { get; init; } = JobScheduleOptions.Disabled;
-
-    /// <summary>
     /// Gets the schedule configuration for the SkuLabs item synchronization job.
     /// Defaults to every 10 minutes with an immediate run on startup.
     /// </summary>
