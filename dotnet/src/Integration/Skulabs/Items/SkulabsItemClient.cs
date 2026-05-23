@@ -75,13 +75,18 @@ public class SkulabsItemClient : ISkulabsItemClient
             // catch has context (HttpRequestException's message alone hides which call failed).
             _logger.LogError(
                 "SkuLabs items request to {RequestPath} failed with status {StatusCode} after {ElapsedMs}ms.",
-                requestPath, (int)response.StatusCode, stopwatch.ElapsedMilliseconds);
+                requestPath,
+                (int)response.StatusCode,
+                stopwatch.ElapsedMilliseconds
+            );
         }
         else
         {
             _logger.LogDebug(
                 "SkuLabs items request completed with status {StatusCode} in {ElapsedMs}ms.",
-                (int)response.StatusCode, stopwatch.ElapsedMilliseconds);
+                (int)response.StatusCode,
+                stopwatch.ElapsedMilliseconds
+            );
         }
 
         response.EnsureSuccessStatusCode();
@@ -104,14 +109,17 @@ public class SkulabsItemClient : ISkulabsItemClient
 
             var finalItems =
                 content
-                    ?.Where(item => item.Listings.Length == 1)
+                    .Where(item => item.Listings.Length == 1)
                     .Select(SkuLabsItem.FromResponse)
                     .ToArray()
                 ?? [];
 
             _logger.LogInformation(
                 "SkuLabs returned {RawCount} item(s); {Usable} usable (single Shopify listing), {Filtered} filtered out.",
-                content.Length, finalItems.Length, content.Length - finalItems.Length);
+                content.Length,
+                finalItems.Length,
+                content.Length - finalItems.Length
+            );
 
             return finalItems;
         }
