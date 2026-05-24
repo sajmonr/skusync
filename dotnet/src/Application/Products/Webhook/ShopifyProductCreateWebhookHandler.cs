@@ -1,5 +1,6 @@
 using Application.Products.Events;
 using Application.Products.Services;
+using Application.Skus;
 using Infrastructure.Database;
 using Infrastructure.Database.Entities;
 using Integration.Aws.Sqs;
@@ -19,7 +20,8 @@ public class ShopifyProductCreateWebhookHandler(
     ApplicationDbContext dbContext,
     ILogger<ShopifyProductUpdateWebhookHandler> logger,
     IMessageBus messageBus,
-    IFeatureManager featureManager)
+    IFeatureManager featureManager,
+    ISkuGenerator skuGenerator)
     : ShopifyWebhookBase, IShopifyWebhookHandler
 {
 
@@ -50,6 +52,9 @@ public class ShopifyProductCreateWebhookHandler(
             .ToHashSetAsync();
 
         var entities = new List<ShopifyProductVariantEntity>();
+        // Track SKUs assigned within this batch so two new variants of the same product
+        // can't be issued the same generated SKU before they hit the database.
+        var reservedSkus = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var variant in product.Variants)
         {
@@ -65,11 +70,23 @@ public class ShopifyProductCreateWebhookHandler(
                 "New variant {VariantId} [{VariantTitle}] for product {ProductId} found.",
                 variant.Id, variant.Title, product.Id);
 
-            var newEntity = ConstructEntity(product, variant);
+            var generatedSku = await skuGenerator.Generate(
+                product.Title, variant.Title, reservedSkus);
+            reservedSkus.Add(generatedSku);
+
+            logger.LogInformation(
+                "Assigning generated SKU '{Sku}' to variant {VariantId} of product {ProductId}.",
+                generatedSku, variant.Id, product.Id);
+
+            var newEntity = ConstructEntity(product, variant, generatedSku);
 
             newEntity.LogEvents.Add(new ShopifyProductVariantLogEventEntity
             {
                 Message = VariantLogMessages.VariantCreated()
+            });
+            newEntity.LogEvents.Add(new ShopifyProductVariantLogEventEntity
+            {
+                Message = VariantLogMessages.SkuSet(generatedSku)
             });
 
             entities.Add(newEntity);

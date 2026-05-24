@@ -12,7 +12,10 @@ public abstract class ShopifyWebhookBase
     /// </summary>
     private const string DefaultVariantTitle = "Default Title";
 
-    protected static ShopifyProductVariantEntity ConstructEntity(SqsShopEventProduct product, SqsShopEventVariant variant)
+    protected static ShopifyProductVariantEntity ConstructEntity(
+        SqsShopEventProduct product,
+        SqsShopEventVariant variant,
+        string sku)
     {
         return new ShopifyProductVariantEntity
         {
@@ -21,7 +24,7 @@ public abstract class ShopifyWebhookBase
             GlobalVariantId = variant.AdminGraphqlApiId,
             VariantId = variant.Id,
             DisplayName = ResolveDisplayName(product, variant),
-            Sku = variant.Id.ToString(),
+            Sku = sku,
             Barcode = variant.Id.ToString()
         };
     }

@@ -36,8 +36,9 @@ public class ProductUpdateWebhookTests(E2EWebApplicationFactory factory) : IAsyn
         // act
         await factory.DispatchWebhookAsync(envelope);
 
-        // assert — variant persisted with VariantId as initial SKU and Barcode
-        var expectedSku = payload.Variants[0].Id.ToString();
+        // assert — variant persisted with a generated SKU and the variant ID as barcode.
+        // Fixture's product title is "Testprod1" (→ "Tes", casing preserved) and the
+        // variant is the sentinel "Default Title", so the variant segment is omitted.
         var expectedBarcode = payload.Variants[0].Id.ToString();
 
         using var scope = factory.Services.CreateScope();
@@ -46,7 +47,7 @@ public class ProductUpdateWebhookTests(E2EWebApplicationFactory factory) : IAsyn
             .SingleAsync(v => v.VariantId == payload.Variants[0].Id);
         variant.GlobalProductId.ShouldBe(payload.AdminGraphqlApiId);
         variant.GlobalVariantId.ShouldBe(payload.Variants[0].AdminGraphqlApiId);
-        variant.Sku.ShouldBe(expectedSku);
+        variant.Sku.ShouldBe("BW-Tes");
         variant.Barcode.ShouldBe(expectedBarcode);
 
         // assert — ProductVariantCreatedConsumer fired and called the Shopify GraphQL mutation

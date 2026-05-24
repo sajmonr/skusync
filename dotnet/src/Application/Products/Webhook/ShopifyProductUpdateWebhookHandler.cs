@@ -1,5 +1,6 @@
 using Application.Products.Events;
 using Application.Products.Services;
+using Application.Skus;
 using Infrastructure.Database;
 using Infrastructure.Database.Entities;
 using Integration.Aws.Sqs;
@@ -20,7 +21,8 @@ public class ShopifyProductUpdateWebhookHandler(
     ApplicationDbContext dbContext,
     ILogger<ShopifyProductUpdateWebhookHandler> logger,
     IMessageBus messageBus,
-    IFeatureManager featureManager)
+    IFeatureManager featureManager,
+    ISkuGenerator skuGenerator)
     : ShopifyWebhookBase, IShopifyWebhookHandler
 {
     /// <inheritdoc/>
@@ -51,6 +53,9 @@ public class ShopifyProductUpdateWebhookHandler(
         // Collect events before SaveChangesAsync so we only publish for persisted changes.
         var createdEntities = new List<ShopifyProductVariantEntity>();
         var updatedEntities = new List<ShopifyProductVariantEntity>();
+        // Track SKUs assigned within this batch so two new variants of the same product
+        // can't be issued the same generated SKU before they hit the database.
+        var reservedSkus = new HashSet<string>(StringComparer.Ordinal);
 
         // update entities
         foreach (var variant in product.Variants)
@@ -59,11 +64,23 @@ public class ShopifyProductUpdateWebhookHandler(
 
             if (entity is null)
             {
-                var newEntity = ConstructEntity(product, variant);
+                var generatedSku = await skuGenerator.Generate(
+                    product.Title, variant.Title, reservedSkus);
+                reservedSkus.Add(generatedSku);
+
+                logger.LogInformation(
+                    "Assigning generated SKU '{Sku}' to newly-seen variant {VariantId} of product {ProductId}.",
+                    generatedSku, variant.Id, product.Id);
+
+                var newEntity = ConstructEntity(product, variant, generatedSku);
 
                 newEntity.LogEvents.Add(new ShopifyProductVariantLogEventEntity
                 {
                     Message = VariantLogMessages.VariantCreated()
+                });
+                newEntity.LogEvents.Add(new ShopifyProductVariantLogEventEntity
+                {
+                    Message = VariantLogMessages.SkuSet(generatedSku)
                 });
 
                 dbContext.ShopifyProductVariants.Add(newEntity);
