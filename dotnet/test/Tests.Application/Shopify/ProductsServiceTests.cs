@@ -1,5 +1,6 @@
 using Application.Products.Events;
 using Application.Products.Services;
+using Application.Skus;
 using Infrastructure.Database;
 using Infrastructure.Database.Entities;
 using Integration.Shopify.Products;
@@ -16,6 +17,7 @@ public class ProductsServiceTests : IDisposable
 {
     private readonly IShopifyProductService _shopifyProductService = Substitute.For<IShopifyProductService>();
     private readonly IMessageBus _messageBus = Substitute.For<IMessageBus>();
+    private readonly ISkuGenerator _skuGenerator = Substitute.For<ISkuGenerator>();
     private readonly ApplicationDbContext _dbContext;
     private readonly TestLogger<ProductsService> _logger = new();
 
@@ -135,6 +137,115 @@ public class ProductsServiceTests : IDisposable
         var updated = await _dbContext.Set<ShopifyProductVariantEntity>()
             .SingleAsync(v => v.GlobalVariantId == "gid://shopify/ProductVariant/200");
         updated.Sku.ShouldBe("NEW-SKU");
+    }
+
+    [Fact]
+    public async Task ImportProducts_ShouldGenerateSku_WhenShopifyVariantHasNoSku_OnCreate()
+    {
+        _skuGenerator.GenerateAsync(
+                "T-Shirt", "Large",
+                Arg.Any<ISet<string>?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult("BW-TSh-LG"));
+
+        _shopifyProductService.GetProducts().Returns(
+        [
+            new ShopifyProductVariant(
+                "gid://shopify/Product/100",
+                "gid://shopify/ProductVariant/200",
+                "T-Shirt - Large",
+                Sku: "",
+                Barcode: "BAR-1")
+            {
+                ProductTitle = "T-Shirt",
+                VariantTitle = "Large",
+            }
+        ]);
+
+        var sut = CreateSut();
+
+        await sut.ImportProductsFromShopify();
+
+        var saved = await _dbContext.Set<ShopifyProductVariantEntity>()
+            .SingleAsync(v => v.GlobalVariantId == "gid://shopify/ProductVariant/200");
+        saved.Sku.ShouldBe("BW-TSh-LG");
+
+        // SkuSet log event recorded (separate from the VariantCreated event).
+        var logMessages = await _dbContext.ShopifyProductVariantLogEvents
+            .Where(e => e.ShopifyProductVariantId == saved.ShopifyProductVariantId)
+            .Select(e => e.Message)
+            .ToListAsync();
+        logMessages.ShouldContain(msg => msg.Contains("BW-TSh-LG"));
+    }
+
+    [Fact]
+    public async Task ImportProducts_ShouldGenerateSku_WhenBothExistingAndShopifySkusAreEmpty_OnUpdate()
+    {
+        SeedVariant("gid://shopify/ProductVariant/200", displayName: "T-Shirt - Large", sku: "", barcode: "BAR-1");
+        await _dbContext.SaveChangesAsync();
+
+        _skuGenerator.GenerateAsync(
+                "T-Shirt", "Large",
+                Arg.Any<ISet<string>?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult("BW-TSh-LG"));
+
+        _shopifyProductService.GetProducts().Returns(
+        [
+            new ShopifyProductVariant(
+                "gid://shopify/Product/100",
+                "gid://shopify/ProductVariant/200",
+                "T-Shirt - Large",
+                Sku: "",
+                Barcode: "BAR-1")
+            {
+                ProductTitle = "T-Shirt",
+                VariantTitle = "Large",
+            }
+        ]);
+
+        var sut = CreateSut();
+
+        await sut.ImportProductsFromShopify();
+
+        var updated = await _dbContext.Set<ShopifyProductVariantEntity>()
+            .SingleAsync(v => v.GlobalVariantId == "gid://shopify/ProductVariant/200");
+        updated.Sku.ShouldBe("BW-TSh-LG");
+    }
+
+    [Fact]
+    public async Task ImportProducts_ShouldReturnFailure_WhenSkuGeneratorThrows()
+    {
+        _skuGenerator.GenerateAsync(
+                Arg.Any<string>(), Arg.Any<string?>(),
+                Arg.Any<ISet<string>?>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new InvalidOperationException("generator unhappy"));
+
+        _shopifyProductService.GetProducts().Returns(
+        [
+            new ShopifyProductVariant(
+                "gid://shopify/Product/100",
+                "gid://shopify/ProductVariant/200",
+                "T-Shirt - Large",
+                Sku: "",
+                Barcode: "BAR-1")
+            {
+                ProductTitle = "T-Shirt",
+                VariantTitle = "Large",
+            }
+        ]);
+
+        var sut = CreateSut();
+
+        var result = await sut.ImportProductsFromShopify();
+
+        result.IsSuccess.ShouldBeFalse();
+        result.Error.ShouldNotBeNullOrWhiteSpace();
+
+        // Nothing should have been persisted.
+        var saved = await _dbContext.Set<ShopifyProductVariantEntity>().CountAsync();
+        saved.ShouldBe(0);
+
+        // The exception is logged at Error level.
+        _logger.Entries.ShouldContain(e => e.LogLevel == LogLevel.Error);
     }
 
     [Fact]
@@ -686,7 +797,7 @@ public class ProductsServiceTests : IDisposable
         return entity;
     }
 
-    private ProductsService CreateSut() => new(_shopifyProductService, _dbContext, _logger, _messageBus);
+    private ProductsService CreateSut() => new(_shopifyProductService, _dbContext, _logger, _messageBus, _skuGenerator);
 
     private sealed class TestLogger<T> : ILogger<T>
     {

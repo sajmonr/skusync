@@ -1,6 +1,7 @@
 using Application;
 using Application.Products.Events;
 using Application.Products.Webhook;
+using Application.Skus;
 using Infrastructure.Database;
 using Infrastructure.Database.Entities;
 using Integration.Aws.Sqs;
@@ -17,6 +18,7 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
 {
     private readonly IMessageBus _messageBus = Substitute.For<IMessageBus>();
     private readonly IFeatureManager _featureManager = Substitute.For<IFeatureManager>();
+    private readonly ISkuGenerator _skuGenerator = Substitute.For<ISkuGenerator>();
     private readonly ApplicationDbContext _dbContext;
     private readonly TestLogger<ShopifyProductUpdateWebhookHandler> _logger = new();
 
@@ -30,6 +32,11 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
 
         // Default to enabled for existing behavioural tests. Override per-test if needed.
         _featureManager.IsEnabledAsync(FeatureFlags.ShopifySyncEnabled).Returns(true);
+
+        _skuGenerator.GenerateAsync(
+                Arg.Any<string>(), Arg.Any<string?>(),
+                Arg.Any<ISet<string>?>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult($"GEN-{Guid.NewGuid():N}"[..12]));
     }
 
     public void Dispose() => _dbContext.Dispose();
@@ -240,7 +247,7 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
     // -------------------------------------------------------------------------
 
     private ShopifyProductUpdateWebhookHandler CreateSut() =>
-        new(_dbContext, _logger, _messageBus, _featureManager);
+        new(_dbContext, _logger, _messageBus, _featureManager, _skuGenerator);
 
     private async Task AssertNoEventsPublished()
     {

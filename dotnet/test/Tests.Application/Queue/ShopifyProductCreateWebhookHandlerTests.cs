@@ -1,6 +1,7 @@
 using Application;
 using Application.Products.Events;
 using Application.Products.Webhook;
+using Application.Skus;
 using Infrastructure.Database;
 using Infrastructure.Database.Entities;
 using Integration.Aws.Sqs;
@@ -17,6 +18,7 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
 {
     private readonly IMessageBus _messageBus = Substitute.For<IMessageBus>();
     private readonly IFeatureManager _featureManager = Substitute.For<IFeatureManager>();
+    private readonly ISkuGenerator _skuGenerator = Substitute.For<ISkuGenerator>();
     private readonly ApplicationDbContext _dbContext;
     private readonly TestLogger<ShopifyProductUpdateWebhookHandler> _logger = new();
 
@@ -30,6 +32,14 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
 
         // Default to enabled for existing behavioural tests. Override per-test if needed.
         _featureManager.IsEnabledAsync(FeatureFlags.ShopifySyncEnabled).Returns(true);
+
+        // Default generator behaviour: return a unique placeholder per call so existing
+        // tests that just need *a* SKU keep working. Tests exercising the SKU value
+        // directly should override this per-test.
+        _skuGenerator.GenerateAsync(
+                Arg.Any<string>(), Arg.Any<string?>(),
+                Arg.Any<ISet<string>?>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult($"GEN-{Guid.NewGuid():N}"[..12]));
     }
 
     public void Dispose() => _dbContext.Dispose();
@@ -67,16 +77,60 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
     }
 
     [Fact]
-    public async Task Handle_ShouldUseVariantId_AsInitialSkuAndBarcode()
+    public async Task Handle_ShouldUseGeneratedSku_AndVariantIdBarcode()
     {
+        _skuGenerator.GenerateAsync(
+                "T-Shirt", "Large",
+                Arg.Any<ISet<string>?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult("BW-TSh-LG"));
+
         var product = CreateProduct("gid://shopify/Product/100", 100,
-            CreateVariant("gid://shopify/ProductVariant/200", 200, "T-Shirt - Large"));
+            CreateVariant("gid://shopify/ProductVariant/200", 200, "Large"));
 
         await CreateSut().Handle(product);
 
         var entity = await _dbContext.ShopifyProductVariants.SingleAsync();
-        entity.Sku.ShouldBe("200");
+        entity.Sku.ShouldBe("BW-TSh-LG");
         entity.Barcode.ShouldBe("200");
+    }
+
+    [Fact]
+    public async Task Handle_ShouldPassProductTitleAndVariantTitle_ToSkuGenerator()
+    {
+        var product = CreateProduct("gid://shopify/Product/100", 100,
+            CreateVariant("gid://shopify/ProductVariant/200", 200, "Small / Black"));
+
+        await CreateSut().Handle(product);
+
+        await _skuGenerator.Received(1).GenerateAsync(
+            "T-Shirt",
+            "Small / Black",
+            Arg.Any<ISet<string>?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_ShouldShareReservedSkuSet_AcrossVariantsOfSameProduct()
+    {
+        // Snapshot the reserved-set's contents at the moment each call is observed so we
+        // can verify the previous variant's SKU was already in it (i.e. that the same
+        // mutable set is threaded across calls within a single Handle invocation).
+        var snapshots = new List<string[]>();
+        _skuGenerator.GenerateAsync(
+                Arg.Any<string>(), Arg.Any<string?>(),
+                Arg.Do<ISet<string>?>(s => snapshots.Add(s?.ToArray() ?? [])),
+                Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult($"BW-{Guid.NewGuid():N}"[..10]));
+
+        var product = CreateProduct("gid://shopify/Product/100", 100,
+            CreateVariant("gid://shopify/ProductVariant/200", 200, "Small"),
+            CreateVariant("gid://shopify/ProductVariant/201", 201, "Medium"));
+
+        await CreateSut().Handle(product);
+
+        snapshots.Count.ShouldBe(2);
+        snapshots[0].Length.ShouldBe(0);
+        snapshots[1].Length.ShouldBe(1);
     }
 
     [Fact]
@@ -216,7 +270,7 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
     // -------------------------------------------------------------------------
 
     private ShopifyProductCreateWebhookHandler CreateSut() =>
-        new(_dbContext, _logger, _messageBus, _featureManager);
+        new(_dbContext, _logger, _messageBus, _featureManager, _skuGenerator);
 
     private void SeedVariant(long productId, long variantId)
     {

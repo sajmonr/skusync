@@ -5,6 +5,7 @@ using Application.Products.Services;
 using Application.Products.Webhook;
 using Application.Skulabs.Jobs;
 using Application.Skulabs.Services;
+using Application.Skus;
 using Integration.Aws.Sqs;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -29,6 +30,7 @@ public static class DependencyInjection
         public T AddApplication()
         {
             builder.Services.AddFeatureManagement();
+            builder.AddOptionsFromConfiguration<SkuGeneratorOptions>(SkuGeneratorOptions.SectionKey);
 
             return builder
                 .AddApplicationServicesServices()
@@ -55,6 +57,7 @@ public static class DependencyInjection
         {
             builder.Services.AddTransient<IProductsService, ProductsService>();
             builder.Services.AddTransient<ISkulabsItemSyncService, SkulabsItemSyncService>();
+            builder.Services.AddTransient<ISkuGenerator, SkuGenerator>();
 
             return builder;
         }

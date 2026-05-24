@@ -106,7 +106,11 @@ internal class ShopifyProductService(IShopifyGraphQlService graphQlService, ILog
                 variant!.id ?? string.Empty,
                 variant.displayName ?? string.Empty,
                 variant.sku ?? string.Empty,
-                variant.barcode ?? string.Empty));
+                variant.barcode ?? string.Empty)
+            {
+                ProductTitle = product.title ?? string.Empty,
+                VariantTitle = variant.title ?? string.Empty,
+            });
     }
 
     private const string BulkUpdateVariantsQuery = """
@@ -125,6 +129,7 @@ internal class ShopifyProductService(IShopifyGraphQlService graphQlService, ILog
                                                    products(first: 250, after: $after){
                                                        nodes{
                                                            id
+                                                           title
                                                            variants(first: 50){
                                                                nodes{
                                                                    id
