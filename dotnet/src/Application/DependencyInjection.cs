@@ -58,6 +58,7 @@ public static class DependencyInjection
             builder.Services.AddTransient<IProductsService, ProductsService>();
             builder.Services.AddTransient<ISkulabsItemSyncService, SkulabsItemSyncService>();
             builder.Services.AddTransient<ISkuGenerator, SkuGenerator>();
+            builder.Services.AddTransient<IShopifyVariantDriftSyncService, ShopifyVariantDriftSyncService>();
 
             return builder;
         }
@@ -96,6 +97,11 @@ public static class DependencyInjection
                 quartz.AddScheduledJob<SkulabsItemSyncJob>(
                     SkulabsItemSyncJob.Key,
                     scheduledJobsOptions.SkulabsItemSync
+                );
+
+                quartz.AddScheduledJob<ShopifyVariantDriftSyncJob>(
+                    ShopifyVariantDriftSyncJob.Key,
+                    scheduledJobsOptions.ShopifyVariantDriftSync
                 );
             });
 

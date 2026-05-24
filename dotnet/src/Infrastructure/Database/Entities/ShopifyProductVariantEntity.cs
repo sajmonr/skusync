@@ -34,7 +34,18 @@ public class ShopifyProductVariantEntity
     public string Barcode { get; set; } = "";
 
     public string DisplayName { get; set; } = "";
-    
+
+    /// <summary>
+    /// Gets or sets a value indicating whether this variant has been locally corrected to
+    /// match its linked SkuLabs item but the corresponding Shopify mutation hasn't yet
+    /// succeeded — either because the <c>ShopifyWriteBack</c> feature flag was disabled at
+    /// the time of the correction, or because the call was made but Shopify hasn't been
+    /// reconciled with the new values. The periodic drift sync picks up variants in this
+    /// state and pushes their <see cref="Sku"/>/<see cref="Barcode"/> to Shopify, clearing
+    /// the flag on success.
+    /// </summary>
+    public bool PendingShopifySync { get; set; }
+
     /// <summary>Gets or sets the UTC timestamp at which this record was first created.</summary>
     public DateTime CreatedOnUtc { get; set; } = DateTime.UtcNow;
 

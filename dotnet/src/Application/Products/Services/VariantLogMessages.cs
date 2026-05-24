@@ -48,4 +48,18 @@ internal static class VariantLogMessages
     /// <param name="skulabsItemId">The SkuLabs source item id that was unlinked.</param>
     public static string SkulabsUnlinked(string skulabsItemId) =>
         $"Unlinked from SkuLabs item '{skulabsItemId}'.";
+
+    /// <summary>Returns a message indicating that the variant's SKU was corrected in Shopify to
+    /// match the authoritative value held by the linked SkuLabs item.</summary>
+    /// <param name="oldSku">The drifted Shopify SKU value that was replaced.</param>
+    /// <param name="newSku">The SkuLabs SKU now written to Shopify.</param>
+    public static string SkuCorrectedFromSkulabs(string oldSku, string newSku) =>
+        $"SKU corrected to match SkuLabs: '{oldSku}' → '{newSku}'.";
+
+    /// <summary>Returns a message indicating that the variant's barcode was corrected in Shopify
+    /// to match the authoritative value held by the linked SkuLabs item.</summary>
+    /// <param name="oldBarcode">The drifted Shopify barcode value that was replaced.</param>
+    /// <param name="newBarcode">The SkuLabs barcode now written to Shopify.</param>
+    public static string BarcodeCorrectedFromSkulabs(string oldBarcode, string newBarcode) =>
+        $"Barcode corrected to match SkuLabs: '{oldBarcode}' → '{newBarcode}'.";
 }
