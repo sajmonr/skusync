@@ -81,7 +81,7 @@ public class ProductUpdateWebhookTests(E2EWebApplicationFactory factory) : IAsyn
                 ProductId = productId,
                 GlobalVariantId = "gid://shopify/ProductVariant/46450996871329",
                 VariantId = variantId,
-                // Display name matches what ResolveDisplayName will compute from the fixture
+                // Display name matches what ShopifyDisplayName.Compose produces from the fixture
                 // (product title "Testprod1" + variant title "Default Title" → "Testprod1"),
                 // so the diff path fires solely on the SKU/barcode mismatch.
                 DisplayName = "Testprod1",

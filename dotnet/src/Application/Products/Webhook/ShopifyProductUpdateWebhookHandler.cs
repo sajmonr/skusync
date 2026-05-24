@@ -4,6 +4,7 @@ using Application.Skus;
 using Infrastructure.Database;
 using Infrastructure.Database.Entities;
 using Integration.Aws.Sqs;
+using Integration.Shopify.Products;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.FeatureManagement;
@@ -115,7 +116,7 @@ public class ShopifyProductUpdateWebhookHandler(
     {
         var changed = false;
 
-        var newDisplayName = ResolveDisplayName(product, variant);
+        var newDisplayName = ShopifyDisplayName.Compose(product.Title, variant.Title);
         if (entity.DisplayName != newDisplayName)
         {
             dbContext.ShopifyProductVariantLogEvents.Add(new ShopifyProductVariantLogEventEntity

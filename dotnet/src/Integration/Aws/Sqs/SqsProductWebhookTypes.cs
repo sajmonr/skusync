@@ -76,7 +76,7 @@ public record SqsShopEventProduct(
 /// Represents a single product variant within a Shopify shop-event webhook payload,
 /// carrying identifiers, SKU, barcode, and the variant's title (e.g. "Default Title"
 /// or "Large", "Red", etc.). The full display name is composed from the product title
-/// and this variant title; see <c>ShopifyWebhookBase.ResolveDisplayName</c>.
+/// and this variant title via <c>ShopifyDisplayName.Compose</c>.
 /// </summary>
 public record SqsShopEventVariant(
     [property: JsonPropertyName("admin_graphql_api_id")] string AdminGraphqlApiId,
