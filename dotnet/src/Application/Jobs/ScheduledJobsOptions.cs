@@ -23,6 +23,13 @@ public class ScheduledJobsOptions
     /// </summary>
     [Required]
     public JobScheduleOptions SkulabsItemSync { get; init; } = JobScheduleOptions.Disabled;
+
+    /// <summary>
+    /// Gets the schedule configuration for the Shopify variant drift correction job, which
+    /// reconciles Shopify variant SKU/barcode against the authoritative SkuLabs values.
+    /// </summary>
+    [Required]
+    public JobScheduleOptions ShopifyVariantDriftSync { get; init; } = JobScheduleOptions.Disabled;
 }
 
 /// <summary>
