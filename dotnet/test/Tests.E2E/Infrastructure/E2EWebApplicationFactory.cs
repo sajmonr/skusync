@@ -64,9 +64,9 @@ public class E2EWebApplicationFactory : WebApplicationFactory<Program>, IAsyncLi
         SetEnv("FeatureManagement__ShopifyWriteBack", "true");
         SetEnv("FeatureManagement__ShopifySyncEnabled", "true");
         SetEnv("FeatureManagement__SkulabsSyncEnabled", "true");
-        SetEnv("ScheduledJobs__ShopifyProductSync__Enabled", "false");
-        SetEnv("ScheduledJobs__ShopifyProductSync__RunOnStart", "false");
-        SetEnv("ScheduledJobs__ShopifyProductSync__CronExpression", "0 0 0 * * ?");
+        SetEnv("ScheduledJobs__ProductMaintenance__Enabled", "false");
+        SetEnv("ScheduledJobs__ProductMaintenance__RunOnStart", "false");
+        SetEnv("ScheduledJobs__ProductMaintenance__CronExpression", "0 0 0 * * ?");
         // Keep the SkulabsItemSync job *enabled* so its type lands in DI (AddScheduledJob skips
         // registration entirely when Enabled=false). RunOnStart is disabled and the cron is set
         // to a far-future time so no triggers fire — and the Quartz hosted service is removed

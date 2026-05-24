@@ -13,23 +13,18 @@ public class ScheduledJobsOptions
     public const string SectionKey = "ScheduledJobs";
 
     /// <summary>
-    /// Gets the schedule configuration for the Shopify product synchronization job.
-    /// </summary>
-    [Required]
-    public JobScheduleOptions ShopifyProductSync { get; init; } = JobScheduleOptions.Disabled;
-
-    /// <summary>
     /// Gets the schedule configuration for the SkuLabs item synchronization job.
     /// </summary>
     [Required]
     public JobScheduleOptions SkulabsItemSync { get; init; } = JobScheduleOptions.Disabled;
 
     /// <summary>
-    /// Gets the schedule configuration for the Shopify variant drift correction job, which
-    /// reconciles Shopify variant SKU/barcode against the authoritative SkuLabs values.
+    /// Gets the schedule configuration for the nightly product-maintenance job, which runs
+    /// every registered <c>IMaintenanceTask</c> (Shopify product sync, SKU/barcode drift
+    /// reconciliation, ...) in sequence within a single scheduled slot.
     /// </summary>
     [Required]
-    public JobScheduleOptions SkuAndBarcodeSync { get; init; } = JobScheduleOptions.Disabled;
+    public JobScheduleOptions ProductMaintenance { get; init; } = JobScheduleOptions.Disabled;
 }
 
 /// <summary>
