@@ -71,7 +71,7 @@ public class SkulabsItemClientTests
                                 "sku": "SKU-1",
                                 "upc": "UPC-1",
                                 "listings": [
-                                  { "variant_id": "var-1", "item_id": "prod-1", "_id": "listing-1" }
+                                  { "variant_id": "1", "item_id": "prod-1", "_id": "listing-1" }
                                 ]
                               },
                               {
@@ -87,7 +87,7 @@ public class SkulabsItemClientTests
                                 "sku": "SKU-3",
                                 "upc": "UPC-3",
                                 "listings": [
-                                  { "variant_id": "var-3", "item_id": "prod-3", "_id": "listing-3" }
+                                  { "variant_id": "3", "item_id": "prod-3", "_id": "listing-3" }
                                 ]
                               }
                             ]
@@ -98,8 +98,8 @@ public class SkulabsItemClientTests
         var result = await sut.GetAllItems();
 
         result.Length.ShouldBe(2);
-        result[0].ShouldBe(new SkuLabsItem("item-1", "listing-1", "var-1", "SKU-1", "UPC-1", "Item One"));
-        result[1].ShouldBe(new SkuLabsItem("item-3", "listing-3", "var-3", "SKU-3", "UPC-3", "Item Three"));
+        result[0].ShouldBe(new SkuLabsItem("item-1", "listing-1", 1, "SKU-1", "UPC-1", "Item One"));
+        result[1].ShouldBe(new SkuLabsItem("item-3", "listing-3", 3, "SKU-3", "UPC-3", "Item Three"));
     }
 
     [Fact]
@@ -135,18 +135,28 @@ public class SkulabsItemClientTests
     }
 
     [Fact]
-    public async Task GetAllItems_ShouldLogWarning_ForEachItemWithMultipleListings()
+    public async Task GetAllItems_ShouldFilterOutItemsWithMultipleListings_AndLogSingleAggregateWarning()
     {
         const string json = """
                             [
                               {
-                                "_id": "item-multi",
-                                "name": "Multi",
-                                "sku": "SKU-M",
-                                "upc": "UPC-M",
+                                "_id": "item-multi-1",
+                                "name": "Multi 1",
+                                "sku": "SKU-M1",
+                                "upc": "UPC-M1",
                                 "listings": [
-                                  { "variant_id": "var-a", "item_id": "prod-a", "_id": "l-a" },
-                                  { "variant_id": "var-b", "item_id": "prod-b", "_id": "l-b" }
+                                  { "variant_id": "10", "item_id": "prod-a", "_id": "l-a" },
+                                  { "variant_id": "11", "item_id": "prod-b", "_id": "l-b" }
+                                ]
+                              },
+                              {
+                                "_id": "item-multi-2",
+                                "name": "Multi 2",
+                                "sku": "SKU-M2",
+                                "upc": "UPC-M2",
+                                "listings": [
+                                  { "variant_id": "20", "item_id": "prod-c", "_id": "l-c" },
+                                  { "variant_id": "21", "item_id": "prod-d", "_id": "l-d" }
                                 ]
                               },
                               {
@@ -155,7 +165,7 @@ public class SkulabsItemClientTests
                                 "sku": "SKU-S",
                                 "upc": "UPC-S",
                                 "listings": [
-                                  { "variant_id": "var-c", "item_id": "prod-c", "_id": "l-c" }
+                                  { "variant_id": "30", "item_id": "prod-s", "_id": "l-s" }
                                 ]
                               }
                             ]
@@ -166,28 +176,70 @@ public class SkulabsItemClientTests
         var result = await sut.GetAllItems();
 
         result.Length.ShouldBe(1);
-        result[0].ShouldBe(new SkuLabsItem("item-single", "l-c", "var-c", "SKU-S", "UPC-S", "Single"));
+        result[0].ShouldBe(new SkuLabsItem("item-single", "l-s", 30, "SKU-S", "UPC-S", "Single"));
 
         var warnings = _logger.Entries
             .Where(e => e.LogLevel == LogLevel.Warning && e.Message.Contains("multiple listings"))
             .ToArray();
         warnings.Length.ShouldBe(1);
-        warnings[0].Message.ShouldContain("item-multi");
+        warnings[0].Message.ShouldContain("2");
     }
 
     [Fact]
-    public async Task GetAllItems_ShouldSkipItem_AndWarn_WhenItemHasMultipleListings()
+    public async Task GetAllItems_ShouldNotEmitMultipleListingsWarning_WhenAllItemsHaveOneListing()
     {
         const string json = """
                             [
                               {
-                                "_id": "item-multi",
-                                "name": "Multi",
-                                "sku": "SKU-M",
-                                "upc": "UPC-M",
+                                "_id": "item-single",
+                                "name": "Single",
+                                "sku": "SKU-S",
+                                "upc": "UPC-S",
                                 "listings": [
-                                  { "variant_id": "var-first", "item_id": "prod-first", "_id": "l-1" },
-                                  { "variant_id": "var-second", "item_id": "prod-second", "_id": "l-2" }
+                                  { "variant_id": "1", "item_id": "prod-s", "_id": "l-s" }
+                                ]
+                              }
+                            ]
+                            """;
+        _handler.SetResponse(JsonResponse(json));
+        var sut = CreateSut();
+
+        await sut.GetAllItems();
+
+        _logger.Entries.ShouldNotContain(e =>
+            e.LogLevel == LogLevel.Warning && e.Message.Contains("multiple listings"));
+    }
+
+    [Fact]
+    public async Task GetAllItems_ShouldFilterOutItemsWithNonNumericVariantId_AndLogSingleAggregateWarning()
+    {
+        const string json = """
+                            [
+                              {
+                                "_id": "item-bad-1",
+                                "name": "Bad 1",
+                                "sku": "SKU-B1",
+                                "upc": "UPC-B1",
+                                "listings": [
+                                  { "variant_id": "not-a-number", "item_id": "prod-a", "_id": "l-a" }
+                                ]
+                              },
+                              {
+                                "_id": "item-bad-2",
+                                "name": "Bad 2",
+                                "sku": "SKU-B2",
+                                "upc": "UPC-B2",
+                                "listings": [
+                                  { "variant_id": "also-bad", "item_id": "prod-b", "_id": "l-b" }
+                                ]
+                              },
+                              {
+                                "_id": "item-good",
+                                "name": "Good",
+                                "sku": "SKU-G",
+                                "upc": "UPC-G",
+                                "listings": [
+                                  { "variant_id": "42", "item_id": "prod-g", "_id": "l-g" }
                                 ]
                               }
                             ]
@@ -197,11 +249,40 @@ public class SkulabsItemClientTests
 
         var result = await sut.GetAllItems();
 
-        result.ShouldBeEmpty();
-        _logger.Entries.ShouldContain(entry =>
-            entry.LogLevel == LogLevel.Warning &&
-            entry.Message.Contains("multiple listings") &&
-            entry.Message.Contains("item-multi"));
+        result.Length.ShouldBe(1);
+        result[0].ShouldBe(new SkuLabsItem("item-good", "l-g", 42, "SKU-G", "UPC-G", "Good"));
+
+        var warnings = _logger.Entries
+            .Where(e => e.LogLevel == LogLevel.Warning && e.Message.Contains("non-numeric"))
+            .ToArray();
+        warnings.Length.ShouldBe(1);
+        warnings[0].Message.ShouldContain("2");
+        warnings[0].Message.ShouldContain("ID");
+    }
+
+    [Fact]
+    public async Task GetAllItems_ShouldNotEmitNonNumericWarning_WhenAllVariantIdsAreNumeric()
+    {
+        const string json = """
+                            [
+                              {
+                                "_id": "item-good",
+                                "name": "Good",
+                                "sku": "SKU-G",
+                                "upc": "UPC-G",
+                                "listings": [
+                                  { "variant_id": "42", "item_id": "prod-g", "_id": "l-g" }
+                                ]
+                              }
+                            ]
+                            """;
+        _handler.SetResponse(JsonResponse(json));
+        var sut = CreateSut();
+
+        await sut.GetAllItems();
+
+        _logger.Entries.ShouldNotContain(e =>
+            e.LogLevel == LogLevel.Warning && e.Message.Contains("non-numeric"));
     }
 
     [Fact]
