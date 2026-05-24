@@ -17,6 +17,8 @@ public class SkulabsItemEntity
 
     public string Barcode { get; set; } = string.Empty;
 
+    public bool PendingSkulabsSync { get; set; }
+
     public ShopifyProductVariantEntity? ShopifyProductVariant { get; set; }
-    
+
 }

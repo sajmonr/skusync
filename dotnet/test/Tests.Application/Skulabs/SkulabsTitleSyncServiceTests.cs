@@ -84,6 +84,7 @@ public class SkulabsTitleSyncServiceTests : IDisposable
 
         var storedItem = await _dbContext.SkulabsItems.SingleAsync();
         storedItem.Title.ShouldBe("New Variant Title");
+        storedItem.PendingSkulabsSync.ShouldBeFalse();
 
         var logs = await LogsForVariant(variant.ShopifyProductVariantId);
         logs.Count.ShouldBe(1);
@@ -126,6 +127,7 @@ public class SkulabsTitleSyncServiceTests : IDisposable
 
         var storedItem = await _dbContext.SkulabsItems.SingleAsync();
         storedItem.Title.ShouldBe("Old Title");
+        storedItem.PendingSkulabsSync.ShouldBeFalse();
         (await _dbContext.ShopifyProductVariantLogEvents.CountAsync()).ShouldBe(0);
     }
 
@@ -142,14 +144,15 @@ public class SkulabsTitleSyncServiceTests : IDisposable
 
         var result = await CreateSut().SyncAll();
 
-        result.Corrected.ShouldBe(0);
-        result.Failed.ShouldBe(1);
+        result.Drifted.ShouldBe(1);
+        result.Corrected.ShouldBe(1);
+        result.Failed.ShouldBe(0);
         await _skulabsItemClient.DidNotReceive()
             .UpdateItems(Arg.Any<IEnumerable<SkulabsItemUpdateWithId>>());
     }
 
     [Fact]
-    public async Task SyncAll_ShouldNotMutateLocalRow_WhenWriteBackIsDisabled()
+    public async Task SyncAll_ShouldStillMirrorLocalRowAndMarkPending_WhenWriteBackIsDisabled()
     {
         _featureManager.IsEnabledAsync(FeatureFlags.SkulabsWriteBack).Returns(false);
 
@@ -160,8 +163,128 @@ public class SkulabsTitleSyncServiceTests : IDisposable
         await CreateSut().SyncAll();
 
         var storedItem = await _dbContext.SkulabsItems.SingleAsync();
-        storedItem.Title.ShouldBe("Old Title");
+        storedItem.Title.ShouldBe("New Title");
+        storedItem.PendingSkulabsSync.ShouldBeTrue();
+
+        var logs = await LogsForVariant(variant.ShopifyProductVariantId);
+        logs.Count.ShouldBe(1);
+        logs[0].Message.ShouldBe(
+            "SkuLabs item title corrected to match variant: 'Old Title' → 'New Title'.");
+    }
+
+    [Fact]
+    public async Task SyncAll_ShouldPushPendingRowsAndClearFlag_WhenWriteBackEnabled()
+    {
+        var variant = SeedVariant(displayName: "Authoritative Title");
+        SeedSkulabsItem(
+            variant.ShopifyProductVariantId,
+            sourceItemId: "src-pending",
+            title: "Authoritative Title",
+            pendingSkulabsSync: true);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await CreateSut().SyncAll();
+
+        result.Checked.ShouldBe(1);
+        result.Drifted.ShouldBe(0);
+        result.Corrected.ShouldBe(1);
+        result.Failed.ShouldBe(0);
+
+        await _skulabsItemClient.Received(1).UpdateItems(
+            Arg.Is<IEnumerable<SkulabsItemUpdateWithId>>(updates =>
+                updates.Count() == 1
+                && updates.First().Id == "src-pending"
+                && updates.First().Name == "Authoritative Title"));
+
+        var storedItem = await _dbContext.SkulabsItems.SingleAsync();
+        storedItem.PendingSkulabsSync.ShouldBeFalse();
         (await _dbContext.ShopifyProductVariantLogEvents.CountAsync()).ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task SyncAll_ShouldLeavePendingRowsUntouched_WhenWriteBackIsDisabled()
+    {
+        _featureManager.IsEnabledAsync(FeatureFlags.SkulabsWriteBack).Returns(false);
+
+        var variant = SeedVariant(displayName: "Authoritative Title");
+        SeedSkulabsItem(
+            variant.ShopifyProductVariantId,
+            title: "Authoritative Title",
+            pendingSkulabsSync: true);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await CreateSut().SyncAll();
+
+        result.Checked.ShouldBe(1);
+        result.Drifted.ShouldBe(0);
+        result.Corrected.ShouldBe(0);
+        result.Failed.ShouldBe(0);
+
+        await _skulabsItemClient.DidNotReceive()
+            .UpdateItems(Arg.Any<IEnumerable<SkulabsItemUpdateWithId>>());
+
+        var storedItem = await _dbContext.SkulabsItems.SingleAsync();
+        storedItem.PendingSkulabsSync.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task SyncAll_ShouldPushDeferredCorrection_WhenWriteBackIsReEnabled()
+    {
+        // First pass: writeback off — local mirror + pending flag set.
+        _featureManager.IsEnabledAsync(FeatureFlags.SkulabsWriteBack).Returns(false);
+
+        var variant = SeedVariant(displayName: "Final Title");
+        SeedSkulabsItem(variant.ShopifyProductVariantId, sourceItemId: "src-defer", title: "Initial Title");
+        await _dbContext.SaveChangesAsync();
+
+        await CreateSut().SyncAll();
+
+        var afterFirstPass = await _dbContext.SkulabsItems.AsNoTracking().SingleAsync();
+        afterFirstPass.Title.ShouldBe("Final Title");
+        afterFirstPass.PendingSkulabsSync.ShouldBeTrue();
+        await _skulabsItemClient.DidNotReceive()
+            .UpdateItems(Arg.Any<IEnumerable<SkulabsItemUpdateWithId>>());
+
+        // Second pass: writeback re-enabled — pending row gets pushed and flag cleared.
+        _featureManager.IsEnabledAsync(FeatureFlags.SkulabsWriteBack).Returns(true);
+
+        var result = await CreateSut().SyncAll();
+
+        result.Checked.ShouldBe(1);
+        result.Corrected.ShouldBe(1);
+
+        await _skulabsItemClient.Received(1).UpdateItems(
+            Arg.Is<IEnumerable<SkulabsItemUpdateWithId>>(updates =>
+                updates.Count() == 1
+                && updates.First().Id == "src-defer"
+                && updates.First().Name == "Final Title"));
+
+        var storedItem = await _dbContext.SkulabsItems.SingleAsync();
+        storedItem.Title.ShouldBe("Final Title");
+        storedItem.PendingSkulabsSync.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task SyncAll_ShouldLeavePendingFlagSet_WhenWriteBackEnabledButPushThrows()
+    {
+        var variant = SeedVariant(displayName: "Title");
+        SeedSkulabsItem(
+            variant.ShopifyProductVariantId,
+            title: "Title",
+            pendingSkulabsSync: true);
+        await _dbContext.SaveChangesAsync();
+
+        _skulabsItemClient
+            .UpdateItems(Arg.Any<IEnumerable<SkulabsItemUpdateWithId>>())
+            .ThrowsAsync(new HttpRequestException("skulabs offline"));
+
+        var result = await CreateSut().SyncAll();
+
+        result.Failed.ShouldBe(1);
+        result.Corrected.ShouldBe(0);
+
+        var storedItem = await _dbContext.SkulabsItems.SingleAsync();
+        storedItem.PendingSkulabsSync.ShouldBeTrue();
     }
 
     // ---------- SyncForVariant ----------
@@ -193,6 +316,32 @@ public class SkulabsTitleSyncServiceTests : IDisposable
         result.Corrected.ShouldBe(0);
         await _skulabsItemClient.DidNotReceive()
             .UpdateItems(Arg.Any<IEnumerable<SkulabsItemUpdateWithId>>());
+    }
+
+    [Fact]
+    public async Task SyncForVariant_ShouldPushAndClearPending_WhenLocallyInSyncButFlaggedPending()
+    {
+        var variant = SeedVariant(displayName: "Pushed Title");
+        SeedSkulabsItem(
+            variant.ShopifyProductVariantId,
+            sourceItemId: "src-pending",
+            title: "Pushed Title",
+            pendingSkulabsSync: true);
+        await _dbContext.SaveChangesAsync();
+
+        var result = await CreateSut().SyncForVariant(variant.ShopifyProductVariantId);
+
+        result.Drifted.ShouldBe(0);
+        result.Corrected.ShouldBe(1);
+
+        await _skulabsItemClient.Received(1).UpdateItems(
+            Arg.Is<IEnumerable<SkulabsItemUpdateWithId>>(updates =>
+                updates.Count() == 1
+                && updates.First().Id == "src-pending"
+                && updates.First().Name == "Pushed Title"));
+
+        var storedItem = await _dbContext.SkulabsItems.SingleAsync();
+        storedItem.PendingSkulabsSync.ShouldBeFalse();
     }
 
     [Fact]
@@ -291,7 +440,8 @@ public class SkulabsTitleSyncServiceTests : IDisposable
         string sourceListingId = "lst",
         string title = "Title",
         string sku = "sku",
-        string barcode = "bar")
+        string barcode = "bar",
+        bool pendingSkulabsSync = false)
     {
         var entity = new SkulabsItemEntity
         {
@@ -301,7 +451,8 @@ public class SkulabsTitleSyncServiceTests : IDisposable
             SkulabsSourceListingId = sourceListingId,
             Title = title,
             Sku = sku,
-            Barcode = barcode
+            Barcode = barcode,
+            PendingSkulabsSync = pendingSkulabsSync
         };
         _dbContext.SkulabsItems.Add(entity);
         return entity;
