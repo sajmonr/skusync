@@ -22,13 +22,13 @@ namespace Application.Skulabs.Services;
 /// marked <see cref="ShopifyProductVariantEntity.PendingShopifySync"/> so a later sweep
 /// — once the flag is re-enabled — pushes the values to Shopify and clears the marker.
 /// </remarks>
-public class ShopifyVariantDriftSyncService(
+public class SkuAndBarcodeSyncService(
     ApplicationDbContext dbContext,
     IShopifyProductService shopifyProductService,
     IFeatureManager featureManager,
-    ILogger<ShopifyVariantDriftSyncService> logger) : IShopifyVariantDriftSyncService
+    ILogger<SkuAndBarcodeSyncService> logger) : ISkuAndBarcodeSyncService
 {
-    public async Task<ShopifyVariantDriftSyncResult> SyncAll(CancellationToken cancellationToken = default)
+    public async Task<SkuAndBarcodeSyncResult> SyncAll(CancellationToken cancellationToken = default)
     {
         logger.LogDebug(
             "Scanning database for SkuLabs-linked variants with drifted SKU/barcode or a pending Shopify push.");
@@ -47,7 +47,7 @@ public class ShopifyVariantDriftSyncService(
         if (candidates.Count == 0)
         {
             logger.LogDebug("No drift detected and no pending Shopify pushes outstanding.");
-            return ShopifyVariantDriftSyncResult.Empty;
+            return SkuAndBarcodeSyncResult.Empty;
         }
 
         var driftedCount = candidates.Count(IsDrifted);
@@ -56,14 +56,14 @@ public class ShopifyVariantDriftSyncService(
             candidates.Count, driftedCount, candidates.Count - driftedCount);
 
         var corrected = await CorrectDrifted(candidates, cancellationToken);
-        return new ShopifyVariantDriftSyncResult(
+        return new SkuAndBarcodeSyncResult(
             Checked: candidates.Count,
             Drifted: driftedCount,
             Corrected: corrected,
             Failed: candidates.Count - corrected);
     }
 
-    public async Task<ShopifyVariantDriftSyncResult> SyncForSkulabsItem(
+    public async Task<SkuAndBarcodeSyncResult> SyncForSkulabsItem(
         Guid skulabsItemId,
         CancellationToken cancellationToken = default)
     {
@@ -76,7 +76,7 @@ public class ShopifyVariantDriftSyncService(
             logger.LogWarning(
                 "SkuLabs item {SkulabsItemId} was requested for drift check but no longer exists in the database.",
                 skulabsItemId);
-            return ShopifyVariantDriftSyncResult.Empty;
+            return SkuAndBarcodeSyncResult.Empty;
         }
 
         if (item.ShopifyProductVariant is null)
@@ -84,7 +84,7 @@ public class ShopifyVariantDriftSyncService(
             logger.LogWarning(
                 "SkuLabs item {SkulabsItemId} has no linked Shopify variant. Nothing to compare.",
                 skulabsItemId);
-            return ShopifyVariantDriftSyncResult.Empty;
+            return SkuAndBarcodeSyncResult.Empty;
         }
 
         var drifted = IsDrifted(item);
@@ -94,7 +94,7 @@ public class ShopifyVariantDriftSyncService(
             logger.LogDebug(
                 "SkuLabs item {SkulabsItemId} is already in sync with its Shopify variant. No correction needed.",
                 skulabsItemId);
-            return new ShopifyVariantDriftSyncResult(Checked: 1, Drifted: 0, Corrected: 0, Failed: 0);
+            return new SkuAndBarcodeSyncResult(Checked: 1, Drifted: 0, Corrected: 0, Failed: 0);
         }
 
         logger.LogInformation(
@@ -102,7 +102,7 @@ public class ShopifyVariantDriftSyncService(
             skulabsItemId, item.ShopifyProductVariantId, drifted, pending);
 
         var corrected = await CorrectDrifted([item], cancellationToken);
-        return new ShopifyVariantDriftSyncResult(
+        return new SkuAndBarcodeSyncResult(
             Checked: 1,
             Drifted: drifted ? 1 : 0,
             Corrected: corrected,

@@ -12,14 +12,14 @@ using Shouldly;
 
 namespace Tests.Application.Skulabs;
 
-public class ShopifyVariantDriftSyncServiceTests : IDisposable
+public class SkuAndBarcodeSyncServiceTests : IDisposable
 {
     private readonly IShopifyProductService _shopifyProductService = Substitute.For<IShopifyProductService>();
     private readonly IFeatureManager _featureManager = Substitute.For<IFeatureManager>();
     private readonly ApplicationDbContext _dbContext;
-    private readonly TestLogger<ShopifyVariantDriftSyncService> _logger = new();
+    private readonly TestLogger<SkuAndBarcodeSyncService> _logger = new();
 
-    public ShopifyVariantDriftSyncServiceTests()
+    public SkuAndBarcodeSyncServiceTests()
     {
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
@@ -42,7 +42,7 @@ public class ShopifyVariantDriftSyncServiceTests : IDisposable
     {
         var result = await CreateSut().SyncAll();
 
-        result.ShouldBe(ShopifyVariantDriftSyncResult.Empty);
+        result.ShouldBe(SkuAndBarcodeSyncResult.Empty);
         await _shopifyProductService.DidNotReceive()
             .UpdateVariants(Arg.Any<string>(), Arg.Any<IEnumerable<ShopifyUpdateProductVariant>>());
     }
@@ -356,7 +356,7 @@ public class ShopifyVariantDriftSyncServiceTests : IDisposable
     {
         var result = await CreateSut().SyncForSkulabsItem(Guid.NewGuid());
 
-        result.ShouldBe(ShopifyVariantDriftSyncResult.Empty);
+        result.ShouldBe(SkuAndBarcodeSyncResult.Empty);
         await _shopifyProductService.DidNotReceive()
             .UpdateVariants(Arg.Any<string>(), Arg.Any<IEnumerable<ShopifyUpdateProductVariant>>());
     }
@@ -403,7 +403,7 @@ public class ShopifyVariantDriftSyncServiceTests : IDisposable
 
     // ---------- Helpers ----------
 
-    private ShopifyVariantDriftSyncService CreateSut() =>
+    private SkuAndBarcodeSyncService CreateSut() =>
         new(_dbContext, _shopifyProductService, _featureManager, _logger);
 
     private async Task<List<ShopifyProductVariantLogEventEntity>> LogsForVariant(Guid variantGuid) =>
