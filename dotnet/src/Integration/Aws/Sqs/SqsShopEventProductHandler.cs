@@ -25,7 +25,7 @@ public class SqsShopEventProductHandler(IEnumerable<IShopifyWebhookHandler> hand
     {
         try
         {
-            logger.LogInformation(
+            logger.LogDebug(
                 "Started processing Shopify message: {MessageDetails}",
                 messageEnvelope.Message.ToShortString());
 
@@ -45,7 +45,7 @@ public class SqsShopEventProductHandler(IEnumerable<IShopifyWebhookHandler> hand
 
             await handlerForTopic.Handle(messageEnvelope.Message.Detail.Payload);
 
-            logger.LogInformation(
+            logger.LogDebug(
                 "Finished processing Shopify message: {MessageDetails}",
                 messageEnvelope.Message.ToShortString());
 
