@@ -15,7 +15,8 @@ public abstract class ShopifyWebhookBase
     protected static ShopifyProductVariantEntity ConstructEntity(
         SqsShopEventProduct product,
         SqsShopEventVariant variant,
-        string sku)
+        string sku
+    )
     {
         return new ShopifyProductVariantEntity
         {
@@ -25,7 +26,7 @@ public abstract class ShopifyWebhookBase
             VariantId = variant.Id,
             DisplayName = ResolveDisplayName(product, variant),
             Sku = sku,
-            Barcode = variant.Id.ToString()
+            Barcode = variant.Id.ToString(),
         };
     }
 
@@ -34,12 +35,15 @@ public abstract class ShopifyWebhookBase
     /// don't carry a <c>display_name</c> field — only product.title and variant.title —
     /// so we compose it ourselves. For variants without options (variant title is
     /// "Default Title"), the display name is just the product title; otherwise it is
-    /// <c>"{product.title} - {variant.title}"</c>.
+    /// <c>"{product.title} ({variant.title})"</c>.
     /// </summary>
-    protected static string ResolveDisplayName(SqsShopEventProduct product, SqsShopEventVariant variant)
+    protected static string ResolveDisplayName(
+        SqsShopEventProduct product,
+        SqsShopEventVariant variant
+    )
     {
         return variant.Title == DefaultVariantTitle
             ? product.Title
-            : $"{product.Title} - {variant.Title}";
+            : $"{product.Title} ({variant.Title})";
     }
 }
