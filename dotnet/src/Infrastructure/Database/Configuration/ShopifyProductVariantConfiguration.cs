@@ -35,7 +35,14 @@ public class ShopifyProductVariantConfiguration : IEntityTypeConfiguration<Shopi
         builder.Property(x => x.Sku).IsRequired()
             .HasMaxLength(100);
 
+        builder.Property(x => x.PendingShopifySync)
+            .IsRequired()
+            .HasDefaultValue(false);
+
         builder.HasIndex(x => x.GlobalVariantId).IsUnique();
         builder.HasIndex(x => x.VariantId).IsUnique();
+        // Filtered index so the drift sweep scans a small subset even at high variant counts.
+        builder.HasIndex(x => x.PendingShopifySync)
+            .HasFilter("\"PendingShopifySync\" = true");
     }
 }

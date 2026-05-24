@@ -23,6 +23,13 @@ public class ScheduledJobsOptions
     /// </summary>
     [Required]
     public JobScheduleOptions SkulabsItemSync { get; init; } = JobScheduleOptions.Disabled;
+
+    /// <summary>
+    /// Gets the schedule configuration for the Shopify variant drift correction job, which
+    /// reconciles Shopify variant SKU/barcode against the authoritative SkuLabs values.
+    /// </summary>
+    [Required]
+    public JobScheduleOptions ShopifyVariantDriftSync { get; init; } = JobScheduleOptions.Disabled;
 }
 
 /// <summary>
@@ -42,6 +49,16 @@ public class JobScheduleOptions
     /// application starts, in addition to its regular cron schedule.
     /// </summary>
     public bool RunOnStart { get; init; }
+
+    /// <summary>
+    /// Gets the maximum random delay (in milliseconds) applied to the startup trigger when
+    /// <see cref="RunOnStart"/> is <c>true</c>. The actual delay is sampled uniformly
+    /// from <c>[0, StartupJitterMs]</c> at scheduler-build time, so multiple jobs that
+    /// share <c>RunOnStart</c> don't all hammer downstream services at boot.
+    /// Has no effect on the cron trigger or when <see cref="RunOnStart"/> is <c>false</c>.
+    /// Defaults to <c>0</c> (no jitter — preserves prior behaviour).
+    /// </summary>
+    public int StartupJitterMs { get; init; }
 
     /// <summary>
     /// Gets a value indicating whether this job is enabled. When <c>false</c> the job is
