@@ -338,12 +338,13 @@ public class ProductsService(
 
         if(existing.DisplayName != shopifyVariant.DisplayName)
         {
+            var oldDisplayName = existing.DisplayName;
             existing.DisplayName = shopifyVariant.DisplayName;
             changed = true;
             dbContext.ShopifyProductVariantLogEvents.Add(new ShopifyProductVariantLogEventEntity
             {
                 ShopifyProductVariantId = existing.ShopifyProductVariantId,
-                Message = VariantLogMessages.TitleUpdated(existing.DisplayName, shopifyVariant.DisplayName)
+                Message = VariantLogMessages.TitleUpdated(oldDisplayName, shopifyVariant.DisplayName)
             });
         }
 
