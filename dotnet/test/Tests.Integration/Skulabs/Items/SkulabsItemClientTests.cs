@@ -335,6 +335,85 @@ public class SkulabsItemClientTests
         await Should.ThrowAsync<HttpRequestException>(() => sut.GetAllItems());
     }
 
+    [Fact]
+    public async Task UpdateItem_ShouldSendPutRequestToItemUpdateEndpoint_WithItemIdAndNameInBody()
+    {
+        _handler.SetResponse(JsonResponse("{}"));
+        var sut = CreateSut();
+
+        await sut.UpdateItem("item-42", new SkulabsItemUpdate("New Name"));
+
+        _handler.Requests.Count.ShouldBe(1);
+        var request = _handler.Requests[0];
+        request.Method.ShouldBe(HttpMethod.Put);
+        request.RequestUri.ShouldNotBeNull();
+        request.RequestUri.AbsoluteUri.ShouldBe($"{BaseUrl}item/update");
+        request.Content.ShouldNotBeNull();
+        request.Content.Headers.ContentType?.MediaType.ShouldBe("application/json");
+
+        var body = _handler.RequestBodies[0];
+        using var document = JsonDocument.Parse(body);
+        document.RootElement.GetProperty("item_id").GetString().ShouldBe("item-42");
+        document.RootElement.GetProperty("name").GetString().ShouldBe("New Name");
+    }
+
+    [Fact]
+    public async Task UpdateItem_ShouldThrow_WhenResponseStatusIsNotSuccess()
+    {
+        _handler.SetResponse(new HttpResponseMessage(HttpStatusCode.InternalServerError));
+        var sut = CreateSut();
+
+        await Should.ThrowAsync<HttpRequestException>(() =>
+            sut.UpdateItem("item-1", new SkulabsItemUpdate("Name")));
+    }
+
+    [Fact]
+    public async Task UpdateItem_ShouldLogStructuredErrorFields_WhenResponseIsStandardSkulabsErrorEnvelope()
+    {
+        const string errorBody = """
+                                 {
+                                   "error": {
+                                     "message": "Item not found",
+                                     "statusCode": 404,
+                                     "code": "ITEM_MISSING",
+                                     "overview": "Lookup failed",
+                                     "origin": "items-service",
+                                     "skulabsTraceId": "trace-xyz-789",
+                                     "user_error": true
+                                   }
+                                 }
+                                 """;
+        _handler.SetResponse(new HttpResponseMessage(HttpStatusCode.NotFound)
+        {
+            Content = new StringContent(errorBody, Encoding.UTF8, "application/json")
+        });
+        var sut = CreateSut();
+
+        await Should.ThrowAsync<HttpRequestException>(() =>
+            sut.UpdateItem("item-1", new SkulabsItemUpdate("Name")));
+
+        var errorEntry = _logger.Entries.SingleOrDefault(e => e.LogLevel == LogLevel.Error);
+        errorEntry.ShouldNotBeNull();
+        errorEntry.Message.ShouldContain("ITEM_MISSING");
+        errorEntry.Message.ShouldContain("Item not found");
+        errorEntry.Message.ShouldContain("trace-xyz-789");
+        errorEntry.Message.ShouldContain("items-service");
+        errorEntry.Message.ShouldContain("item/update");
+    }
+
+    [Fact]
+    public async Task UpdateItem_ShouldLogInformation_OnSuccess()
+    {
+        _handler.SetResponse(JsonResponse("{}"));
+        var sut = CreateSut();
+
+        await sut.UpdateItem("item-99", new SkulabsItemUpdate("Updated"));
+
+        _logger.Entries.ShouldContain(e =>
+            e.LogLevel == LogLevel.Information && e.Message.Contains("item-99"));
+        _logger.Entries.ShouldNotContain(e => e.LogLevel == LogLevel.Error);
+    }
+
     private SkulabsItemClient CreateSut()
     {
         var httpClient = new HttpClient(_handler);
@@ -352,6 +431,7 @@ public class SkulabsItemClientTests
     private sealed class RecordingHttpMessageHandler : HttpMessageHandler
     {
         public List<HttpRequestMessage> Requests { get; } = [];
+        public List<string> RequestBodies { get; } = [];
         private HttpResponseMessage _response = new(HttpStatusCode.OK)
         {
             Content = new StringContent("[]", Encoding.UTF8, "application/json")
@@ -362,11 +442,14 @@ public class SkulabsItemClientTests
             _response = response;
         }
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
             Requests.Add(request);
-            return Task.FromResult(_response);
+            RequestBodies.Add(request.Content is null
+                ? string.Empty
+                : await request.Content.ReadAsStringAsync(cancellationToken));
+            return _response;
         }
     }
 

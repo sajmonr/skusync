@@ -91,6 +91,21 @@ public class SkulabsItemClientResilienceTests
     }
 
     [Fact]
+    public async Task UpdateItem_ShouldRetryAndSucceed_When429IsFollowedBySuccess()
+    {
+        var transport = new ScriptedHttpMessageHandler(
+            JsonResponse(HttpStatusCode.TooManyRequests, "{}"),
+            JsonResponse(HttpStatusCode.OK, "{}")
+        );
+
+        var client = BuildClient(transport);
+
+        await client.UpdateItem("item-1", new SkulabsItemUpdate("Name"));
+
+        transport.RequestCount.ShouldBe(2);
+    }
+
+    [Fact]
     public async Task GetAllItems_ShouldNotRetry_OnClientErrorOtherThan429()
     {
         // 401 Unauthorized is a permanent failure — retries would be wasteful.

@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Integration.Skulabs.Options;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -93,6 +94,42 @@ public class SkulabsItemClient : ISkulabsItemClient
 
         return finalItems;
     }
+
+    /// <summary>
+    /// Updates an existing SkuLabs item via <c>PUT /item/update</c>.
+    /// </summary>
+    public async Task UpdateItem(string itemId, SkulabsItemUpdate update)
+    {
+        const string requestPath = "item/update";
+        var payload = new UpdateItemPayload(itemId, update.Name);
+
+        _logger.LogDebug(
+            "Updating SkuLabs item {ItemId} at {RequestPath}.",
+            itemId,
+            requestPath);
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var response = await _client.PutAsJsonAsync(requestPath, payload);
+        stopwatch.Stop();
+
+        if (!response.IsSuccessStatusCode)
+        {
+            await LogErrorResponse(response, requestPath, stopwatch.ElapsedMilliseconds);
+        }
+        else
+        {
+            _logger.LogInformation(
+                "SkuLabs item {ItemId} updated with status {StatusCode} in {ElapsedMs}ms.",
+                itemId,
+                (int)response.StatusCode,
+                stopwatch.ElapsedMilliseconds);
+        }
+
+        response.EnsureSuccessStatusCode();
+    }
+
+    private readonly record struct UpdateItemPayload(
+        [property: JsonPropertyName("item_id")] string ItemId,
+        [property: JsonPropertyName("name")] string Name);
 
     private async Task LogErrorResponse(HttpResponseMessage response, string requestPath, long elapsedMs)
     {
