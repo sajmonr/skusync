@@ -154,6 +154,7 @@ npm run lint
 
 ## Git
 - Feature work on a branch off `develop`, in a worktree under `.claude/worktrees/<name>`. PRs target `develop`. Don't push to `main` directly.
+- When running inside a worktree (cwd under `.claude/worktrees/`), every file edit must use a path under that worktree — either relative, or an absolute path that begins with the worktree root. Never edit `/Users/<you>/repos/.../skusync/dotnet/...` directly; that's the main checkout (usually `develop`) and changes there bypass the feature branch. A `PreToolUse` hook in [.claude/settings.json](.claude/settings.json) enforces this.
 - Commit subjects: imperative, short (≤72 chars). Body explains the why and any non-obvious impact.
 - Don't `--no-verify`. Don't force-push `main` or `develop`.
 - Never commit `appsettings.*` files with real secrets.
