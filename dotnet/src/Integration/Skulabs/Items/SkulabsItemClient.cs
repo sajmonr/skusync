@@ -105,17 +105,11 @@ public class SkulabsItemClient : ISkulabsItemClient
                 return [];
             }
 
-            DetectAndWarnAboutMultipleListings(content);
-
-            var finalItems =
-                content
-                    .Where(item => item.Listings.Length == 1)
-                    .Select(SkuLabsItem.FromResponse)
-                    .ToArray()
-                ?? [];
+            var singleListingItems = FilterMultipleListings(content);
+            var finalItems = FilterNonNumericVariantIds(singleListingItems);
 
             _logger.LogInformation(
-                "SkuLabs returned {RawCount} item(s); {Usable} usable (single Shopify listing), {Filtered} filtered out.",
+                "SkuLabs returned {RawCount} item(s); {Usable} usable, {Filtered} filtered out.",
                 content.Length,
                 finalItems.Length,
                 content.Length - finalItems.Length
@@ -130,18 +124,51 @@ public class SkulabsItemClient : ISkulabsItemClient
         }
     }
 
-    private void DetectAndWarnAboutMultipleListings(SkulabsItemResponse[] responses)
+    private SkulabsItemResponse[] FilterMultipleListings(SkulabsItemResponse[] responses)
     {
-        var multipleListings = responses.Where(r => r.Listings.Length > 1).ToArray();
+        var singleListing = responses.Where(r => r.Listings.Length == 1).ToArray();
+        var multipleListings = responses.Length - singleListing.Length;
 
-        if (multipleListings.Length == 0)
+        if (multipleListings > 0)
         {
-            return;
+            _logger.LogWarning(
+                "{Count} SkuLabs item(s) had multiple listings and were filtered out.",
+                multipleListings);
         }
 
-        foreach (var response in multipleListings)
+        return singleListing;
+    }
+
+    private SkuLabsItem[] FilterNonNumericVariantIds(SkulabsItemResponse[] responses)
+    {
+        var items = new List<SkuLabsItem>(responses.Length);
+        var nonNumeric = 0;
+
+        foreach (var response in responses)
         {
-            _logger.LogWarning("Item {Id} has multiple listings in SkuLabs.", response.ItemId);
+            var listing = response.Listings[0];
+            if (!long.TryParse(listing.VariantId, out var variantId))
+            {
+                nonNumeric++;
+                continue;
+            }
+
+            items.Add(new SkuLabsItem(
+                response.ItemId,
+                listing.ListingId,
+                variantId,
+                response.Sku,
+                response.Upc,
+                response.Title));
         }
+
+        if (nonNumeric > 0)
+        {
+            _logger.LogWarning(
+                "{Count} SkuLabs item(s) had a non-numeric Shopify variant ID and were filtered out.",
+                nonNumeric);
+        }
+
+        return items.ToArray();
     }
 }

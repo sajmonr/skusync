@@ -44,7 +44,7 @@ public class SkulabsItemSyncServiceTests : IDisposable
     [Fact]
     public async Task Sync_ShouldSkip_WhenNoMatchingVariantInDatabase()
     {
-        _skulabsClient.GetAllItems().Returns([NewSkulabsItem(variantId: "999")]);
+        _skulabsClient.GetAllItems().Returns([NewSkulabsItem(variantId: 999)]);
         var sut = CreateSut();
 
         var result = await sut.Sync();
@@ -55,36 +55,20 @@ public class SkulabsItemSyncServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Sync_ShouldSkipItem_WhenSkulabsVariantIdIsNotNumeric()
-    {
-        SeedVariant(variantId: 200L);
-        await _dbContext.SaveChangesAsync();
-
-        _skulabsClient.GetAllItems().Returns([NewSkulabsItem(variantId: "not-a-number")]);
-        var sut = CreateSut();
-
-        var result = await sut.Sync();
-
-        result.SkippedCount.ShouldBe(1);
-        result.UnmatchedCount.ShouldBe(0);
-        (await _dbContext.SkulabsItems.CountAsync()).ShouldBe(0);
-    }
-
-    [Fact]
-    public async Task Sync_ShouldProcessRemainingItems_WhenOneItemFails()
+    public async Task Sync_ShouldProcessRemainingItems_WhenOneItemIsUnmatched()
     {
         SeedVariant(variantId: 200L);
         await _dbContext.SaveChangesAsync();
 
         _skulabsClient.GetAllItems().Returns([
-            NewSkulabsItem(variantId: "bad"),
-            NewSkulabsItem(itemId: "src-good", listingId: "lst-good", variantId: "200")
+            NewSkulabsItem(variantId: 999),
+            NewSkulabsItem(itemId: "src-good", listingId: "lst-good", variantId: 200)
         ]);
         var sut = CreateSut();
 
         var result = await sut.Sync();
 
-        result.SkippedCount.ShouldBe(1);
+        result.UnmatchedCount.ShouldBe(1);
         result.CreatedSkulabsItemIds.Count.ShouldBe(1);
         (await _dbContext.SkulabsItems.CountAsync()).ShouldBe(1);
     }
@@ -98,7 +82,7 @@ public class SkulabsItemSyncServiceTests : IDisposable
         await _dbContext.SaveChangesAsync();
 
         _skulabsClient.GetAllItems().Returns([
-            new SkuLabsItem("src", "lst", "200", "shared-sku", "shared-barcode", "Title")
+            new SkuLabsItem("src", "lst", 200, "shared-sku", "shared-barcode", "Title")
         ]);
         var sut = CreateSut();
 
@@ -120,7 +104,7 @@ public class SkulabsItemSyncServiceTests : IDisposable
             NewSkulabsItem(
                 itemId: "69b4543c6642ed434a5b1c4a",
                 listingId: "69b454b06642ed434a5bf571",
-                variantId: "45696210862241",
+                variantId: 45696210862241L,
                 sku: "1 bird",
                 barcode: "10862241",
                 title: "Yellow Vintage Nature Domino Necklace (Goose (1bird))")
@@ -149,7 +133,7 @@ public class SkulabsItemSyncServiceTests : IDisposable
         await _dbContext.SaveChangesAsync();
 
         _skulabsClient.GetAllItems().Returns([
-            NewSkulabsItem(itemId: "skulabs-1", variantId: "200")
+            NewSkulabsItem(itemId: "skulabs-1", variantId: 200)
         ]);
 
         await CreateSut().Sync();
@@ -174,7 +158,7 @@ public class SkulabsItemSyncServiceTests : IDisposable
         var originalId = existing.SkulabsItemId;
 
         _skulabsClient.GetAllItems().Returns([
-            new SkuLabsItem("src-1", "lst-1", "200", "same-sku", "same-bar", "Same Title")
+            new SkuLabsItem("src-1", "lst-1", 200, "same-sku", "same-bar", "Same Title")
         ]);
 
         var result = await CreateSut().Sync();
@@ -200,7 +184,7 @@ public class SkulabsItemSyncServiceTests : IDisposable
         var originalId = existing.SkulabsItemId;
 
         _skulabsClient.GetAllItems().Returns([
-            new SkuLabsItem("src-1", "lst-new", "200", "new-sku", "new-bar", "New Title")
+            new SkuLabsItem("src-1", "lst-new", 200, "new-sku", "new-bar", "New Title")
         ]);
 
         var result = await CreateSut().Sync();
@@ -233,7 +217,7 @@ public class SkulabsItemSyncServiceTests : IDisposable
         var preservedRowId = existing.SkulabsItemId;
 
         _skulabsClient.GetAllItems().Returns([
-            new SkuLabsItem("S2", "L-new", "3", "new-sku", "new-bar", "New Title")
+            new SkuLabsItem("S2", "L-new", 3, "new-sku", "new-bar", "New Title")
         ]);
 
         var result = await CreateSut().Sync();
@@ -273,7 +257,7 @@ public class SkulabsItemSyncServiceTests : IDisposable
         await _dbContext.SaveChangesAsync();
 
         _skulabsClient.GetAllItems().Returns([
-            new SkuLabsItem("S-new", "lst-new", "200", "new-sku", "new-bar", "New")
+            new SkuLabsItem("S-new", "lst-new", 200, "new-sku", "new-bar", "New")
         ]);
 
         var result = await CreateSut().Sync();
@@ -317,8 +301,8 @@ public class SkulabsItemSyncServiceTests : IDisposable
         await _dbContext.SaveChangesAsync();
 
         _skulabsClient.GetAllItems().Returns([
-            new SkuLabsItem("SB", "lB2", "1", "skb2", "bcb2", "B2"),
-            new SkuLabsItem("SA", "lA2", "2", "ska2", "bca2", "A2")
+            new SkuLabsItem("SB", "lB2", 1, "skb2", "bcb2", "B2"),
+            new SkuLabsItem("SA", "lA2", 2, "ska2", "bca2", "A2")
         ]);
 
         var result = await CreateSut().Sync();
@@ -353,7 +337,7 @@ public class SkulabsItemSyncServiceTests : IDisposable
         await _dbContext.SaveChangesAsync();
 
         _skulabsClient.GetAllItems().Returns([
-            new SkuLabsItem("SB", "lb2", "1", "sku", "bar", "Title")
+            new SkuLabsItem("SB", "lb2", 1, "sku", "bar", "Title")
         ]);
 
         var result = await CreateSut().Sync();
@@ -431,7 +415,7 @@ public class SkulabsItemSyncServiceTests : IDisposable
     private static SkuLabsItem NewSkulabsItem(
         string itemId = "src",
         string listingId = "lst",
-        string variantId = "200",
+        long variantId = 200,
         string sku = "sku",
         string barcode = "bar",
         string title = "Title") => new(itemId, listingId, variantId, sku, barcode, title);

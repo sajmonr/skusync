@@ -9,7 +9,7 @@ namespace Application.Skulabs.Services;
 
 /// <summary>
 /// Reconciles the local SkuLabs item table with the SkuLabs API by considering only the
-/// link identifiers — Shopify variant id on one side, SkuLabs source item id on the other.
+/// link identifiers — Shopify variant ID on one side, SkuLabs source item ID on the other.
 /// Field-level metadata (title, sku, barcode, listing id) is written only when a link is
 /// created or re-linked. When the link identifiers already match what the API reports the
 /// row is left untouched.
@@ -72,7 +72,7 @@ public class SkulabsItemSyncService(
     }
 
     /// <summary>
-    /// Loads a lookup from Shopify's numeric variant id to the local database Guid. Only the
+    /// Loads a lookup from Shopify's numeric variant ID to the local database Guid. Only the
     /// two columns are projected so this stays cheap even with thousands of variants.
     /// </summary>
     private Task<Dictionary<long, Guid>> LoadVariantLookupAsync(CancellationToken cancellationToken) =>
@@ -82,7 +82,7 @@ public class SkulabsItemSyncService(
 
     /// <summary>
     /// Loads every existing SkuLabs item once and builds two indexes over the same tracked
-    /// entity instances — one by SkuLabs source item id, one by variant Guid. Both indexes
+    /// entity instances — one by SkuLabs source item ID, one by variant Guid. Both indexes
     /// must stay in sync as the reconciler mutates state.
     /// </summary>
     private async Task<SkulabsItemIndexes> LoadExistingItemIndexesAsync(CancellationToken cancellationToken)
@@ -109,9 +109,12 @@ public class SkulabsItemSyncService(
     {
         try
         {
-            if (!TryGetMatchingVariantGuid(apiItem, variantLookup, out var variantGuid, out var nonMatchReason))
+            if (!variantLookup.TryGetValue(apiItem.ShopifyVariantId, out var variantGuid))
             {
-                accumulator.RecordNonMatch(nonMatchReason);
+                logger.LogDebug(
+                    "SkuLabs item {SkulabsItemId} references Shopify variant ID {VariantId} which is not in the database. Skipping.",
+                    apiItem.SkulabsItemId, apiItem.ShopifyVariantId);
+                accumulator.Unmatched++;
                 return;
             }
 
@@ -139,7 +142,7 @@ public class SkulabsItemSyncService(
                 return;
             }
 
-            // Case C: brand-new SkuLabs item id. If the destination variant already has a
+            // Case C: brand-new SkuLabs item ID. If the destination variant already has a
             // different SkuLabs item, sever it; then create.
             if (byVariant is not null)
             {
@@ -155,40 +158,6 @@ public class SkulabsItemSyncService(
                 apiItem.SkulabsItemId);
             accumulator.Skipped++;
         }
-    }
-
-    /// <summary>
-    /// Resolves the local variant Guid for a SkuLabs item, or reports why it couldn't be matched.
-    /// </summary>
-    private bool TryGetMatchingVariantGuid(
-        SkuLabsItem apiItem,
-        IReadOnlyDictionary<long, Guid> variantLookup,
-        out Guid variantGuid,
-        out NonMatchReason reason)
-    {
-        if (!long.TryParse(apiItem.ShopifyVariantId, out var numericVariantId))
-        {
-            logger.LogWarning(
-                "SkuLabs item {SkulabsItemId} has non-numeric Shopify variant id '{ShopifyVariantId}'. Skipping.",
-                apiItem.SkulabsItemId, apiItem.ShopifyVariantId);
-            variantGuid = default;
-            reason = NonMatchReason.Skipped;
-            return false;
-        }
-
-        if (!variantLookup.TryGetValue(numericVariantId, out variantGuid))
-        {
-            // Per-item Debug level only — at 2000+ items this would otherwise drown info logs.
-            // Aggregate "Unmatched: N" appears in the summary at Information level.
-            logger.LogDebug(
-                "SkuLabs item {SkulabsItemId} references Shopify variant id {VariantId} which is not in the database. Skipping.",
-                apiItem.SkulabsItemId, numericVariantId);
-            reason = NonMatchReason.Unmatched;
-            return false;
-        }
-
-        reason = default;
-        return true;
     }
 
     /// <summary>
@@ -278,12 +247,6 @@ public class SkulabsItemSyncService(
         });
     }
 
-    private enum NonMatchReason
-    {
-        Unmatched,
-        Skipped
-    }
-
     /// <summary>
     /// Tally of reconciliation outcomes for a single <see cref="Sync"/> run.
     /// </summary>
@@ -291,18 +254,9 @@ public class SkulabsItemSyncService(
     {
         public List<Guid> Created { get; } = [];
         public List<Guid> Updated { get; } = [];
-        public int Unmatched { get; private set; }
+        public int Unmatched { get; set; }
         public int Skipped { get; set; }
         public int Severed { get; set; }
-
-        public void RecordNonMatch(NonMatchReason reason)
-        {
-            switch (reason)
-            {
-                case NonMatchReason.Unmatched: Unmatched++; break;
-                case NonMatchReason.Skipped: Skipped++; break;
-            }
-        }
 
         public SkulabsItemSyncResult ToResult() => new(Created, Updated, Unmatched, Skipped);
     }

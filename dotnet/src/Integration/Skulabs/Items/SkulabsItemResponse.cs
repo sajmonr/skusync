@@ -4,7 +4,6 @@ namespace Integration.Skulabs.Items;
 
 /// <summary>
 /// Represents the raw JSON response shape for a single item returned by the SkuLabs API.
-/// Use <see cref="SkuLabsItem.FromResponse"/> to convert to the application domain model.
 /// </summary>
 public class SkulabsItemResponse
 {
