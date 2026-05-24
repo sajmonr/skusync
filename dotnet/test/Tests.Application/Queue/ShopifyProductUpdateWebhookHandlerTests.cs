@@ -33,7 +33,7 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
         // Default to enabled for existing behavioural tests. Override per-test if needed.
         _featureManager.IsEnabledAsync(FeatureFlags.ShopifySyncEnabled).Returns(true);
 
-        _skuGenerator.GenerateAsync(
+        _skuGenerator.Generate(
                 Arg.Any<string>(), Arg.Any<string?>(),
                 Arg.Any<ISet<string>?>(), Arg.Any<CancellationToken>())
             .Returns(_ => Task.FromResult($"GEN-{Guid.NewGuid():N}"[..12]));

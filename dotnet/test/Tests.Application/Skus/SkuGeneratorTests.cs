@@ -32,7 +32,7 @@ public class SkuGeneratorTests : IDisposable
     public async Task Generate_UsesPrefix_AndProductAndVariantSegments()
     {
         var sut = CreateSut();
-        var sku = await sut.GenerateAsync("Basic Tee", "Small / Black");
+        var sku = await sut.Generate("Basic Tee", "Small / Black");
         sku.ShouldBe("BW-BasTee-SM-BL");
     }
 
@@ -40,7 +40,7 @@ public class SkuGeneratorTests : IDisposable
     public async Task Generate_OmitsVariantSegment_ForDefaultTitleVariant()
     {
         var sut = CreateSut();
-        var sku = await sut.GenerateAsync("Basic Tee", "Default Title");
+        var sku = await sut.Generate("Basic Tee", "Default Title");
         sku.ShouldBe("BW-BasTee");
     }
 
@@ -48,9 +48,9 @@ public class SkuGeneratorTests : IDisposable
     public async Task Generate_OmitsVariantSegment_ForNullOrEmptyVariantTitle()
     {
         var sut = CreateSut();
-        (await sut.GenerateAsync("Basic Tee", null)).ShouldBe("BW-BasTee");
-        (await sut.GenerateAsync("Basic Tee", "")).ShouldBe("BW-BasTee");
-        (await sut.GenerateAsync("Basic Tee", "   ")).ShouldBe("BW-BasTee");
+        (await sut.Generate("Basic Tee", null)).ShouldBe("BW-BasTee");
+        (await sut.Generate("Basic Tee", "")).ShouldBe("BW-BasTee");
+        (await sut.Generate("Basic Tee", "   ")).ShouldBe("BW-BasTee");
     }
 
     // -------------------------------------------------------------------------
@@ -62,7 +62,7 @@ public class SkuGeneratorTests : IDisposable
     {
         var sut = CreateSut();
         // "New Awesome Tshirt" → New + Awe + Tsh (casing preserved on product segment)
-        var sku = await sut.GenerateAsync("New Awesome Tshirt", "Default Title");
+        var sku = await sut.Generate("New Awesome Tshirt", "Default Title");
         sku.ShouldBe("BW-NewAweTsh");
     }
 
@@ -71,7 +71,7 @@ public class SkuGeneratorTests : IDisposable
     {
         var sut = CreateSut();
         // "T-Shirt" is a single token with a hyphen; alphanumeric stripping yields "TShirt" → "TSh"
-        var sku = await sut.GenerateAsync("T-Shirt", "Default Title");
+        var sku = await sut.Generate("T-Shirt", "Default Title");
         sku.ShouldBe("BW-TSh");
     }
 
@@ -82,7 +82,7 @@ public class SkuGeneratorTests : IDisposable
         // First char of each product word is upper-cased ("basic" → "Bas", "tee" → "Tee");
         // remaining chars preserve their original casing. Variant segments are always
         // upper-cased regardless of input casing.
-        var sku = await sut.GenerateAsync("basic tee", "small / black");
+        var sku = await sut.Generate("basic tee", "small / black");
         sku.ShouldBe("BW-BasTee-SM-BL");
     }
 
@@ -103,7 +103,7 @@ public class SkuGeneratorTests : IDisposable
     public async Task Generate_UsesCanonicalSizeAbbreviations(string sizeWord, string expectedAbbrev)
     {
         var sut = CreateSut();
-        var sku = await sut.GenerateAsync("Tee", sizeWord);
+        var sku = await sut.Generate("Tee", sizeWord);
         sku.ShouldBe($"BW-Tee-{expectedAbbrev}");
     }
 
@@ -111,7 +111,7 @@ public class SkuGeneratorTests : IDisposable
     public async Task Generate_TakesFirstTwoCharsOfVariantWord_WhenNotASize()
     {
         var sut = CreateSut();
-        var sku = await sut.GenerateAsync("Tee", "Cotton / Green");
+        var sku = await sut.Generate("Tee", "Cotton / Green");
         sku.ShouldBe("BW-Tee-CO-GR");
     }
 
@@ -119,7 +119,7 @@ public class SkuGeneratorTests : IDisposable
     public async Task Generate_HandlesMixedSizeAndColorParts()
     {
         var sut = CreateSut();
-        var sku = await sut.GenerateAsync("Tee", "Large / Blue");
+        var sku = await sut.Generate("Tee", "Large / Blue");
         sku.ShouldBe("BW-Tee-LG-BL");
     }
 
@@ -135,7 +135,7 @@ public class SkuGeneratorTests : IDisposable
         // Full would be BW-NewAweTshMadByBohWan-SM-GR (way over 15).
         // With suffix=0: available for product = 15 - 2 - 1 - 1 - 2 - 1 - 2 = 6 → NewAwe
         var sut = CreateSut(maxLength: 15);
-        var sku = await sut.GenerateAsync("New Awesome Tshirt Made By Boho WanderLust", "Small / Green");
+        var sku = await sut.Generate("New Awesome Tshirt Made By Boho WanderLust", "Small / Green");
         sku.ShouldBe("BW-NewAwe-SM-GR");
         sku.Length.ShouldBeLessThanOrEqualTo(15);
     }
@@ -149,7 +149,7 @@ public class SkuGeneratorTests : IDisposable
         await _dbContext.SaveChangesAsync();
 
         var sut = CreateSut(maxLength: 15);
-        var sku = await sut.GenerateAsync("New Awesome Tshirt Made By Boho WanderLust", "Small / Green");
+        var sku = await sut.Generate("New Awesome Tshirt Made By Boho WanderLust", "Small / Green");
         sku.Length.ShouldBeLessThanOrEqualTo(15);
         sku.ShouldEndWith("-SM-GR-1");
         sku.ShouldStartWith("BW-");
@@ -162,7 +162,7 @@ public class SkuGeneratorTests : IDisposable
         // MaxLength=9 leaves negative space for product → throw.
         var sut = CreateSut(maxLength: 9);
         var exception = await Should.ThrowAsync<InvalidOperationException>(
-            () => sut.GenerateAsync("Anything", "Small / Green"));
+            () => sut.Generate("Anything", "Small / Green"));
         exception.Message.ShouldContain("MaxLength");
     }
 
@@ -177,7 +177,7 @@ public class SkuGeneratorTests : IDisposable
         await _dbContext.SaveChangesAsync();
 
         var sut = CreateSut();
-        var sku = await sut.GenerateAsync("Basic Tee", "Small / Black");
+        var sku = await sut.Generate("Basic Tee", "Small / Black");
         sku.ShouldBe("BW-BasTee-SM-BL-1");
     }
 
@@ -190,7 +190,7 @@ public class SkuGeneratorTests : IDisposable
         await _dbContext.SaveChangesAsync();
 
         var sut = CreateSut();
-        var sku = await sut.GenerateAsync("Basic Tee", "Small / Black");
+        var sku = await sut.Generate("Basic Tee", "Small / Black");
         sku.ShouldBe("BW-BasTee-SM-BL-3");
     }
 
@@ -199,7 +199,7 @@ public class SkuGeneratorTests : IDisposable
     {
         var sut = CreateSut();
         var reserved = new HashSet<string>(StringComparer.Ordinal) { "BW-BasTee-SM-BL" };
-        var sku = await sut.GenerateAsync("Basic Tee", "Small / Black", reserved);
+        var sku = await sut.Generate("Basic Tee", "Small / Black", reserved);
         sku.ShouldBe("BW-BasTee-SM-BL-1");
     }
 
@@ -211,7 +211,7 @@ public class SkuGeneratorTests : IDisposable
     public async Task Generate_UsesConfiguredPrefix_WhenOverridden()
     {
         var sut = CreateSut(prefix: "ACME");
-        var sku = await sut.GenerateAsync("Basic Tee", "Small / Black");
+        var sku = await sut.Generate("Basic Tee", "Small / Black");
         sku.ShouldBe("ACME-BasTee-SM-BL");
     }
 
@@ -219,7 +219,7 @@ public class SkuGeneratorTests : IDisposable
     public async Task Generate_UsesConfiguredDelimiter_WhenOverridden()
     {
         var sut = CreateSut(delimiter: "_");
-        var sku = await sut.GenerateAsync("Basic Tee", "Small / Black");
+        var sku = await sut.Generate("Basic Tee", "Small / Black");
         sku.ShouldBe("BW_BasTee_SM_BL");
     }
 
@@ -232,7 +232,7 @@ public class SkuGeneratorTests : IDisposable
     {
         var sut = CreateSut();
         await Should.ThrowAsync<InvalidOperationException>(
-            () => sut.GenerateAsync("", "Small / Black"));
+            () => sut.Generate("", "Small / Black"));
     }
 
     [Fact]
@@ -242,7 +242,7 @@ public class SkuGeneratorTests : IDisposable
         // → generator can't build a meaningful SKU and must surface the configuration error.
         var sut = CreateSut();
         var exception = await Should.ThrowAsync<InvalidOperationException>(
-            () => sut.GenerateAsync("--- !!! ---", "Small / Black"));
+            () => sut.Generate("--- !!! ---", "Small / Black"));
         exception.Message.ShouldContain("empty abbreviation");
     }
 

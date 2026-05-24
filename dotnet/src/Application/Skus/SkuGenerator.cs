@@ -26,7 +26,7 @@ public class SkuGenerator(
     private const int MaxSuffixAttempts = 10_000;
 
     /// <inheritdoc/>
-    public async Task<string> GenerateAsync(
+    public async Task<string> Generate(
         string productTitle,
         string? variantTitle,
         ISet<string>? reservedInBatch = null,

@@ -70,7 +70,7 @@ public class ShopifyProductCreateWebhookHandler(
                 "New variant {VariantId} [{VariantTitle}] for product {ProductId} found.",
                 variant.Id, variant.Title, product.Id);
 
-            var generatedSku = await skuGenerator.GenerateAsync(
+            var generatedSku = await skuGenerator.Generate(
                 product.Title, variant.Title, reservedSkus);
             reservedSkus.Add(generatedSku);
 

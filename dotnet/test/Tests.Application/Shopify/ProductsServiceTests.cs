@@ -142,7 +142,7 @@ public class ProductsServiceTests : IDisposable
     [Fact]
     public async Task ImportProducts_ShouldGenerateSku_WhenShopifyVariantHasNoSku_OnCreate()
     {
-        _skuGenerator.GenerateAsync(
+        _skuGenerator.Generate(
                 "T-Shirt", "Large",
                 Arg.Any<ISet<string>?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult("BW-TSh-LG"));
@@ -183,7 +183,7 @@ public class ProductsServiceTests : IDisposable
         SeedVariant("gid://shopify/ProductVariant/200", displayName: "T-Shirt - Large", sku: "", barcode: "BAR-1");
         await _dbContext.SaveChangesAsync();
 
-        _skuGenerator.GenerateAsync(
+        _skuGenerator.Generate(
                 "T-Shirt", "Large",
                 Arg.Any<ISet<string>?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult("BW-TSh-LG"));
@@ -214,7 +214,7 @@ public class ProductsServiceTests : IDisposable
     [Fact]
     public async Task ImportProducts_ShouldReturnFailure_WhenSkuGeneratorThrows()
     {
-        _skuGenerator.GenerateAsync(
+        _skuGenerator.Generate(
                 Arg.Any<string>(), Arg.Any<string?>(),
                 Arg.Any<ISet<string>?>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("generator unhappy"));

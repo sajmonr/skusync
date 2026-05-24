@@ -25,7 +25,7 @@ public interface ISkuGenerator
     /// the next variant so that two new variants of the same product never receive the
     /// same SKU.
     /// </param>
-    Task<string> GenerateAsync(
+    Task<string> Generate(
         string productTitle,
         string? variantTitle,
         ISet<string>? reservedInBatch = null,

@@ -44,7 +44,7 @@ public class ProductsService(
         try
         {
             (createdEntities, updatedEntities) =
-                await ReconcileVariantsAsync(shopifyVariants, dbVariantsByGlobalId);
+                await ReconcileVariants(shopifyVariants, dbVariantsByGlobalId);
         }
         catch (Exception exception)
         {
@@ -68,7 +68,7 @@ public class ProductsService(
                 "Could not import products from Shopify because the product variants could not be saved to the database.");
         }
 
-        await PublishVariantEventsAsync(createdEntities, updatedEntities);
+        await PublishVariantEvents(createdEntities, updatedEntities);
 
         logger.LogDebug("Synchronization complete. Created: {Created}, Updated: {Updated}.",
             createdEntities.Count, updatedEntities.Count);
@@ -81,7 +81,7 @@ public class ProductsService(
     /// tracking entities in the DbContext as a side effect but not yet calling SaveChanges.
     /// </summary>
     private async Task<(List<ShopifyProductVariantEntity> Created, List<ShopifyProductVariantEntity> Updated)>
-        ReconcileVariantsAsync(
+        ReconcileVariants(
             ShopifyProductVariant[] shopifyVariants,
             IReadOnlyDictionary<string, ShopifyProductVariantEntity> dbVariantsByGlobalId)
     {
@@ -102,7 +102,7 @@ public class ProductsService(
             }
             else
             {
-                createdEntities.Add(await CreateNewVariantAsync(shopifyVariant, reservedSkus));
+                createdEntities.Add(await CreateNewVariant(shopifyVariant, reservedSkus));
             }
         }
 
@@ -138,11 +138,11 @@ public class ProductsService(
     /// The matching <c>VariantCreated</c> (and optional <c>SkuSet</c>) log events are
     /// attached to the entity.
     /// </summary>
-    private async Task<ShopifyProductVariantEntity> CreateNewVariantAsync(
+    private async Task<ShopifyProductVariantEntity> CreateNewVariant(
         ShopifyProductVariant shopifyVariant,
         ISet<string> reservedSkus)
     {
-        var (sku, skuWasGenerated) = await ResolveSkuForNewVariantAsync(shopifyVariant, reservedSkus);
+        var (sku, skuWasGenerated) = await ResolveSkuForNewVariant(shopifyVariant, reservedSkus);
 
         var newVariant = new ShopifyProductVariantEntity
         {
@@ -180,7 +180,7 @@ public class ProductsService(
     /// otherwise one synthesised by <see cref="ISkuGenerator"/>. The returned flag tells
     /// callers whether a <c>SkuSet</c> log event should be emitted (only when generated).
     /// </summary>
-    private async Task<(string Sku, bool WasGenerated)> ResolveSkuForNewVariantAsync(
+    private async Task<(string Sku, bool WasGenerated)> ResolveSkuForNewVariant(
         ShopifyProductVariant shopifyVariant,
         ISet<string> reservedSkus)
     {
@@ -189,7 +189,7 @@ public class ProductsService(
             return (shopifyVariant.Sku, WasGenerated: false);
         }
 
-        var sku = await skuGenerator.GenerateAsync(
+        var sku = await skuGenerator.Generate(
             shopifyVariant.ProductTitle, shopifyVariant.VariantTitle, reservedSkus);
         reservedSkus.Add(sku);
         logger.LogInformation(
@@ -203,7 +203,7 @@ public class ProductsService(
     /// persisted entity. Called only after the DbContext save has succeeded, so that no
     /// phantom events ever reach the queue.
     /// </summary>
-    private async Task PublishVariantEventsAsync(
+    private async Task PublishVariantEvents(
         List<ShopifyProductVariantEntity> createdEntities,
         List<ShopifyProductVariantEntity> updatedEntities)
     {
@@ -358,7 +358,7 @@ public class ProductsService(
             }
             else
             {
-                newSku = await skuGenerator.GenerateAsync(
+                newSku = await skuGenerator.Generate(
                     shopifyVariant.ProductTitle, shopifyVariant.VariantTitle, reservedSkus);
                 reservedSkus.Add(newSku);
             }

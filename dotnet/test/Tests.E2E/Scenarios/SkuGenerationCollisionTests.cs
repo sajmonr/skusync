@@ -26,7 +26,7 @@ public class SkuGenerationCollisionTests(E2EWebApplicationFactory factory) : IAs
         using var scope = factory.Services.CreateScope();
         var sut = scope.ServiceProvider.GetRequiredService<ISkuGenerator>();
 
-        var sku = await sut.GenerateAsync("Basic Tee", "Small / Black");
+        var sku = await sut.Generate("Basic Tee", "Small / Black");
 
         sku.ShouldBe("BW-BasTee-SM-BL");
     }
@@ -39,7 +39,7 @@ public class SkuGenerationCollisionTests(E2EWebApplicationFactory factory) : IAs
         using var scope = factory.Services.CreateScope();
         var sut = scope.ServiceProvider.GetRequiredService<ISkuGenerator>();
 
-        var sku = await sut.GenerateAsync("Basic Tee", "Small / Black");
+        var sku = await sut.Generate("Basic Tee", "Small / Black");
 
         sku.ShouldBe("BW-BasTee-SM-BL-1");
     }
@@ -54,7 +54,7 @@ public class SkuGenerationCollisionTests(E2EWebApplicationFactory factory) : IAs
         using var scope = factory.Services.CreateScope();
         var sut = scope.ServiceProvider.GetRequiredService<ISkuGenerator>();
 
-        var sku = await sut.GenerateAsync("Basic Tee", "Small / Black");
+        var sku = await sut.Generate("Basic Tee", "Small / Black");
 
         sku.ShouldBe("BW-BasTee-SM-BL-3");
     }

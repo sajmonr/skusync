@@ -36,7 +36,7 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
         // Default generator behaviour: return a unique placeholder per call so existing
         // tests that just need *a* SKU keep working. Tests exercising the SKU value
         // directly should override this per-test.
-        _skuGenerator.GenerateAsync(
+        _skuGenerator.Generate(
                 Arg.Any<string>(), Arg.Any<string?>(),
                 Arg.Any<ISet<string>?>(), Arg.Any<CancellationToken>())
             .Returns(_ => Task.FromResult($"GEN-{Guid.NewGuid():N}"[..12]));
@@ -79,7 +79,7 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
     [Fact]
     public async Task Handle_ShouldUseGeneratedSku_AndVariantIdBarcode()
     {
-        _skuGenerator.GenerateAsync(
+        _skuGenerator.Generate(
                 "T-Shirt", "Large",
                 Arg.Any<ISet<string>?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult("BW-TSh-LG"));
@@ -102,7 +102,7 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
 
         await CreateSut().Handle(product);
 
-        await _skuGenerator.Received(1).GenerateAsync(
+        await _skuGenerator.Received(1).Generate(
             "T-Shirt",
             "Small / Black",
             Arg.Any<ISet<string>?>(),
@@ -116,7 +116,7 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
         // can verify the previous variant's SKU was already in it (i.e. that the same
         // mutable set is threaded across calls within a single Handle invocation).
         var snapshots = new List<string[]>();
-        _skuGenerator.GenerateAsync(
+        _skuGenerator.Generate(
                 Arg.Any<string>(), Arg.Any<string?>(),
                 Arg.Do<ISet<string>?>(s => snapshots.Add(s?.ToArray() ?? [])),
                 Arg.Any<CancellationToken>())

@@ -64,7 +64,7 @@ public class ShopifyProductUpdateWebhookHandler(
 
             if (entity is null)
             {
-                var generatedSku = await skuGenerator.GenerateAsync(
+                var generatedSku = await skuGenerator.Generate(
                     product.Title, variant.Title, reservedSkus);
                 reservedSkus.Add(generatedSku);
 
