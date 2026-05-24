@@ -117,14 +117,6 @@ npm run lint
 - Defaults in `appsettings.json`; environment overrides in `appsettings.{Environment}.json`. Secrets stay blank in committed files — supplied via env vars or user secrets locally.
 - Feature flags via `Microsoft.FeatureManagement` (`IFeatureManager.IsEnabledAsync(FeatureFlags.X)`).
 
-### Architecture rules (enforced by `Tests.Architecture`)
-- `Integration` depends on `SharedKernel` only (no `Application`, no `Infrastructure`).
-- `Infrastructure` depends on `SharedKernel` only.
-- `Application` depends on `Infrastructure`, `Integration`, `SharedKernel`.
-- `Web.Api` depends on all of the above.
-
-If a new dependency edge fails the architecture tests, **fix the design** — don't suppress the test.
-
 ### Dependency injection
 - Each layer has a `DependencyInjection.cs` exposing an `IHostApplicationBuilder` extension method (`AddApplication`, `AddInfrastructure`, `AddIntegration`). New services register inside the matching layer's file.
 - Prefer `AddTransient` for stateless services. `AddSingleton` for genuinely singleton resources (HTTP clients via factory, message bus). Avoid `AddScoped` outside of EF/DbContext.
@@ -155,9 +147,6 @@ If a new dependency edge fails the architecture tests, **fix the design** — do
 - Dispatch webhooks via `factory.DispatchWebhookAsync(envelope)` so the real `SqsShopEventProductHandler` topic routing is exercised.
 - Use `AsyncWait.UntilAsync(...)` for async post-conditions (consumers running on the in-memory bus).
 
-### Architecture tests (`Tests.Architecture`)
-- NetArchTest rules in `LayerTests.cs`. New layer-crossing dependencies will fail these — re-evaluate the design before changing the test.
-
 ## Comments and docs
 - Default to **no inline comments**. Only add `///` XML docs on public types/members so IDE tooltips work.
 - Inline comments explain non-obvious **why** (a hidden constraint, a workaround for a specific incident, an invariant that would surprise a reader). Never restate **what** the code does.
@@ -169,3 +158,4 @@ If a new dependency edge fails the architecture tests, **fix the design** — do
 - Don't `--no-verify`. Don't force-push `main` or `develop`.
 - Never commit `appsettings.*` files with real secrets.
 - Don't commit IDE artefacts (`.idea/**` workspace state, `.vs/`, etc.) — leave them out of stages.
+- Pull requests follow `.github/pull_request_template.md`. Fill in the Summary and Test plan; drop the Notes section if you have nothing to add.
