@@ -87,6 +87,11 @@ public class ProductsServiceTests : IDisposable
             .SingleAsync(v => v.GlobalVariantId == "gid://shopify/ProductVariant/200");
         updated.DisplayName.ShouldBe("New Title");
         updated.UpdatedOnUtc.ShouldBeGreaterThanOrEqualTo(existingVariant.UpdatedOnUtc);
+
+        var logEvents = await _dbContext.Set<ShopifyProductVariantLogEventEntity>()
+            .Where(e => e.ShopifyProductVariantId == existingVariant.ShopifyProductVariantId)
+            .ToListAsync();
+        logEvents.ShouldContain(e => e.Message.Contains("Old Title") && e.Message.Contains("New Title"));
     }
 
     [Fact]
