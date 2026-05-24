@@ -1,0 +1,59 @@
+name: PR Verify (develop)
+
+on:
+  pull_request:
+    branches:
+      - develop
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'dotnet/**'
+      - '.github/workflows/pr-develop.yml'
+
+defaults:
+  run:
+    working-directory: dotnet
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
+jobs:
+  build-and-test:
+    name: Build & Test (no E2E)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ vars.DOTNET_VERSION }}
+
+      - name: Restore NuGet packages
+        run: dotnet restore SkuSync.slnx
+
+      - name: Build solution (warnings as errors)
+        run: >-
+          dotnet build SkuSync.slnx
+          --no-restore
+          --configuration Release
+          /p:TreatWarningsAsErrors=true
+
+      - name: Run unit, architecture, and integration tests
+        run: >-
+          dotnet test SkuSync.slnx
+          --no-build --configuration Release
+          --filter "FullyQualifiedName!~Tests.E2E"
+          --logger "trx;LogFileName=test-results.trx"
+          --results-directory ${{ github.workspace }}/TestResults
+
+      - name: Publish test results to PR
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        if: always()
+        with:
+          files: ${{ github.workspace }}/TestResults/**/*.trx
+          comment_mode: always
+          check_name: Test results (develop PR)
