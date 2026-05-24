@@ -11,9 +11,8 @@ public interface ISkulabsItemClient
     Task<SkuLabsItem[]> GetAllItems();
 
     /// <summary>
-    /// Updates an existing SkuLabs item with the supplied fields.
+    /// Updates one or more SkuLabs items in a single call via <c>PUT /item/bulk_upsert</c>.
     /// </summary>
-    /// <param name="itemId">SkuLabs item identifier (<c>_id</c>) to update.</param>
-    /// <param name="update">New representation of the item.</param>
-    Task UpdateItem(string itemId, SkulabsItemUpdate update);
+    /// <param name="updates">Items to update, each identified by its SkuLabs id.</param>
+    Task UpdateItems(IEnumerable<SkulabsItemUpdateWithId> updates);
 }

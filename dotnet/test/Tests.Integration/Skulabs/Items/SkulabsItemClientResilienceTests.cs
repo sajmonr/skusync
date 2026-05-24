@@ -91,7 +91,7 @@ public class SkulabsItemClientResilienceTests
     }
 
     [Fact]
-    public async Task UpdateItem_ShouldRetryAndSucceed_When429IsFollowedBySuccess()
+    public async Task UpdateItems_ShouldRetryAndSucceed_When429IsFollowedBySuccess()
     {
         var transport = new ScriptedHttpMessageHandler(
             JsonResponse(HttpStatusCode.TooManyRequests, "{}"),
@@ -100,7 +100,7 @@ public class SkulabsItemClientResilienceTests
 
         var client = BuildClient(transport);
 
-        await client.UpdateItem("item-1", new SkulabsItemUpdate("Name"));
+        await client.UpdateItems([new SkulabsItemUpdateWithId("item-1", "Name")]);
 
         transport.RequestCount.ShouldBe(2);
     }

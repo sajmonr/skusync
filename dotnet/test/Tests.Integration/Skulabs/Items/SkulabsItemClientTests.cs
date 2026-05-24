@@ -336,39 +336,59 @@ public class SkulabsItemClientTests
     }
 
     [Fact]
-    public async Task UpdateItem_ShouldSendPutRequestToItemUpdateEndpoint_WithItemIdAndNameInBody()
+    public async Task UpdateItems_ShouldSendPutRequestToBulkUpsertEndpoint_WithItemsArrayInBody()
     {
         _handler.SetResponse(JsonResponse("{}"));
         var sut = CreateSut();
 
-        await sut.UpdateItem("item-42", new SkulabsItemUpdate("New Name"));
+        await sut.UpdateItems([
+            new SkulabsItemUpdateWithId("item-1", "First"),
+            new SkulabsItemUpdateWithId("item-2", "Second"),
+        ]);
 
         _handler.Requests.Count.ShouldBe(1);
         var request = _handler.Requests[0];
         request.Method.ShouldBe(HttpMethod.Put);
         request.RequestUri.ShouldNotBeNull();
-        request.RequestUri.AbsoluteUri.ShouldBe($"{BaseUrl}item/update");
+        request.RequestUri.AbsoluteUri.ShouldBe($"{BaseUrl}item/bulk_upsert");
         request.Content.ShouldNotBeNull();
         request.Content.Headers.ContentType?.MediaType.ShouldBe("application/json");
 
         var body = _handler.RequestBodies[0];
         using var document = JsonDocument.Parse(body);
-        document.RootElement.GetProperty("item_id").GetString().ShouldBe("item-42");
-        document.RootElement.GetProperty("name").GetString().ShouldBe("New Name");
+        var items = document.RootElement.GetProperty("items");
+        items.GetArrayLength().ShouldBe(2);
+        items[0].GetProperty("_id").GetString().ShouldBe("item-1");
+        items[0].GetProperty("name").GetString().ShouldBe("First");
+        items[1].GetProperty("_id").GetString().ShouldBe("item-2");
+        items[1].GetProperty("name").GetString().ShouldBe("Second");
     }
 
     [Fact]
-    public async Task UpdateItem_ShouldThrow_WhenResponseStatusIsNotSuccess()
+    public async Task UpdateItems_ShouldSendEmptyItemsArray_WhenInputIsEmpty()
+    {
+        _handler.SetResponse(JsonResponse("{}"));
+        var sut = CreateSut();
+
+        await sut.UpdateItems([]);
+
+        var body = _handler.RequestBodies[0];
+        using var document = JsonDocument.Parse(body);
+        document.RootElement.GetProperty("items").GetArrayLength().ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task UpdateItems_ShouldThrow_WhenResponseStatusIsNotSuccess()
     {
         _handler.SetResponse(new HttpResponseMessage(HttpStatusCode.InternalServerError));
         var sut = CreateSut();
 
         await Should.ThrowAsync<HttpRequestException>(() =>
-            sut.UpdateItem("item-1", new SkulabsItemUpdate("Name")));
+            sut.UpdateItems([new SkulabsItemUpdateWithId("item-1", "Name")]));
     }
 
     [Fact]
-    public async Task UpdateItem_ShouldLogStructuredErrorFields_WhenResponseIsStandardSkulabsErrorEnvelope()
+    public async Task UpdateItems_ShouldLogStructuredErrorFields_WhenResponseIsStandardSkulabsErrorEnvelope()
     {
         const string errorBody = """
                                  {
@@ -390,7 +410,7 @@ public class SkulabsItemClientTests
         var sut = CreateSut();
 
         await Should.ThrowAsync<HttpRequestException>(() =>
-            sut.UpdateItem("item-1", new SkulabsItemUpdate("Name")));
+            sut.UpdateItems([new SkulabsItemUpdateWithId("item-1", "Name")]));
 
         var errorEntry = _logger.Entries.SingleOrDefault(e => e.LogLevel == LogLevel.Error);
         errorEntry.ShouldNotBeNull();
@@ -398,20 +418,45 @@ public class SkulabsItemClientTests
         errorEntry.Message.ShouldContain("Item not found");
         errorEntry.Message.ShouldContain("trace-xyz-789");
         errorEntry.Message.ShouldContain("items-service");
-        errorEntry.Message.ShouldContain("item/update");
+        errorEntry.Message.ShouldContain("item/bulk_upsert");
     }
 
     [Fact]
-    public async Task UpdateItem_ShouldLogInformation_OnSuccess()
+    public async Task UpdateItems_ShouldLogInformation_OnSuccess()
     {
         _handler.SetResponse(JsonResponse("{}"));
         var sut = CreateSut();
 
-        await sut.UpdateItem("item-99", new SkulabsItemUpdate("Updated"));
+        await sut.UpdateItems([
+            new SkulabsItemUpdateWithId("item-a", "A"),
+            new SkulabsItemUpdateWithId("item-b", "B"),
+        ]);
 
         _logger.Entries.ShouldContain(e =>
-            e.LogLevel == LogLevel.Information && e.Message.Contains("item-99"));
+            e.LogLevel == LogLevel.Information && e.Message.Contains("2"));
         _logger.Entries.ShouldNotContain(e => e.LogLevel == LogLevel.Error);
+    }
+
+    [Fact]
+    public async Task UpdateItem_Extension_ShouldDelegateToUpdateItems_WithSingletonArray()
+    {
+        _handler.SetResponse(JsonResponse("{}"));
+        var sut = CreateSut();
+
+        await sut.UpdateItem("item-42", new SkulabsItemUpdate("New Name"));
+
+        _handler.Requests.Count.ShouldBe(1);
+        var request = _handler.Requests[0];
+        request.Method.ShouldBe(HttpMethod.Put);
+        request.RequestUri.ShouldNotBeNull();
+        request.RequestUri.AbsoluteUri.ShouldBe($"{BaseUrl}item/bulk_upsert");
+
+        var body = _handler.RequestBodies[0];
+        using var document = JsonDocument.Parse(body);
+        var items = document.RootElement.GetProperty("items");
+        items.GetArrayLength().ShouldBe(1);
+        items[0].GetProperty("_id").GetString().ShouldBe("item-42");
+        items[0].GetProperty("name").GetString().ShouldBe("New Name");
     }
 
     private SkulabsItemClient CreateSut()

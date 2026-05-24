@@ -1,7 +1,10 @@
 namespace Integration.Skulabs.Items;
 
 /// <summary>
-/// Mutable fields supplied to <see cref="ISkulabsItemClient.UpdateItem"/> when
-/// updating a SkuLabs inventory item.
+/// Fields that can be updated on a SkuLabs inventory item.
+/// Pair with an item id via <see cref="SkulabsItemUpdateWithId"/> when calling
+/// <see cref="ISkulabsItemClient.UpdateItems"/>, or use the
+/// <see cref="SkulabsItemClientExtensions.UpdateItem"/> convenience helper to
+/// update a single item by id.
 /// </summary>
-public readonly record struct SkulabsItemUpdate(string Name);
+public record class SkulabsItemUpdate(string Name);

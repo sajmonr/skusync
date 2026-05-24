@@ -96,16 +96,19 @@ public class SkulabsItemClient : ISkulabsItemClient
     }
 
     /// <summary>
-    /// Updates an existing SkuLabs item via <c>PUT /item/update</c>.
+    /// Updates one or more SkuLabs items in a single call via <c>PUT /item/bulk_upsert</c>.
     /// </summary>
-    public async Task UpdateItem(string itemId, SkulabsItemUpdate update)
+    public async Task UpdateItems(IEnumerable<SkulabsItemUpdateWithId> updates)
     {
-        const string requestPath = "item/update";
-        var payload = new UpdateItemPayload(itemId, update.Name);
+        const string requestPath = "item/bulk_upsert";
+        var items = updates
+            .Select(u => new BulkUpsertItem(u.Id, u.Name))
+            .ToArray();
+        var payload = new BulkUpsertPayload(items);
 
         _logger.LogDebug(
-            "Updating SkuLabs item {ItemId} at {RequestPath}.",
-            itemId,
+            "Bulk-updating {Count} SkuLabs item(s) at {RequestPath}.",
+            items.Length,
             requestPath);
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var response = await _client.PutAsJsonAsync(requestPath, payload);
@@ -118,8 +121,8 @@ public class SkulabsItemClient : ISkulabsItemClient
         else
         {
             _logger.LogInformation(
-                "SkuLabs item {ItemId} updated with status {StatusCode} in {ElapsedMs}ms.",
-                itemId,
+                "SkuLabs bulk-upsert of {Count} item(s) completed with status {StatusCode} in {ElapsedMs}ms.",
+                items.Length,
                 (int)response.StatusCode,
                 stopwatch.ElapsedMilliseconds);
         }
@@ -127,8 +130,11 @@ public class SkulabsItemClient : ISkulabsItemClient
         response.EnsureSuccessStatusCode();
     }
 
-    private readonly record struct UpdateItemPayload(
-        [property: JsonPropertyName("item_id")] string ItemId,
+    private readonly record struct BulkUpsertPayload(
+        [property: JsonPropertyName("items")] BulkUpsertItem[] Items);
+
+    private readonly record struct BulkUpsertItem(
+        [property: JsonPropertyName("_id")] string Id,
         [property: JsonPropertyName("name")] string Name);
 
     private async Task LogErrorResponse(HttpResponseMessage response, string requestPath, long elapsedMs)
