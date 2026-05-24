@@ -1,10 +1,13 @@
 using Application.Products.Events;
 using Application.Products.Services;
+using Application.Skus;
 using Infrastructure.Database;
 using Infrastructure.Database.Entities;
 using Integration.Aws.Sqs;
+using Integration.Shopify.Products;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.FeatureManagement;
 using SlimMessageBus;
 
 namespace Application.Products.Webhook;
@@ -18,7 +21,9 @@ namespace Application.Products.Webhook;
 public class ShopifyProductUpdateWebhookHandler(
     ApplicationDbContext dbContext,
     ILogger<ShopifyProductUpdateWebhookHandler> logger,
-    IMessageBus messageBus)
+    IMessageBus messageBus,
+    IFeatureManager featureManager,
+    ISkuGenerator skuGenerator)
     : ShopifyWebhookBase, IShopifyWebhookHandler
 {
     /// <inheritdoc/>
@@ -31,6 +36,14 @@ public class ShopifyProductUpdateWebhookHandler(
     /// <param name="product">The product payload from the <c>products/update</c> webhook.</param>
     public async Task Handle(SqsShopEventProduct product)
     {
+        if (!await featureManager.IsEnabledAsync(FeatureFlags.ShopifySyncEnabled))
+        {
+            logger.LogDebug(
+                "{Flag} is disabled. Ignoring products/update webhook for product {ProductId}.",
+                FeatureFlags.ShopifySyncEnabled, product.Id);
+            return;
+        }
+
         var existingVariants = await dbContext.ShopifyProductVariants.Where(variant => variant.ProductId == product.Id)
             .ToArrayAsync();
 
@@ -41,6 +54,9 @@ public class ShopifyProductUpdateWebhookHandler(
         // Collect events before SaveChangesAsync so we only publish for persisted changes.
         var createdEntities = new List<ShopifyProductVariantEntity>();
         var updatedEntities = new List<ShopifyProductVariantEntity>();
+        // Track SKUs assigned within this batch so two new variants of the same product
+        // can't be issued the same generated SKU before they hit the database.
+        var reservedSkus = new HashSet<string>(StringComparer.Ordinal);
 
         // update entities
         foreach (var variant in product.Variants)
@@ -49,11 +65,23 @@ public class ShopifyProductUpdateWebhookHandler(
 
             if (entity is null)
             {
-                var newEntity = ConstructEntity(product, variant);
+                var generatedSku = await skuGenerator.Generate(
+                    product.Title, variant.Title, reservedSkus);
+                reservedSkus.Add(generatedSku);
+
+                logger.LogInformation(
+                    "Assigning generated SKU '{Sku}' to newly-seen variant {VariantId} of product {ProductId}.",
+                    generatedSku, variant.Id, product.Id);
+
+                var newEntity = ConstructEntity(product, variant, generatedSku);
 
                 newEntity.LogEvents.Add(new ShopifyProductVariantLogEventEntity
                 {
                     Message = VariantLogMessages.VariantCreated()
+                });
+                newEntity.LogEvents.Add(new ShopifyProductVariantLogEventEntity
+                {
+                    Message = VariantLogMessages.SkuSet(generatedSku)
                 });
 
                 dbContext.ShopifyProductVariants.Add(newEntity);
@@ -88,7 +116,7 @@ public class ShopifyProductUpdateWebhookHandler(
     {
         var changed = false;
 
-        var newDisplayName = ResolveDisplayName(product, variant);
+        var newDisplayName = ShopifyDisplayName.Compose(product.Title, variant.Title);
         if (entity.DisplayName != newDisplayName)
         {
             dbContext.ShopifyProductVariantLogEvents.Add(new ShopifyProductVariantLogEventEntity

@@ -1,4 +1,4 @@
-name: .NET Build & Deploy
+name: '[STAGING] .NET Build & Deploy'
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
     paths:
       - 'dotnet/**'
       - '!dotnet/test/**'
-      - '.github/workflows/deploy.yml'
+      - '.github/workflows/staging-deploy.yml'
   workflow_dispatch:
 
 defaults:
@@ -33,7 +33,7 @@ jobs:
         run: dotnet restore SkuSync.slnx
 
       - name: Build solution
-        run: dotnet build SkuSync.slnx --no-restore --configuration Release
+        run: dotnet build SkuSync.slnx --no-restore --configuration Release --warnaserror
 
       - name: Run unit tests
         run: |

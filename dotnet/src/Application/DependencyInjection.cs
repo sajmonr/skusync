@@ -1,8 +1,13 @@
 ﻿using System.Reflection;
 using Application.Jobs;
-using Application.Products.Jobs;
+using Application.Jobs.Maintenance;
+using Application.Products.Maintenance;
 using Application.Products.Services;
 using Application.Products.Webhook;
+using Application.Skulabs.Jobs;
+using Application.Skulabs.Maintenance;
+using Application.Skulabs.Services;
+using Application.Skus;
 using Integration.Aws.Sqs;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -27,8 +32,10 @@ public static class DependencyInjection
         public T AddApplication()
         {
             builder.Services.AddFeatureManagement();
+            builder.AddOptionsFromConfiguration<SkuGeneratorOptions>(SkuGeneratorOptions.SectionKey);
 
-            return builder.AddApplicationServicesServices()
+            return builder
+                .AddApplicationServicesServices()
                 .AddShopifyWebhooks()
                 .AddMessageBus()
                 .AddScheduledJobs();
@@ -36,8 +43,14 @@ public static class DependencyInjection
 
         private T AddShopifyWebhooks()
         {
-            builder.Services.AddTransient<IShopifyWebhookHandler, ShopifyProductUpdateWebhookHandler>();
-            builder.Services.AddTransient<IShopifyWebhookHandler, ShopifyProductCreateWebhookHandler>();
+            builder.Services.AddTransient<
+                IShopifyWebhookHandler,
+                ShopifyProductUpdateWebhookHandler
+            >();
+            builder.Services.AddTransient<
+                IShopifyWebhookHandler,
+                ShopifyProductCreateWebhookHandler
+            >();
 
             return builder;
         }
@@ -45,6 +58,14 @@ public static class DependencyInjection
         private T AddApplicationServicesServices()
         {
             builder.Services.AddTransient<IProductsService, ProductsService>();
+            builder.Services.AddTransient<ISkulabsItemSyncService, SkulabsItemSyncService>();
+            builder.Services.AddTransient<ISkuGenerator, SkuGenerator>();
+            builder.Services.AddTransient<ISkuAndBarcodeSyncService, SkuAndBarcodeSyncService>();
+            builder.Services.AddTransient<ISkulabsTitleSyncService, SkulabsTitleSyncService>();
+
+            builder.Services.AddTransient<IMaintenanceTask, ShopifyProductSyncTask>();
+            builder.Services.AddTransient<IMaintenanceTask, SkuAndBarcodeSyncTask>();
+            builder.Services.AddTransient<IMaintenanceTask, SkulabsTitleSyncTask>();
 
             return builder;
         }
@@ -53,7 +74,11 @@ public static class DependencyInjection
         {
             builder.Services.AddSlimMessageBus(busBuilder =>
             {
-                busBuilder.WithProviderMemory(config => { config.EnableBlockingPublish = false; })
+                busBuilder
+                    .WithProviderMemory(config =>
+                    {
+                        config.EnableBlockingPublish = false;
+                    })
                     .AutoDeclareFrom(Assembly.GetExecutingAssembly());
             });
 
@@ -62,23 +87,30 @@ public static class DependencyInjection
 
         private T AddScheduledJobs()
         {
-            builder.AddOptionsFromConfiguration<ScheduledJobsOptions>(ScheduledJobsOptions.SectionKey);
-            var scheduledJobsOptions =
-                builder.GetRequiredConfigValue<ScheduledJobsOptions>(ScheduledJobsOptions.SectionKey);
-
-            builder.Services.AddSingleton<MutexGroupRegistry>();
-            builder.Services.AddSingleton<MutexGroupListener>();
+            builder.AddOptionsFromConfiguration<ScheduledJobsOptions>(
+                ScheduledJobsOptions.SectionKey
+            );
+            var scheduledJobsOptions = builder.GetRequiredConfigValue<ScheduledJobsOptions>(
+                ScheduledJobsOptions.SectionKey
+            );
 
             builder.Services.AddQuartz(quartz =>
             {
-                //quartz.AddTriggerListener<MutexGroupListener>(GroupMatcher<TriggerKey>.AnyGroup());
-                //quartz.AddJobListener<MutexGroupListener>(GroupMatcher<JobKey>.AnyGroup());
+                quartz.AddScheduledJob<SkulabsItemSyncJob>(
+                    SkulabsItemSyncJob.Key,
+                    scheduledJobsOptions.SkulabsItemSync
+                );
 
-                quartz.AddScheduledJob<ShopifyProductSyncJob>(ShopifyProductSyncJob.Key,
-                    scheduledJobsOptions.ShopifyProductSync);
+                quartz.AddScheduledJob<ProductMaintenanceJob>(
+                    ProductMaintenanceJob.Key,
+                    scheduledJobsOptions.ProductMaintenance
+                );
             });
 
-            builder.Services.AddQuartzHostedService(options => { options.WaitForJobsToComplete = true; });
+            builder.Services.AddQuartzHostedService(options =>
+            {
+                options.WaitForJobsToComplete = true;
+            });
 
             return builder;
         }

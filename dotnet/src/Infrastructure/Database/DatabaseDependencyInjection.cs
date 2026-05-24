@@ -28,7 +28,10 @@ public static class DatabaseDependencyInjection
             var skuSyncConnectionString = builder.GetConnectionStringOrThrow(ConnectionStringConfigurationKey);
 
             builder.Services.AddHealthChecks()
-                .AddNpgSql(skuSyncConnectionString);
+                .AddNpgSql(
+                    skuSyncConnectionString,
+                    name: "postgres",
+                    tags: ["ready", "db"]);
 
             builder.Services.AddDbContext<ApplicationDbContext>(options =>
                 options.UseNpgsql(skuSyncConnectionString));

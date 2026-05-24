@@ -1,4 +1,4 @@
-﻿name: skusync
+name: skusync
 services:
   web.api:
     build: .
@@ -12,10 +12,29 @@ services:
       - Aws__Auth__SecretKey
       - Aws__Auth__AccessKey
     depends_on:
-      - postgres
-    
+      postgres:
+        condition: service_healthy
+    # Probes the narrowest possible signal — /_health/live runs only the "self" check, so
+    # external dependency outages can't trigger a container-restart loop. A Postgres outage
+    # makes /_health/ready unhealthy (gating LB traffic) without killing the process.
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/_health/live"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
   postgres:
     image: postgres:18.3
     environment:
       - POSTGRES_USER
       - POSTGRES_PASSWORD
+    # web.api waits for this to report healthy before starting. pg_isready exits 0 only when
+    # the server is accepting connections, so the API never tries to migrate against a
+    # half-booted Postgres.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s

@@ -21,6 +21,11 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     /// </summary>
     public DbSet<ShopifyProductVariantLogEventEntity> ShopifyProductVariantLogEvents { get; init; }
 
+    /// <summary>
+    /// Gets the set of SkuLabs inventory items linked to Shopify product variants.
+    /// </summary>
+    public DbSet<SkulabsItemEntity> SkulabsItems { get; init; }
+
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

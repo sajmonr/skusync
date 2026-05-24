@@ -36,4 +36,37 @@ internal static class VariantLogMessages
     /// <param name="newBarcode">The replacement barcode value.</param>
     public static string BarcodeUpdated(string oldBarcode, string newBarcode) =>
         $"Barcode changed from '{oldBarcode}' to '{newBarcode}'.";
+
+    /// <summary>Returns a message indicating that a SkuLabs item was newly linked to this variant.</summary>
+    /// <param name="skulabsItemId">The SkuLabs source item id of the newly linked item.</param>
+    public static string SkulabsLinked(string skulabsItemId) =>
+        $"Linked to SkuLabs item '{skulabsItemId}'.";
+
+    /// <summary>Returns a message indicating that the SkuLabs item previously linked to this
+    /// variant is no longer linked (either because it moved to a different variant or because a
+    /// different SkuLabs item now claims this variant).</summary>
+    /// <param name="skulabsItemId">The SkuLabs source item id that was unlinked.</param>
+    public static string SkulabsUnlinked(string skulabsItemId) =>
+        $"Unlinked from SkuLabs item '{skulabsItemId}'.";
+
+    /// <summary>Returns a message indicating that the variant's SKU was corrected in Shopify to
+    /// match the authoritative value held by the linked SkuLabs item.</summary>
+    /// <param name="oldSku">The drifted Shopify SKU value that was replaced.</param>
+    /// <param name="newSku">The SkuLabs SKU now written to Shopify.</param>
+    public static string SkuCorrectedFromSkulabs(string oldSku, string newSku) =>
+        $"SKU corrected to match SkuLabs: '{oldSku}' → '{newSku}'.";
+
+    /// <summary>Returns a message indicating that the variant's barcode was corrected in Shopify
+    /// to match the authoritative value held by the linked SkuLabs item.</summary>
+    /// <param name="oldBarcode">The drifted Shopify barcode value that was replaced.</param>
+    /// <param name="newBarcode">The SkuLabs barcode now written to Shopify.</param>
+    public static string BarcodeCorrectedFromSkulabs(string oldBarcode, string newBarcode) =>
+        $"Barcode corrected to match SkuLabs: '{oldBarcode}' → '{newBarcode}'.";
+
+    /// <summary>Returns a message indicating that the linked SkuLabs item's title was corrected
+    /// in SkuLabs to match the authoritative display name held on this variant.</summary>
+    /// <param name="oldTitle">The previous SkuLabs item title that was replaced.</param>
+    /// <param name="newTitle">The variant display name now written to SkuLabs.</param>
+    public static string SkulabsTitleSyncedFromVariant(string oldTitle, string newTitle) =>
+        $"SkuLabs item title corrected to match variant: '{oldTitle}' → '{newTitle}'.";
 }

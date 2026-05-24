@@ -17,7 +17,7 @@ namespace Infrastructure.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.5")
+                .HasAnnotation("ProductVersion", "10.0.8")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -53,6 +53,11 @@ namespace Infrastructure.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)");
 
+                    b.Property<bool>("PendingShopifySync")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<long>("ProductId")
                         .HasColumnType("bigint");
 
@@ -73,6 +78,9 @@ namespace Infrastructure.Migrations
 
                     b.HasIndex("GlobalVariantId")
                         .IsUnique();
+
+                    b.HasIndex("PendingShopifySync")
+                        .HasFilter("\"PendingShopifySync\" = true");
 
                     b.HasIndex("VariantId")
                         .IsUnique();
@@ -117,6 +125,11 @@ namespace Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<bool>("PendingSkulabsSync")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<Guid>("ShopifyProductVariantId")
                         .HasColumnType("uuid");
 
@@ -141,6 +154,9 @@ namespace Infrastructure.Migrations
                         .HasColumnType("character varying(1000)");
 
                     b.HasKey("SkulabsItemId");
+
+                    b.HasIndex("PendingSkulabsSync")
+                        .HasFilter("\"PendingSkulabsSync\" = true");
 
                     b.HasIndex("ShopifyProductVariantId")
                         .IsUnique();

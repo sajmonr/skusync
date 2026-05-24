@@ -1,10 +1,13 @@
+using Application;
 using Application.Products.Events;
 using Application.Products.Webhook;
+using Application.Skus;
 using Infrastructure.Database;
 using Infrastructure.Database.Entities;
 using Integration.Aws.Sqs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.FeatureManagement;
 using NSubstitute;
 using Shouldly;
 using SlimMessageBus;
@@ -14,6 +17,8 @@ namespace Tests.Application.Queue;
 public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
 {
     private readonly IMessageBus _messageBus = Substitute.For<IMessageBus>();
+    private readonly IFeatureManager _featureManager = Substitute.For<IFeatureManager>();
+    private readonly ISkuGenerator _skuGenerator = Substitute.For<ISkuGenerator>();
     private readonly ApplicationDbContext _dbContext;
     private readonly TestLogger<ShopifyProductUpdateWebhookHandler> _logger = new();
 
@@ -24,6 +29,14 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
             .Options;
 
         _dbContext = new ApplicationDbContext(options);
+
+        // Default to enabled for existing behavioural tests. Override per-test if needed.
+        _featureManager.IsEnabledAsync(FeatureFlags.ShopifySyncEnabled).Returns(true);
+
+        _skuGenerator.Generate(
+                Arg.Any<string>(), Arg.Any<string?>(),
+                Arg.Any<ISet<string>?>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult($"GEN-{Guid.NewGuid():N}"[..12]));
     }
 
     public void Dispose() => _dbContext.Dispose();
@@ -65,7 +78,7 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
     [Fact]
     public async Task Handle_ShouldUpdateDisplayName_WhenProductOrVariantTitleChangedInShopify()
     {
-        SeedVariant(100, 200, displayName: "Old Product - Old Variant", sku: "SKU-A", barcode: "BAR-A");
+        SeedVariant(100, 200, displayName: "Old Product (Old Variant)", sku: "SKU-A", barcode: "BAR-A");
         await _dbContext.SaveChangesAsync();
 
         var product = CreateProduct(100, productTitle: "New Product",
@@ -74,7 +87,7 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
         await CreateSut().Handle(product);
 
         var updated = await _dbContext.ShopifyProductVariants.SingleAsync();
-        updated.DisplayName.ShouldBe("New Product - New Variant");
+        updated.DisplayName.ShouldBe("New Product (New Variant)");
     }
 
     [Fact]
@@ -132,7 +145,7 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
     public async Task Handle_ShouldNotPublishUpdatedEvent_WhenBarcodeIsEmptyInDatabase()
     {
         // Display name must match so UpdateEntity returns false; only DidBarcodeOrSkuChange is tested.
-        SeedVariant(100, 200, displayName: "T-Shirt - Large", sku: "SKU-A", barcode: "");
+        SeedVariant(100, 200, displayName: "T-Shirt (Large)", sku: "SKU-A", barcode: "");
         await _dbContext.SaveChangesAsync();
 
         var product = CreateProduct(100,
@@ -147,7 +160,7 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
     public async Task Handle_ShouldNotPublishUpdatedEvent_WhenSkuIsEmptyInDatabase()
     {
         // Display name must match so UpdateEntity returns false; only DidBarcodeOrSkuChange is tested.
-        SeedVariant(100, 200, displayName: "T-Shirt - Large", sku: "", barcode: "BAR-A");
+        SeedVariant(100, 200, displayName: "T-Shirt (Large)", sku: "", barcode: "BAR-A");
         await _dbContext.SaveChangesAsync();
 
         var product = CreateProduct(100,
@@ -161,7 +174,7 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
     [Fact]
     public async Task Handle_ShouldNotPublishAnyEvent_WhenVariantIsFullyUpToDate()
     {
-        SeedVariant(100, 200, displayName: "T-Shirt - Large", sku: "SKU-A", barcode: "BAR-A");
+        SeedVariant(100, 200, displayName: "T-Shirt (Large)", sku: "SKU-A", barcode: "BAR-A");
         await _dbContext.SaveChangesAsync();
 
         var product = CreateProduct(100,
@@ -179,7 +192,7 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
     [Fact]
     public async Task Handle_ShouldCreateAndUpdateVariants_InSameCall()
     {
-        SeedVariant(100, 200, displayName: "T-Shirt - Large", sku: "SKU-A", barcode: "BAR-A");
+        SeedVariant(100, 200, displayName: "T-Shirt (Large)", sku: "SKU-A", barcode: "BAR-A");
         await _dbContext.SaveChangesAsync();
 
         var product = CreateProduct(100,
@@ -213,11 +226,28 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
     }
 
     // -------------------------------------------------------------------------
+    // Feature flag
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task Handle_ShouldDoNothing_WhenShopifySyncFeatureFlagIsDisabled()
+    {
+        _featureManager.IsEnabledAsync(FeatureFlags.ShopifySyncEnabled).Returns(false);
+        var product = CreateProduct(100,
+            CreateVariant(200, variantTitle: "Large", sku: "SKU-A", barcode: "BAR-A"));
+
+        await CreateSut().Handle(product);
+
+        (await _dbContext.ShopifyProductVariants.CountAsync()).ShouldBe(0);
+        await AssertNoEventsPublished();
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 
     private ShopifyProductUpdateWebhookHandler CreateSut() =>
-        new(_dbContext, _logger, _messageBus);
+        new(_dbContext, _logger, _messageBus, _featureManager, _skuGenerator);
 
     private async Task AssertNoEventsPublished()
     {
@@ -232,7 +262,7 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
     private void SeedVariant(
         long productId,
         long variantId,
-        string displayName = "T-Shirt - Large",
+        string displayName = "T-Shirt (Large)",
         string sku = "SKU",
         string barcode = "BAR")
     {

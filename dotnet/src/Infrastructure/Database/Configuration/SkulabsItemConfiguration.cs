@@ -17,8 +17,14 @@ public class SkulabsItemConfiguration : IEntityTypeConfiguration<SkulabsItemEnti
         builder.Property(x => x.Title).IsRequired().HasMaxLength(1000);
         builder.Property(x => x.Sku).IsRequired().HasMaxLength(100);
         builder.Property(x => x.Barcode).IsRequired().HasMaxLength(100);
-        
+
+        builder.Property(x => x.PendingSkulabsSync)
+            .IsRequired()
+            .HasDefaultValue(false);
+
         builder.HasIndex(x => x.SkulabsSourceItemId).IsUnique();
         builder.HasIndex(x => x.SkulabsSourceListingId).IsUnique();
+        builder.HasIndex(x => x.PendingSkulabsSync)
+            .HasFilter("\"PendingSkulabsSync\" = true");
     }
 }

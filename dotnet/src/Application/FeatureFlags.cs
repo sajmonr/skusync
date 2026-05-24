@@ -10,4 +10,23 @@ public static class FeatureFlags
     /// When disabled, all writes back to Shopify (variant SKU/barcode sync) are skipped.
     /// </summary>
     public const string ShopifyWriteBack = "ShopifyWriteBack";
+
+    /// <summary>
+    /// When disabled, all writes back to SkuLabs (variant title push) are skipped.
+    /// </summary>
+    public const string SkulabsWriteBack = "SkulabsWriteBack";
+
+    /// <summary>
+    /// When disabled, Shopify product webhook handlers (products/create, products/update)
+    /// return immediately without persisting anything or publishing events.
+    /// Defaults to enabled (configured in appsettings).
+    /// </summary>
+    public const string ShopifySyncEnabled = "ShopifySyncEnabled";
+
+    /// <summary>
+    /// When disabled, the scheduled SkuLabs item sync job returns immediately without
+    /// fetching from SkuLabs or touching the database.
+    /// Defaults to disabled (omit from appsettings, or set explicitly to false).
+    /// </summary>
+    public const string SkulabsSyncEnabled = "SkulabsSyncEnabled";
 }

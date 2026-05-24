@@ -1,10 +1,12 @@
 using Application.Products.Events;
 using Application.Products.Services;
+using Application.Skus;
 using Infrastructure.Database;
 using Infrastructure.Database.Entities;
 using Integration.Aws.Sqs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.FeatureManagement;
 using SlimMessageBus;
 
 namespace Application.Products.Webhook;
@@ -17,7 +19,9 @@ namespace Application.Products.Webhook;
 public class ShopifyProductCreateWebhookHandler(
     ApplicationDbContext dbContext,
     ILogger<ShopifyProductUpdateWebhookHandler> logger,
-    IMessageBus messageBus)
+    IMessageBus messageBus,
+    IFeatureManager featureManager,
+    ISkuGenerator skuGenerator)
     : ShopifyWebhookBase, IShopifyWebhookHandler
 {
 
@@ -31,6 +35,14 @@ public class ShopifyProductCreateWebhookHandler(
     /// <param name="product">The product payload from the <c>products/create</c> webhook.</param>
     public async Task Handle(SqsShopEventProduct product)
     {
+        if (!await featureManager.IsEnabledAsync(FeatureFlags.ShopifySyncEnabled))
+        {
+            logger.LogDebug(
+                "{Flag} is disabled. Ignoring products/create webhook for product {ProductId}.",
+                FeatureFlags.ShopifySyncEnabled, product.Id);
+            return;
+        }
+
         // Shopify can redeliver products/create webhooks (e.g. retries, replays) and the second
         // delivery may carry a different variant set. Skip variants we already track so we don't
         // violate the unique GlobalVariantId index, but still persist any genuinely new ones.
@@ -40,6 +52,9 @@ public class ShopifyProductCreateWebhookHandler(
             .ToHashSetAsync();
 
         var entities = new List<ShopifyProductVariantEntity>();
+        // Track SKUs assigned within this batch so two new variants of the same product
+        // can't be issued the same generated SKU before they hit the database.
+        var reservedSkus = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var variant in product.Variants)
         {
@@ -55,11 +70,23 @@ public class ShopifyProductCreateWebhookHandler(
                 "New variant {VariantId} [{VariantTitle}] for product {ProductId} found.",
                 variant.Id, variant.Title, product.Id);
 
-            var newEntity = ConstructEntity(product, variant);
+            var generatedSku = await skuGenerator.Generate(
+                product.Title, variant.Title, reservedSkus);
+            reservedSkus.Add(generatedSku);
+
+            logger.LogInformation(
+                "Assigning generated SKU '{Sku}' to variant {VariantId} of product {ProductId}.",
+                generatedSku, variant.Id, product.Id);
+
+            var newEntity = ConstructEntity(product, variant, generatedSku);
 
             newEntity.LogEvents.Add(new ShopifyProductVariantLogEventEntity
             {
                 Message = VariantLogMessages.VariantCreated()
+            });
+            newEntity.LogEvents.Add(new ShopifyProductVariantLogEventEntity
+            {
+                Message = VariantLogMessages.SkuSet(generatedSku)
             });
 
             entities.Add(newEntity);

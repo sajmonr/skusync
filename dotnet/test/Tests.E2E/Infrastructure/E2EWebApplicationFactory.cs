@@ -10,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
+using NSubstitute.ClearExtensions;
 using Testcontainers.PostgreSql;
 using WireMock.Server;
 
@@ -30,8 +31,7 @@ namespace Tests.E2E.Infrastructure;
 /// </remarks>
 public class E2EWebApplicationFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
-        .WithImage("postgres:18.3")
+    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:18.3")
         .Build();
 
     /// <summary>Local WireMock server for outbound HTTP we own (Skulabs). Started per-fixture.</summary>
@@ -63,9 +63,19 @@ public class E2EWebApplicationFactory : WebApplicationFactory<Program>, IAsyncLi
         SetEnv("Aws__Auth__Region", "us-east-1");
         SetEnv("Aws__Sqs__QueueUrl", "https://localhost/test-queue");
         SetEnv("FeatureManagement__ShopifyWriteBack", "true");
-        SetEnv("ScheduledJobs__ShopifyProductSync__Enabled", "false");
-        SetEnv("ScheduledJobs__ShopifyProductSync__RunOnStart", "false");
-        SetEnv("ScheduledJobs__ShopifyProductSync__CronExpression", "0 0 0 * * ?");
+        SetEnv("FeatureManagement__ShopifySyncEnabled", "true");
+        SetEnv("FeatureManagement__SkulabsSyncEnabled", "true");
+        SetEnv("FeatureManagement__SkulabsWriteBack", "true");
+        SetEnv("ScheduledJobs__ProductMaintenance__Enabled", "false");
+        SetEnv("ScheduledJobs__ProductMaintenance__RunOnStart", "false");
+        SetEnv("ScheduledJobs__ProductMaintenance__CronExpression", "0 0 0 * * ?");
+        // Keep the SkulabsItemSync job *enabled* so its type lands in DI (AddScheduledJob skips
+        // registration entirely when Enabled=false). RunOnStart is disabled and the cron is set
+        // to a far-future time so no triggers fire — and the Quartz hosted service is removed
+        // below anyway. Tests resolve the job from DI and execute it directly.
+        SetEnv("ScheduledJobs__SkulabsItemSync__Enabled", "true");
+        SetEnv("ScheduledJobs__SkulabsItemSync__RunOnStart", "false");
+        SetEnv("ScheduledJobs__SkulabsItemSync__CronExpression", "0 0 0 * * ?");
 
         // Force the host to build now so DI overrides apply and migrations run against the container.
         _ = Services;
@@ -116,18 +126,24 @@ public class E2EWebApplicationFactory : WebApplicationFactory<Program>, IAsyncLi
     }
 
     /// <summary>
-    /// Wipes the variant + log-event tables and resets recorded calls on the Shopify GraphQL
-    /// substitute. Call from each test's <c>InitializeAsync</c> so state doesn't leak across
-    /// tests in the same class fixture.
+    /// Wipes the variant + log-event tables, clears WireMock mappings + request log, and
+    /// resets recorded calls on the Shopify GraphQL substitute. Call from each test's
+    /// <c>InitializeAsync</c> so state doesn't leak across tests in the same class fixture
+    /// (or across classes — the factory is shared via <see cref="E2ETestCollection"/>).
     /// </summary>
     public async Task ResetAsync()
     {
         using var scope = Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        await db.SkulabsItems.ExecuteDeleteAsync();
         await db.ShopifyProductVariantLogEvents.ExecuteDeleteAsync();
         await db.ShopifyProductVariants.ExecuteDeleteAsync();
 
-        ShopifyGraphQl.ClearReceivedCalls();
+        WireMock.Reset();
+        // Full reset (configured Returns + received calls). ClearReceivedCalls alone leaves
+        // .Returns(...) values from earlier tests in place, causing IShopifyGraphQlService
+        // calls in later tests to succeed where the test author expected the default null.
+        ShopifyGraphQl.ClearSubstitute();
     }
 
     /// <summary>

@@ -7,6 +7,7 @@ using Integration.Skulabs.Items;
 using Integration.Skulabs.Options;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Http.Resilience;
 using SharedKernel.Options;
 using ShopifySharp.Extensions.DependencyInjection;
 
@@ -27,7 +28,8 @@ public static class DependencyInjection
         {
             // Skulabs
             builder.AddOptionsFromConfiguration<SkulabsApiOptions>(SkulabsApiOptions.SectionKey);
-            builder.Services.AddHttpClient<SkulabsItemClient>();
+            builder.Services.AddHttpClient<ISkulabsItemClient, SkulabsItemClient>()
+                .AddResilienceHandler("skulabs-retry", SkulabsResiliencePipeline.Configure);
             
             // Shopify
             builder.AddOptionsFromConfiguration<ShopifyOptions>(ShopifyOptions.SectionKey);
