@@ -1,9 +1,11 @@
 ﻿using System.Reflection;
 using Application.Jobs;
-using Application.Products.Jobs;
+using Application.Jobs.Maintenance;
+using Application.Products.Maintenance;
 using Application.Products.Services;
 using Application.Products.Webhook;
 using Application.Skulabs.Jobs;
+using Application.Skulabs.Maintenance;
 using Application.Skulabs.Services;
 using Application.Skus;
 using Integration.Aws.Sqs;
@@ -60,6 +62,9 @@ public static class DependencyInjection
             builder.Services.AddTransient<ISkuGenerator, SkuGenerator>();
             builder.Services.AddTransient<ISkuAndBarcodeSyncService, SkuAndBarcodeSyncService>();
 
+            builder.Services.AddTransient<IMaintenanceTask, ShopifyProductSyncTask>();
+            builder.Services.AddTransient<IMaintenanceTask, SkuAndBarcodeSyncTask>();
+
             return builder;
         }
 
@@ -89,19 +94,14 @@ public static class DependencyInjection
 
             builder.Services.AddQuartz(quartz =>
             {
-                quartz.AddScheduledJob<ShopifyProductSyncJob>(
-                    ShopifyProductSyncJob.Key,
-                    scheduledJobsOptions.ShopifyProductSync
-                );
-
                 quartz.AddScheduledJob<SkulabsItemSyncJob>(
                     SkulabsItemSyncJob.Key,
                     scheduledJobsOptions.SkulabsItemSync
                 );
 
-                quartz.AddScheduledJob<SkuAndBarcodeSyncJob>(
-                    SkuAndBarcodeSyncJob.Key,
-                    scheduledJobsOptions.SkuAndBarcodeSync
+                quartz.AddScheduledJob<ProductMaintenanceJob>(
+                    ProductMaintenanceJob.Key,
+                    scheduledJobsOptions.ProductMaintenance
                 );
             });
 

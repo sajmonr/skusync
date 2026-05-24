@@ -28,7 +28,7 @@ public class SkulabsProductImportedConsumer(
         catch (Exception exception)
         {
             // Swallow per-item failures so a single bad item doesn't poison the batch published
-            // from SkulabsItemSyncJob. The periodic SkuAndBarcodeSyncJob will retry.
+            // from SkulabsItemSyncJob. The periodic SkuAndBarcodeSyncTask will retry.
             logger.LogError(
                 exception,
                 "Post-link drift check failed for SkuLabs item {SkulabsItemId}. The periodic drift sync will retry.",
