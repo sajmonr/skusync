@@ -99,10 +99,74 @@ public class ProductMaintenanceJobTests
         await task.Received(1).Execute(cts.Token);
     }
 
+    [Fact]
+    public async Task Execute_ShouldOrderTasks_ByTaskOrderAttribute_RegardlessOfRegistration()
+    {
+        // Register in reverse-attribute order; the orchestrator should still run them
+        // in attribute order (1, 2, 3).
+        var order = new List<string>();
+        var third = new RecordingTaskWithOrder3("third", order);
+        var first = new RecordingTaskWithOrder1("first", order);
+        var second = new RecordingTaskWithOrder2("second", order);
+
+        await CreateSut(third, first, second).Execute(_context);
+
+        order.ShouldBe(["first", "second", "third"]);
+    }
+
+    [Fact]
+    public async Task Execute_ShouldRunUnorderedTasks_AfterOrderedTasks_InRegistrationOrder()
+    {
+        var order = new List<string>();
+        var ordered = new RecordingTaskWithOrder1("ordered", order);
+        var unorderedA = new RecordingTask("unordered-a", order);
+        var unorderedB = new RecordingTask("unordered-b", order);
+
+        await CreateSut(unorderedA, ordered, unorderedB).Execute(_context);
+
+        order.ShouldBe(["ordered", "unordered-a", "unordered-b"]);
+    }
+
     private ProductMaintenanceJob CreateSut(params IMaintenanceTask[] tasks) =>
         new(tasks, _logger);
 
     private sealed class RecordingTask(string name, List<string> order) : IMaintenanceTask
+    {
+        public string Name => name;
+
+        public Task Execute(CancellationToken cancellationToken)
+        {
+            order.Add(name);
+            return Task.CompletedTask;
+        }
+    }
+
+    [TaskOrder(1)]
+    private sealed class RecordingTaskWithOrder1(string name, List<string> order) : IMaintenanceTask
+    {
+        public string Name => name;
+
+        public Task Execute(CancellationToken cancellationToken)
+        {
+            order.Add(name);
+            return Task.CompletedTask;
+        }
+    }
+
+    [TaskOrder(2)]
+    private sealed class RecordingTaskWithOrder2(string name, List<string> order) : IMaintenanceTask
+    {
+        public string Name => name;
+
+        public Task Execute(CancellationToken cancellationToken)
+        {
+            order.Add(name);
+            return Task.CompletedTask;
+        }
+    }
+
+    [TaskOrder(3)]
+    private sealed class RecordingTaskWithOrder3(string name, List<string> order) : IMaintenanceTask
     {
         public string Name => name;
 

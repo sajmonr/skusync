@@ -10,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
+using NSubstitute.ClearExtensions;
 using Testcontainers.PostgreSql;
 using WireMock.Server;
 
@@ -64,6 +65,7 @@ public class E2EWebApplicationFactory : WebApplicationFactory<Program>, IAsyncLi
         SetEnv("FeatureManagement__ShopifyWriteBack", "true");
         SetEnv("FeatureManagement__ShopifySyncEnabled", "true");
         SetEnv("FeatureManagement__SkulabsSyncEnabled", "true");
+        SetEnv("FeatureManagement__SkulabsWriteBack", "true");
         SetEnv("ScheduledJobs__ProductMaintenance__Enabled", "false");
         SetEnv("ScheduledJobs__ProductMaintenance__RunOnStart", "false");
         SetEnv("ScheduledJobs__ProductMaintenance__CronExpression", "0 0 0 * * ?");
@@ -124,9 +126,10 @@ public class E2EWebApplicationFactory : WebApplicationFactory<Program>, IAsyncLi
     }
 
     /// <summary>
-    /// Wipes the variant + log-event tables and resets recorded calls on the Shopify GraphQL
-    /// substitute. Call from each test's <c>InitializeAsync</c> so state doesn't leak across
-    /// tests in the same class fixture.
+    /// Wipes the variant + log-event tables, clears WireMock mappings + request log, and
+    /// resets recorded calls on the Shopify GraphQL substitute. Call from each test's
+    /// <c>InitializeAsync</c> so state doesn't leak across tests in the same class fixture
+    /// (or across classes — the factory is shared via <see cref="E2ETestCollection"/>).
     /// </summary>
     public async Task ResetAsync()
     {
@@ -136,7 +139,11 @@ public class E2EWebApplicationFactory : WebApplicationFactory<Program>, IAsyncLi
         await db.ShopifyProductVariantLogEvents.ExecuteDeleteAsync();
         await db.ShopifyProductVariants.ExecuteDeleteAsync();
 
-        ShopifyGraphQl.ClearReceivedCalls();
+        WireMock.Reset();
+        // Full reset (configured Returns + received calls). ClearReceivedCalls alone leaves
+        // .Returns(...) values from earlier tests in place, causing IShopifyGraphQlService
+        // calls in later tests to succeed where the test author expected the default null.
+        ShopifyGraphQl.ClearSubstitute();
     }
 
     /// <summary>

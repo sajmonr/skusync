@@ -62,4 +62,11 @@ internal static class VariantLogMessages
     /// <param name="newBarcode">The SkuLabs barcode now written to Shopify.</param>
     public static string BarcodeCorrectedFromSkulabs(string oldBarcode, string newBarcode) =>
         $"Barcode corrected to match SkuLabs: '{oldBarcode}' → '{newBarcode}'.";
+
+    /// <summary>Returns a message indicating that the linked SkuLabs item's title was corrected
+    /// in SkuLabs to match the authoritative display name held on this variant.</summary>
+    /// <param name="oldTitle">The previous SkuLabs item title that was replaced.</param>
+    /// <param name="newTitle">The variant display name now written to SkuLabs.</param>
+    public static string SkulabsTitleSyncedFromVariant(string oldTitle, string newTitle) =>
+        $"SkuLabs item title corrected to match variant: '{oldTitle}' → '{newTitle}'.";
 }
