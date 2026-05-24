@@ -98,8 +98,8 @@ public class SkuAndBarcodeSyncService(
         }
 
         logger.LogInformation(
-            "SkuLabs item {SkulabsItemId} needs correction on variant {VariantGuid} (drifted: {Drifted}, pending: {Pending}).",
-            skulabsItemId, item.ShopifyProductVariantId, drifted, pending);
+            "SkuLabs item {SkulabsSourceItemId} needs correction on Shopify variant {ShopifyVariantId}: {Reason}.",
+            item.SkulabsSourceItemId, item.ShopifyProductVariant.GlobalVariantId, DescribeCorrectionReason(item, pending));
 
         var corrected = await CorrectDrifted([item], cancellationToken);
         return new SkuAndBarcodeSyncResult(
@@ -248,4 +248,27 @@ public class SkuAndBarcodeSyncService(
     private static bool IsDrifted(SkulabsItemEntity item) =>
         !string.Equals(item.ShopifyProductVariant!.Sku, item.Sku, StringComparison.Ordinal)
         || !string.Equals(item.ShopifyProductVariant!.Barcode, item.Barcode, StringComparison.Ordinal);
+
+    private static string DescribeCorrectionReason(SkulabsItemEntity item, bool pending)
+    {
+        var variant = item.ShopifyProductVariant!;
+        var reasons = new List<string>();
+
+        if (!string.Equals(variant.Sku, item.Sku, StringComparison.Ordinal))
+        {
+            reasons.Add($"SKU '{variant.Sku}' → '{item.Sku}'");
+        }
+
+        if (!string.Equals(variant.Barcode, item.Barcode, StringComparison.Ordinal))
+        {
+            reasons.Add($"barcode '{variant.Barcode}' → '{item.Barcode}'");
+        }
+
+        if (pending)
+        {
+            reasons.Add("pending Shopify push from a previous run");
+        }
+
+        return string.Join("; ", reasons);
+    }
 }
