@@ -12,6 +12,11 @@ public static class FeatureFlags
     public const string ShopifyWriteBack = "ShopifyWriteBack";
 
     /// <summary>
+    /// When disabled, all writes back to SkuLabs (variant title push) are skipped.
+    /// </summary>
+    public const string SkulabsWriteBack = "SkulabsWriteBack";
+
+    /// <summary>
     /// When disabled, Shopify product webhook handlers (products/create, products/update)
     /// return immediately without persisting anything or publishing events.
     /// Defaults to enabled (configured in appsettings).

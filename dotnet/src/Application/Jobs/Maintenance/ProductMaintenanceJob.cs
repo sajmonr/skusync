@@ -1,3 +1,4 @@
+using System.Reflection;
 using Microsoft.Extensions.Logging;
 using Quartz;
 
@@ -28,7 +29,7 @@ public class ProductMaintenanceJob(
         );
 
         var jobStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var taskList = tasks.ToList();
+        var taskList = OrderTasks(tasks);
         var succeeded = 0;
         var failed = 0;
 
@@ -52,6 +53,18 @@ public class ProductMaintenanceJob(
             succeeded,
             failed
         );
+
+        static List<IMaintenanceTask> OrderTasks(IEnumerable<IMaintenanceTask> source) =>
+            source
+                .Select((task, registrationIndex) => (
+                    Task: task,
+                    Order: task.GetType().GetCustomAttribute<TaskOrderAttribute>()?.Order,
+                    RegistrationIndex: registrationIndex))
+                .OrderBy(x => x.Order is null)
+                .ThenBy(x => x.Order ?? int.MaxValue)
+                .ThenBy(x => x.RegistrationIndex)
+                .Select(x => x.Task)
+                .ToList();
 
         async Task RunTask(IMaintenanceTask task, CancellationToken cancellationToken)
         {

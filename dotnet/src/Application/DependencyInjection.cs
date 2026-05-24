@@ -61,9 +61,11 @@ public static class DependencyInjection
             builder.Services.AddTransient<ISkulabsItemSyncService, SkulabsItemSyncService>();
             builder.Services.AddTransient<ISkuGenerator, SkuGenerator>();
             builder.Services.AddTransient<ISkuAndBarcodeSyncService, SkuAndBarcodeSyncService>();
+            builder.Services.AddTransient<ISkulabsTitleSyncService, SkulabsTitleSyncService>();
 
             builder.Services.AddTransient<IMaintenanceTask, ShopifyProductSyncTask>();
             builder.Services.AddTransient<IMaintenanceTask, SkuAndBarcodeSyncTask>();
+            builder.Services.AddTransient<IMaintenanceTask, SkulabsTitleSyncTask>();
 
             return builder;
         }

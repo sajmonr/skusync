@@ -2,10 +2,11 @@ namespace Application.Jobs.Maintenance;
 
 /// <summary>
 /// A unit of recurring maintenance work executed by <see cref="ProductMaintenanceJob"/>.
-/// Tasks are run sequentially in the order they were registered with the DI container.
-/// A task failure is isolated by the orchestrator — the exception is logged and the next
-/// task still runs — so implementations may surface errors by throwing or by handling
-/// them internally as appropriate for the operation.
+/// Tasks run sequentially in the order declared by <see cref="TaskOrderAttribute"/> (lower
+/// values first); unattributed tasks run afterwards in DI registration order. Ties are
+/// broken by DI registration order. A task failure is isolated by the orchestrator — the
+/// exception is logged and the next task still runs — so implementations may surface errors
+/// by throwing or by handling them internally as appropriate for the operation.
 /// </summary>
 public interface IMaintenanceTask
 {

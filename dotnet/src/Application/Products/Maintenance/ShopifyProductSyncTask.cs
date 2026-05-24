@@ -9,6 +9,7 @@ namespace Application.Products.Maintenance;
 /// with a deduplication pass. Invoked by <see cref="ProductMaintenanceJob"/>; not registered
 /// as a standalone Quartz job.
 /// </summary>
+[TaskOrder(1)]
 public class ShopifyProductSyncTask(
     IProductsService productsService,
     ILogger<ShopifyProductSyncTask> logger

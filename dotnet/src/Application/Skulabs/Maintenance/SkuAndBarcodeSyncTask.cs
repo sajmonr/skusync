@@ -11,6 +11,7 @@ namespace Application.Skulabs.Maintenance;
 /// view of "what should be in Shopify" stays up to date even when external writes are off.
 /// Invoked by <see cref="ProductMaintenanceJob"/>; not registered as a standalone Quartz job.
 /// </summary>
+[TaskOrder(2)]
 public class SkuAndBarcodeSyncTask(
     ISkuAndBarcodeSyncService syncService,
     ILogger<SkuAndBarcodeSyncTask> logger
