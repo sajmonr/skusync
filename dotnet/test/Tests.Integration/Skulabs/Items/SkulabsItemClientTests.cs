@@ -335,6 +335,130 @@ public class SkulabsItemClientTests
         await Should.ThrowAsync<HttpRequestException>(() => sut.GetAllItems());
     }
 
+    [Fact]
+    public async Task UpdateItems_ShouldSendPutRequestToBulkUpsertEndpoint_WithItemsArrayInBody()
+    {
+        _handler.SetResponse(JsonResponse("{}"));
+        var sut = CreateSut();
+
+        await sut.UpdateItems([
+            new SkulabsItemUpdateWithId("item-1", "First"),
+            new SkulabsItemUpdateWithId("item-2", "Second"),
+        ]);
+
+        _handler.Requests.Count.ShouldBe(1);
+        var request = _handler.Requests[0];
+        request.Method.ShouldBe(HttpMethod.Put);
+        request.RequestUri.ShouldNotBeNull();
+        request.RequestUri.AbsoluteUri.ShouldBe($"{BaseUrl}item/bulk_upsert");
+        request.Content.ShouldNotBeNull();
+        request.Content.Headers.ContentType?.MediaType.ShouldBe("application/json");
+
+        var body = _handler.RequestBodies[0];
+        using var document = JsonDocument.Parse(body);
+        var items = document.RootElement.GetProperty("items");
+        items.GetArrayLength().ShouldBe(2);
+        items[0].GetProperty("_id").GetString().ShouldBe("item-1");
+        items[0].GetProperty("name").GetString().ShouldBe("First");
+        items[1].GetProperty("_id").GetString().ShouldBe("item-2");
+        items[1].GetProperty("name").GetString().ShouldBe("Second");
+    }
+
+    [Fact]
+    public async Task UpdateItems_ShouldSendEmptyItemsArray_WhenInputIsEmpty()
+    {
+        _handler.SetResponse(JsonResponse("{}"));
+        var sut = CreateSut();
+
+        await sut.UpdateItems([]);
+
+        var body = _handler.RequestBodies[0];
+        using var document = JsonDocument.Parse(body);
+        document.RootElement.GetProperty("items").GetArrayLength().ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task UpdateItems_ShouldThrow_WhenResponseStatusIsNotSuccess()
+    {
+        _handler.SetResponse(new HttpResponseMessage(HttpStatusCode.InternalServerError));
+        var sut = CreateSut();
+
+        await Should.ThrowAsync<HttpRequestException>(() =>
+            sut.UpdateItems([new SkulabsItemUpdateWithId("item-1", "Name")]));
+    }
+
+    [Fact]
+    public async Task UpdateItems_ShouldLogStructuredErrorFields_WhenResponseIsStandardSkulabsErrorEnvelope()
+    {
+        const string errorBody = """
+                                 {
+                                   "error": {
+                                     "message": "Item not found",
+                                     "statusCode": 404,
+                                     "code": "ITEM_MISSING",
+                                     "overview": "Lookup failed",
+                                     "origin": "items-service",
+                                     "skulabsTraceId": "trace-xyz-789",
+                                     "user_error": true
+                                   }
+                                 }
+                                 """;
+        _handler.SetResponse(new HttpResponseMessage(HttpStatusCode.NotFound)
+        {
+            Content = new StringContent(errorBody, Encoding.UTF8, "application/json")
+        });
+        var sut = CreateSut();
+
+        await Should.ThrowAsync<HttpRequestException>(() =>
+            sut.UpdateItems([new SkulabsItemUpdateWithId("item-1", "Name")]));
+
+        var errorEntry = _logger.Entries.SingleOrDefault(e => e.LogLevel == LogLevel.Error);
+        errorEntry.ShouldNotBeNull();
+        errorEntry.Message.ShouldContain("ITEM_MISSING");
+        errorEntry.Message.ShouldContain("Item not found");
+        errorEntry.Message.ShouldContain("trace-xyz-789");
+        errorEntry.Message.ShouldContain("items-service");
+        errorEntry.Message.ShouldContain("item/bulk_upsert");
+    }
+
+    [Fact]
+    public async Task UpdateItems_ShouldLogInformation_OnSuccess()
+    {
+        _handler.SetResponse(JsonResponse("{}"));
+        var sut = CreateSut();
+
+        await sut.UpdateItems([
+            new SkulabsItemUpdateWithId("item-a", "A"),
+            new SkulabsItemUpdateWithId("item-b", "B"),
+        ]);
+
+        _logger.Entries.ShouldContain(e =>
+            e.LogLevel == LogLevel.Information && e.Message.Contains("2"));
+        _logger.Entries.ShouldNotContain(e => e.LogLevel == LogLevel.Error);
+    }
+
+    [Fact]
+    public async Task UpdateItem_Extension_ShouldDelegateToUpdateItems_WithSingletonArray()
+    {
+        _handler.SetResponse(JsonResponse("{}"));
+        var sut = CreateSut();
+
+        await sut.UpdateItem("item-42", new SkulabsItemUpdate("New Name"));
+
+        _handler.Requests.Count.ShouldBe(1);
+        var request = _handler.Requests[0];
+        request.Method.ShouldBe(HttpMethod.Put);
+        request.RequestUri.ShouldNotBeNull();
+        request.RequestUri.AbsoluteUri.ShouldBe($"{BaseUrl}item/bulk_upsert");
+
+        var body = _handler.RequestBodies[0];
+        using var document = JsonDocument.Parse(body);
+        var items = document.RootElement.GetProperty("items");
+        items.GetArrayLength().ShouldBe(1);
+        items[0].GetProperty("_id").GetString().ShouldBe("item-42");
+        items[0].GetProperty("name").GetString().ShouldBe("New Name");
+    }
+
     private SkulabsItemClient CreateSut()
     {
         var httpClient = new HttpClient(_handler);
@@ -352,6 +476,7 @@ public class SkulabsItemClientTests
     private sealed class RecordingHttpMessageHandler : HttpMessageHandler
     {
         public List<HttpRequestMessage> Requests { get; } = [];
+        public List<string> RequestBodies { get; } = [];
         private HttpResponseMessage _response = new(HttpStatusCode.OK)
         {
             Content = new StringContent("[]", Encoding.UTF8, "application/json")
@@ -362,11 +487,14 @@ public class SkulabsItemClientTests
             _response = response;
         }
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
             Requests.Add(request);
-            return Task.FromResult(_response);
+            RequestBodies.Add(request.Content is null
+                ? string.Empty
+                : await request.Content.ReadAsStringAsync(cancellationToken));
+            return _response;
         }
     }
 

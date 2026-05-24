@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Integration.Skulabs.Options;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -93,6 +94,48 @@ public class SkulabsItemClient : ISkulabsItemClient
 
         return finalItems;
     }
+
+    /// <summary>
+    /// Updates one or more SkuLabs items in a single call via <c>PUT /item/bulk_upsert</c>.
+    /// </summary>
+    public async Task UpdateItems(IEnumerable<SkulabsItemUpdateWithId> updates)
+    {
+        const string requestPath = "item/bulk_upsert";
+        var items = updates
+            .Select(u => new BulkUpsertItem(u.Id, u.Name))
+            .ToArray();
+        var payload = new BulkUpsertPayload(items);
+
+        _logger.LogDebug(
+            "Bulk-updating {Count} SkuLabs item(s) at {RequestPath}.",
+            items.Length,
+            requestPath);
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var response = await _client.PutAsJsonAsync(requestPath, payload);
+        stopwatch.Stop();
+
+        if (!response.IsSuccessStatusCode)
+        {
+            await LogErrorResponse(response, requestPath, stopwatch.ElapsedMilliseconds);
+        }
+        else
+        {
+            _logger.LogInformation(
+                "SkuLabs bulk-upsert of {Count} item(s) completed with status {StatusCode} in {ElapsedMs}ms.",
+                items.Length,
+                (int)response.StatusCode,
+                stopwatch.ElapsedMilliseconds);
+        }
+
+        response.EnsureSuccessStatusCode();
+    }
+
+    private readonly record struct BulkUpsertPayload(
+        [property: JsonPropertyName("items")] BulkUpsertItem[] Items);
+
+    private readonly record struct BulkUpsertItem(
+        [property: JsonPropertyName("_id")] string Id,
+        [property: JsonPropertyName("name")] string Name);
 
     private async Task LogErrorResponse(HttpResponseMessage response, string requestPath, long elapsedMs)
     {
