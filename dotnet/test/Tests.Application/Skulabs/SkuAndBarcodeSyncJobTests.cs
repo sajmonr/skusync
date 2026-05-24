@@ -8,27 +8,27 @@ using Shouldly;
 
 namespace Tests.Application.Skulabs;
 
-public class ShopifyVariantDriftSyncJobTests
+public class SkuAndBarcodeSyncJobTests
 {
-    private readonly IShopifyVariantDriftSyncService _driftService = Substitute.For<IShopifyVariantDriftSyncService>();
+    private readonly ISkuAndBarcodeSyncService _syncService = Substitute.For<ISkuAndBarcodeSyncService>();
     private readonly IJobExecutionContext _context = Substitute.For<IJobExecutionContext>();
-    private readonly TestLogger<ShopifyVariantDriftSyncJob> _logger = new();
+    private readonly TestLogger<SkuAndBarcodeSyncJob> _logger = new();
 
     [Fact]
     public async Task Execute_ShouldCallSyncAll()
     {
-        _driftService.SyncAll(Arg.Any<CancellationToken>()).Returns(ShopifyVariantDriftSyncResult.Empty);
+        _syncService.SyncAll(Arg.Any<CancellationToken>()).Returns(SkuAndBarcodeSyncResult.Empty);
 
         await CreateSut().Execute(_context);
 
-        await _driftService.Received(1).SyncAll(Arg.Any<CancellationToken>());
+        await _syncService.Received(1).SyncAll(Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task Execute_ShouldThrowJobExecutionException_WhenSyncThrows()
     {
         var inner = new InvalidOperationException("boom");
-        _driftService.SyncAll(Arg.Any<CancellationToken>()).ThrowsAsync(inner);
+        _syncService.SyncAll(Arg.Any<CancellationToken>()).ThrowsAsync(inner);
 
         var thrown = await Should.ThrowAsync<JobExecutionException>(() => CreateSut().Execute(_context));
 
@@ -36,7 +36,7 @@ public class ShopifyVariantDriftSyncJobTests
         thrown.RefireImmediately.ShouldBeFalse();
     }
 
-    private ShopifyVariantDriftSyncJob CreateSut() => new(_driftService, _logger);
+    private SkuAndBarcodeSyncJob CreateSut() => new(_syncService, _logger);
 
     private sealed class TestLogger<T> : ILogger<T>
     {

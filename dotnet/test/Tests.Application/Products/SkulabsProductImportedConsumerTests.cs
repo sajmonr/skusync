@@ -8,7 +8,7 @@ namespace Tests.Application.Products;
 
 public class SkulabsProductImportedConsumerTests
 {
-    private readonly IShopifyVariantDriftSyncService _driftService = Substitute.For<IShopifyVariantDriftSyncService>();
+    private readonly ISkuAndBarcodeSyncService _syncService = Substitute.For<ISkuAndBarcodeSyncService>();
     private readonly TestLogger<SkulabsProductImportedConsumer> _logger = new();
 
     [Fact]
@@ -18,13 +18,13 @@ public class SkulabsProductImportedConsumerTests
 
         await CreateSut().OnHandle(new SkulabsProductImportedEvent(id), CancellationToken.None);
 
-        await _driftService.Received(1).SyncForSkulabsItem(id, Arg.Any<CancellationToken>());
+        await _syncService.Received(1).SyncForSkulabsItem(id, Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task OnHandle_ShouldSwallowExceptions_SoBatchSiblingsKeepProcessing()
     {
-        _driftService
+        _syncService
             .SyncForSkulabsItem(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("shopify offline"));
 
@@ -32,7 +32,7 @@ public class SkulabsProductImportedConsumerTests
         await CreateSut().OnHandle(new SkulabsProductImportedEvent(Guid.NewGuid()), CancellationToken.None);
     }
 
-    private SkulabsProductImportedConsumer CreateSut() => new(_driftService, _logger);
+    private SkulabsProductImportedConsumer CreateSut() => new(_syncService, _logger);
 
     private sealed class TestLogger<T> : ILogger<T>
     {

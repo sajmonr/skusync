@@ -29,7 +29,7 @@ public class ScheduledJobsOptions
     /// reconciles Shopify variant SKU/barcode against the authoritative SkuLabs values.
     /// </summary>
     [Required]
-    public JobScheduleOptions ShopifyVariantDriftSync { get; init; } = JobScheduleOptions.Disabled;
+    public JobScheduleOptions SkuAndBarcodeSync { get; init; } = JobScheduleOptions.Disabled;
 }
 
 /// <summary>

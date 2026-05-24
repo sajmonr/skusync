@@ -12,10 +12,10 @@ public readonly record struct SkulabsProductImportedEvent(Guid SkulabsProductId)
 /// immediately checks whether the variant's Shopify SKU/barcode matches the authoritative
 /// SkuLabs values — correcting Shopify if they have drifted. This runs unconditionally; the
 /// outbound Shopify write itself is gated by the <c>ShopifyWriteBack</c> feature flag inside
-/// <see cref="IShopifyVariantDriftSyncService"/>.
+/// <see cref="ISkuAndBarcodeSyncService"/>.
 /// </summary>
 public class SkulabsProductImportedConsumer(
-    IShopifyVariantDriftSyncService driftSyncService,
+    ISkuAndBarcodeSyncService syncService,
     ILogger<SkulabsProductImportedConsumer> logger
 ) : IConsumer<SkulabsProductImportedEvent>
 {
@@ -23,12 +23,12 @@ public class SkulabsProductImportedConsumer(
     {
         try
         {
-            await driftSyncService.SyncForSkulabsItem(message.SkulabsProductId, cancellationToken);
+            await syncService.SyncForSkulabsItem(message.SkulabsProductId, cancellationToken);
         }
         catch (Exception exception)
         {
             // Swallow per-item failures so a single bad item doesn't poison the batch published
-            // from SkulabsItemSyncJob. The periodic ShopifyVariantDriftSyncJob will retry.
+            // from SkulabsItemSyncJob. The periodic SkuAndBarcodeSyncJob will retry.
             logger.LogError(
                 exception,
                 "Post-link drift check failed for SkuLabs item {SkulabsItemId}. The periodic drift sync will retry.",
