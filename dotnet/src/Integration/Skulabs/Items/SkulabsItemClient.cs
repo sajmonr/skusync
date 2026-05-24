@@ -1,21 +1,11 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Integration.Skulabs.Options;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Integration.Skulabs.Items;
-
-/// <summary>
-/// Abstraction over the SkuLabs Items API client to enable substitution in tests.
-/// </summary>
-public interface ISkulabsItemClient
-{
-    /// <summary>
-    /// Fetches all SkuLabs inventory items that have exactly one Shopify channel listing.
-    /// </summary>
-    Task<SkuLabsItem[]> GetAllItems();
-}
 
 /// <summary>
 /// HTTP client for the SkuLabs Items API. Retrieves inventory items along with their
@@ -69,16 +59,7 @@ public class SkulabsItemClient : ISkulabsItemClient
 
         if (!response.IsSuccessStatusCode)
         {
-            // The resilience handler has already exhausted retries on transient failures, so
-            // anything that reaches here is either a permanent 4xx or a sustained 5xx. Log the
-            // status before EnsureSuccessStatusCode throws so the exception in the upstream
-            // catch has context (HttpRequestException's message alone hides which call failed).
-            _logger.LogError(
-                "SkuLabs items request to {RequestPath} failed with status {StatusCode} after {ElapsedMs}ms.",
-                requestPath,
-                (int)response.StatusCode,
-                stopwatch.ElapsedMilliseconds
-            );
+            await LogErrorResponse(response, requestPath, stopwatch.ElapsedMilliseconds);
         }
         else
         {
@@ -91,38 +72,72 @@ public class SkulabsItemClient : ISkulabsItemClient
 
         response.EnsureSuccessStatusCode();
 
+        var content = await response.Content.ReadFromJsonAsync<SkulabsItemResponse[]>();
+
+        if (content is null)
+        {
+            var body = await response.Content.ReadAsStringAsync();
+            throw new InvalidOperationException(
+                $"SkuLabs item response deserialized to null. Body: {Truncate(body)}");
+        }
+
+        var singleListingItems = FilterMultipleListings(content);
+        var finalItems = FilterNonNumericVariantIds(singleListingItems);
+
+        _logger.LogInformation(
+            "SkuLabs returned {RawCount} item(s); {Usable} usable, {Filtered} filtered out.",
+            content.Length,
+            finalItems.Length,
+            content.Length - finalItems.Length
+        );
+
+        return finalItems;
+    }
+
+    private async Task LogErrorResponse(HttpResponseMessage response, string requestPath, long elapsedMs)
+    {
+        var body = await response.Content.ReadAsStringAsync();
+        SkulabsErrorPayload? error = null;
         try
         {
-            var content = await response.Content.ReadFromJsonAsync<SkulabsItemResponse[]>();
-
-            if (content is null)
-            {
-                var body = await response.Content.ReadAsStringAsync();
-                _logger.LogWarning(
-                    "Response from SkuLabs API was empty. Response body: {ResponseBody}",
-                    body
-                );
-                return [];
-            }
-
-            var singleListingItems = FilterMultipleListings(content);
-            var finalItems = FilterNonNumericVariantIds(singleListingItems);
-
-            _logger.LogInformation(
-                "SkuLabs returned {RawCount} item(s); {Usable} usable, {Filtered} filtered out.",
-                content.Length,
-                finalItems.Length,
-                content.Length - finalItems.Length
-            );
-
-            return finalItems;
+            error = JsonSerializer.Deserialize<SkulabsErrorResponse>(body)?.Error;
         }
-        catch (Exception exception)
+        catch (JsonException)
         {
-            _logger.LogError(exception, "Failed to parse SkuLabs item response.");
-            return [];
+            // Body wasn't the standardized envelope (e.g. a fronting proxy returned HTML on 502).
+            // Fall through and log the raw body instead.
+        }
+
+        if (error is not null)
+        {
+            _logger.LogError(
+                "SkuLabs items request to {RequestPath} failed with status {StatusCode} after {ElapsedMs}ms. "
+                + "Code: {ErrorCode}, Message: {ErrorMessage}, Overview: {Overview}, Origin: {Origin}, "
+                + "TraceId: {SkulabsTraceId}, UserError: {UserError}.",
+                requestPath,
+                (int)response.StatusCode,
+                elapsedMs,
+                error.Code,
+                error.Message,
+                error.Overview,
+                error.Origin,
+                error.SkulabsTraceId,
+                error.UserError);
+        }
+        else
+        {
+            _logger.LogError(
+                "SkuLabs items request to {RequestPath} failed with status {StatusCode} after {ElapsedMs}ms. "
+                + "Body: {ResponseBody}",
+                requestPath,
+                (int)response.StatusCode,
+                elapsedMs,
+                Truncate(body));
         }
     }
+
+    private static string Truncate(string value, int max = 2048) =>
+        value.Length <= max ? value : value[..max] + "…";
 
     private SkulabsItemResponse[] FilterMultipleListings(SkulabsItemResponse[] responses)
     {

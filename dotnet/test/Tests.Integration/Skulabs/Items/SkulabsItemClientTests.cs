@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Text.Json;
 using Integration.Skulabs.Items;
 using Integration.Skulabs.Options;
 using Microsoft.Extensions.Logging;
@@ -103,21 +104,17 @@ public class SkulabsItemClientTests
     }
 
     [Fact]
-    public async Task GetAllItems_ShouldReturnEmptyArray_AndLogWarning_WhenResponseBodyIsJsonNull()
+    public async Task GetAllItems_ShouldThrow_WhenResponseBodyIsJsonNull()
     {
         _handler.SetResponse(JsonResponse("null"));
         var sut = CreateSut();
 
-        var result = await sut.GetAllItems();
-
-        result.ShouldBeEmpty();
-        _logger.Entries.ShouldContain(entry =>
-            entry.LogLevel == LogLevel.Warning &&
-            entry.Message.Contains("Response from SkuLabs API was empty"));
+        var exception = await Should.ThrowAsync<InvalidOperationException>(() => sut.GetAllItems());
+        exception.Message.ShouldContain("deserialized to null");
     }
 
     [Fact]
-    public async Task GetAllItems_ShouldReturnEmptyArray_AndLogError_WhenResponseIsNotValidJson()
+    public async Task GetAllItems_ShouldThrow_WhenResponseIsNotValidJson()
     {
         _handler.SetResponse(new HttpResponseMessage(HttpStatusCode.OK)
         {
@@ -125,13 +122,57 @@ public class SkulabsItemClientTests
         });
         var sut = CreateSut();
 
-        var result = await sut.GetAllItems();
+        await Should.ThrowAsync<JsonException>(() => sut.GetAllItems());
+    }
 
-        result.ShouldBeEmpty();
-        _logger.Entries.Any(entry =>
-            entry.LogLevel == LogLevel.Error &&
-            entry.Exception != null &&
-            entry.Message.Contains("Failed to parse SkuLabs item response")).ShouldBeTrue();
+    [Fact]
+    public async Task GetAllItems_ShouldLogStructuredErrorFields_WhenResponseIsStandardSkulabsErrorEnvelope()
+    {
+        const string errorBody = """
+                                 {
+                                   "error": {
+                                     "message": "Invalid API key",
+                                     "statusCode": 401,
+                                     "code": "AUTH_INVALID",
+                                     "overview": "Authentication failed",
+                                     "origin": "auth-service",
+                                     "skulabsTraceId": "trace-abc-123",
+                                     "user_error": false
+                                   }
+                                 }
+                                 """;
+        _handler.SetResponse(new HttpResponseMessage(HttpStatusCode.Unauthorized)
+        {
+            Content = new StringContent(errorBody, Encoding.UTF8, "application/json")
+        });
+        var sut = CreateSut();
+
+        await Should.ThrowAsync<HttpRequestException>(() => sut.GetAllItems());
+
+        var errorEntry = _logger.Entries.SingleOrDefault(e => e.LogLevel == LogLevel.Error);
+        errorEntry.ShouldNotBeNull();
+        errorEntry.Message.ShouldContain("AUTH_INVALID");
+        errorEntry.Message.ShouldContain("Invalid API key");
+        errorEntry.Message.ShouldContain("trace-abc-123");
+        errorEntry.Message.ShouldContain("auth-service");
+        errorEntry.Message.ShouldContain("Authentication failed");
+    }
+
+    [Fact]
+    public async Task GetAllItems_ShouldLogRawBody_WhenErrorResponseIsNotStandardEnvelope()
+    {
+        const string nonStandardBody = "<html><body>Bad Gateway</body></html>";
+        _handler.SetResponse(new HttpResponseMessage(HttpStatusCode.BadGateway)
+        {
+            Content = new StringContent(nonStandardBody, Encoding.UTF8, "text/html")
+        });
+        var sut = CreateSut();
+
+        await Should.ThrowAsync<HttpRequestException>(() => sut.GetAllItems());
+
+        var errorEntry = _logger.Entries.SingleOrDefault(e => e.LogLevel == LogLevel.Error);
+        errorEntry.ShouldNotBeNull();
+        errorEntry.Message.ShouldContain("Bad Gateway");
     }
 
     [Fact]
