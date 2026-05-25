@@ -72,6 +72,17 @@ public class SkulabsTitleSyncService(
             return SkulabsTitleSyncResult.Empty;
         }
 
+        // The variant nav is filtered by the global IsActive query filter — when the variant
+        // is inactive the SkuLabs row still loads but the navigation is null. Treat that the
+        // same as "no linked variant" so we don't dereference null downstream.
+        if (item.ShopifyProductVariant is null)
+        {
+            logger.LogDebug(
+                "Variant {VariantId} is inactive; skipping SkuLabs title push for linked item {SkulabsItemId}.",
+                variantId, item.SkulabsItemId);
+            return SkulabsTitleSyncResult.Empty;
+        }
+
         return await CorrectSingle(item, cancellationToken);
     }
 

@@ -39,10 +39,25 @@ public class ShopifyProductVariantConfiguration : IEntityTypeConfiguration<Shopi
             .IsRequired()
             .HasDefaultValue(false);
 
+        builder.Property(x => x.FailedShopifySyncAttempts)
+            .IsRequired()
+            .HasDefaultValue(0);
+
+        builder.Property(x => x.IsActive)
+            .IsRequired()
+            .HasDefaultValue(true);
+
         builder.HasIndex(x => x.GlobalVariantId).IsUnique();
         builder.HasIndex(x => x.VariantId).IsUnique();
         // Filtered index so the drift sweep scans a small subset even at high variant counts.
         builder.HasIndex(x => x.PendingShopifySync)
             .HasFilter("\"PendingShopifySync\" = true");
+
+        // Inactive rows are excluded from every read; a filtered index keeps the global
+        // query filter cheap on tables that grow over time.
+        builder.HasIndex(x => x.IsActive)
+            .HasFilter("\"IsActive\" = true");
+
+        builder.HasQueryFilter(x => x.IsActive);
     }
 }

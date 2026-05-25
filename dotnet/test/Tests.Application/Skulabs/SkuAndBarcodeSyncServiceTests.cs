@@ -349,6 +349,102 @@ public class SkuAndBarcodeSyncServiceTests : IDisposable
         stored.PendingShopifySync.ShouldBeTrue();
     }
 
+    // ---------- Failed attempt tracking & deactivation ----------
+
+    [Fact]
+    public async Task SyncAll_ShouldIncrementFailedAttempts_WhenShopifyRejectsPush()
+    {
+        var variant = SeedVariant(sku: "old-sku", barcode: "old-bar");
+        SeedSkulabsItem(variant.ShopifyProductVariantId, sku: "new-sku", barcode: "new-bar");
+        await _dbContext.SaveChangesAsync();
+
+        _shopifyProductService
+            .UpdateVariants(Arg.Any<string>(), Arg.Any<IEnumerable<ShopifyUpdateProductVariant>>())
+            .Returns(false);
+
+        await CreateSut().SyncAll();
+
+        var stored = await _dbContext.ShopifyProductVariants.SingleAsync();
+        stored.FailedShopifySyncAttempts.ShouldBe(1);
+        stored.IsActive.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task SyncAll_ShouldIncrementFailedAttempts_WhenShopifyThrows()
+    {
+        var variant = SeedVariant(sku: "old-sku", barcode: "old-bar");
+        SeedSkulabsItem(variant.ShopifyProductVariantId, sku: "new-sku", barcode: "new-bar");
+        await _dbContext.SaveChangesAsync();
+
+        _shopifyProductService
+            .UpdateVariants(Arg.Any<string>(), Arg.Any<IEnumerable<ShopifyUpdateProductVariant>>())
+            .ThrowsAsync(new HttpRequestException("shopify offline"));
+
+        await CreateSut().SyncAll();
+
+        var stored = await _dbContext.ShopifyProductVariants.SingleAsync();
+        stored.FailedShopifySyncAttempts.ShouldBe(1);
+        stored.IsActive.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task SyncAll_ShouldDeactivateVariant_AfterThreeConsecutiveFailures()
+    {
+        // Pre-existing two failures plus one more → deactivation on this run.
+        var variant = SeedVariant(sku: "old-sku", barcode: "old-bar", failedShopifySyncAttempts: 2);
+        SeedSkulabsItem(variant.ShopifyProductVariantId, sku: "new-sku", barcode: "new-bar");
+        await _dbContext.SaveChangesAsync();
+
+        _shopifyProductService
+            .UpdateVariants(Arg.Any<string>(), Arg.Any<IEnumerable<ShopifyUpdateProductVariant>>())
+            .Returns(false);
+
+        await CreateSut().SyncAll();
+
+        // Global query filter hides inactive rows — opt out with IgnoreQueryFilters to assert state.
+        var stored = await _dbContext.ShopifyProductVariants
+            .IgnoreQueryFilters()
+            .SingleAsync();
+        stored.FailedShopifySyncAttempts.ShouldBe(3);
+        stored.IsActive.ShouldBeFalse();
+
+        var logs = await LogsForVariant(variant.ShopifyProductVariantId);
+        logs.ShouldContain(l =>
+            l.Message == "Variant deactivated after 3 consecutive failed Shopify sync attempts.");
+    }
+
+    [Fact]
+    public async Task SyncAll_ShouldExcludeInactiveVariants_FromDriftQuery()
+    {
+        var variant = SeedVariant(
+            sku: "old-sku",
+            barcode: "old-bar",
+            failedShopifySyncAttempts: 3,
+            isActive: false);
+        SeedSkulabsItem(variant.ShopifyProductVariantId, sku: "new-sku", barcode: "new-bar");
+        await _dbContext.SaveChangesAsync();
+
+        var result = await CreateSut().SyncAll();
+
+        result.ShouldBe(SkuAndBarcodeSyncResult.Empty);
+        await _shopifyProductService.DidNotReceive()
+            .UpdateVariants(Arg.Any<string>(), Arg.Any<IEnumerable<ShopifyUpdateProductVariant>>());
+    }
+
+    [Fact]
+    public async Task SyncAll_ShouldResetFailedAttempts_OnSuccessfulPush()
+    {
+        var variant = SeedVariant(sku: "old-sku", barcode: "old-bar", failedShopifySyncAttempts: 2);
+        SeedSkulabsItem(variant.ShopifyProductVariantId, sku: "new-sku", barcode: "new-bar");
+        await _dbContext.SaveChangesAsync();
+
+        await CreateSut().SyncAll();
+
+        var stored = await _dbContext.ShopifyProductVariants.SingleAsync();
+        stored.FailedShopifySyncAttempts.ShouldBe(0);
+        stored.IsActive.ShouldBeTrue();
+    }
+
     // ---------- SyncForSkulabsItem ----------
 
     [Fact]
@@ -418,7 +514,9 @@ public class SkuAndBarcodeSyncServiceTests : IDisposable
         long variantId = 200,
         string sku = "SKU",
         string barcode = "BAR",
-        bool pendingShopifySync = false)
+        bool pendingShopifySync = false,
+        int failedShopifySyncAttempts = 0,
+        bool isActive = true)
     {
         var entity = new ShopifyProductVariantEntity
         {
@@ -430,7 +528,9 @@ public class SkuAndBarcodeSyncServiceTests : IDisposable
             DisplayName = "Variant",
             Sku = sku,
             Barcode = barcode,
-            PendingShopifySync = pendingShopifySync
+            PendingShopifySync = pendingShopifySync,
+            FailedShopifySyncAttempts = failedShopifySyncAttempts,
+            IsActive = isActive
         };
         _dbContext.ShopifyProductVariants.Add(entity);
         return entity;
