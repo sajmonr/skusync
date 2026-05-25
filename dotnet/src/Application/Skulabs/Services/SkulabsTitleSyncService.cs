@@ -1,6 +1,7 @@
 using Application.Products.Services;
 using Infrastructure.Database;
 using Infrastructure.Database.Entities;
+using Integration.RateLimiting;
 using Integration.Skulabs.Items;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -68,6 +69,17 @@ public class SkulabsTitleSyncService(
             logger.LogDebug(
                 "Variant {VariantId} has no linked SkuLabs item. Nothing to push.",
                 variantId);
+            return SkulabsTitleSyncResult.Empty;
+        }
+
+        // The variant nav is filtered by the global IsActive query filter — when the variant
+        // is inactive the SkuLabs row still loads but the navigation is null. Treat that the
+        // same as "no linked variant" so we don't dereference null downstream.
+        if (item.ShopifyProductVariant is null)
+        {
+            logger.LogDebug(
+                "Variant {VariantId} is inactive; skipping SkuLabs title push for linked item {SkulabsItemId}.",
+                variantId, item.SkulabsItemId);
             return SkulabsTitleSyncResult.Empty;
         }
 
@@ -161,6 +173,18 @@ public class SkulabsTitleSyncService(
                     "Pushing {Count} SkuLabs title correction(s) via bulk_upsert.",
                     updates.Length);
                 await skulabsItemClient.UpdateItems(updates);
+            }
+            catch (RateLimitedException rateLimited)
+            {
+                logger.LogWarning(
+                    "Skipped {Count} SkuLabs title correction(s); SkuLabs is in rate-limit cooldown for {RetrySeconds}s. Local rows left untouched — the next run will retry.",
+                    updates.Length,
+                    rateLimited.RetryAfter.TotalSeconds);
+                return new SkulabsTitleSyncResult(
+                    Checked: candidates.Count,
+                    Drifted: driftedCount,
+                    Corrected: 0,
+                    Failed: candidates.Count);
             }
             catch (Exception exception)
             {

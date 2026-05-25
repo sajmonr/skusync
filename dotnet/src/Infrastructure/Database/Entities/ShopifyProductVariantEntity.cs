@@ -46,6 +46,22 @@ public class ShopifyProductVariantEntity
     /// </summary>
     public bool PendingShopifySync { get; set; }
 
+    /// <summary>
+    /// Gets or sets the number of consecutive failed attempts to push the SkuLabs-authoritative
+    /// SKU/barcode to Shopify for this variant. Reset to zero on a successful push. When this
+    /// counter reaches the deactivation threshold, <see cref="IsActive"/> is flipped to
+    /// <c>false</c> so the variant is excluded from future syncs and other queries.
+    /// </summary>
+    public int FailedShopifySyncAttempts { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether this variant participates in any sync work or
+    /// query. Defaults to <c>true</c>. Set to <c>false</c> when a Shopify push has failed enough
+    /// consecutive times that the row is presumed dead (e.g. the underlying product was deleted
+    /// in Shopify) and we should stop retrying it.
+    /// </summary>
+    public bool IsActive { get; set; } = true;
+
     /// <summary>Gets or sets the UTC timestamp at which this record was first created.</summary>
     public DateTime CreatedOnUtc { get; set; } = DateTime.UtcNow;
 

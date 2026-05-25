@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using Integration.RateLimiting;
 using Integration.Skulabs.Items;
 using Integration.Skulabs.Options;
 using Microsoft.Extensions.Logging;
@@ -21,6 +22,7 @@ public class SkulabsItemClientTests
 
     private readonly TestLogger<SkulabsItemClient> _logger = new();
     private readonly RecordingHttpMessageHandler _handler = new();
+    private readonly IRateLimitService _rateLimitService = Substitute.For<IRateLimitService>();
 
     public SkulabsItemClientTests()
     {
@@ -29,6 +31,7 @@ public class SkulabsItemClientTests
             BaseUrl = BaseUrl,
             ApiKey = ApiKey
         });
+        _rateLimitService.GetRemainingCooldown(Arg.Any<string>()).Returns((TimeSpan?)null);
     }
 
     [Fact]
@@ -36,11 +39,42 @@ public class SkulabsItemClientTests
     {
         var httpClient = new HttpClient(_handler);
 
-        _ = new SkulabsItemClient(httpClient, _options, _logger);
+        _ = new SkulabsItemClient(httpClient, _options, _rateLimitService, _logger);
 
         httpClient.BaseAddress.ShouldBe(new Uri(BaseUrl));
         httpClient.DefaultRequestHeaders.Authorization.ShouldBe(
             new AuthenticationHeaderValue("Bearer", ApiKey));
+    }
+
+    [Fact]
+    public async Task GetAllItems_ShouldThrowAndNotSendRequest_WhenClientIsInRateLimitCooldown()
+    {
+        _rateLimitService.GetRemainingCooldown(SkulabsRateLimitHandler.RateLimitKey)
+            .Returns(TimeSpan.FromMinutes(2));
+        var sut = CreateSut();
+
+        var exception = await Should.ThrowAsync<RateLimitedException>(() => sut.GetAllItems());
+
+        exception.Key.ShouldBe(SkulabsRateLimitHandler.RateLimitKey);
+        exception.RetryAfter.ShouldBe(TimeSpan.FromMinutes(2));
+        _handler.Requests.ShouldBeEmpty();
+        _logger.Entries.ShouldContain(e =>
+            e.LogLevel == LogLevel.Warning && e.Message.Contains("cooldown"));
+    }
+
+    [Fact]
+    public async Task UpdateItems_ShouldThrowAndNotSendRequest_WhenClientIsInRateLimitCooldown()
+    {
+        _rateLimitService.GetRemainingCooldown(SkulabsRateLimitHandler.RateLimitKey)
+            .Returns(TimeSpan.FromSeconds(45));
+        var sut = CreateSut();
+
+        await Should.ThrowAsync<RateLimitedException>(() =>
+            sut.UpdateItems([new SkulabsItemUpdateWithId("item-1", "Name")]));
+
+        _handler.Requests.ShouldBeEmpty();
+        _logger.Entries.ShouldContain(e =>
+            e.LogLevel == LogLevel.Warning && e.Message.Contains("cooldown"));
     }
 
     [Fact]
@@ -462,7 +496,7 @@ public class SkulabsItemClientTests
     private SkulabsItemClient CreateSut()
     {
         var httpClient = new HttpClient(_handler);
-        return new SkulabsItemClient(httpClient, _options, _logger);
+        return new SkulabsItemClient(httpClient, _options, _rateLimitService, _logger);
     }
 
     private static HttpResponseMessage JsonResponse(string json)

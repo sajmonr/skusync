@@ -28,6 +28,15 @@ public class SkuAndBarcodeSyncService(
     IFeatureManager featureManager,
     ILogger<SkuAndBarcodeSyncService> logger) : ISkuAndBarcodeSyncService
 {
+    /// <summary>
+    /// Maximum consecutive Shopify push failures tolerated for a single variant before it is
+    /// marked <see cref="ShopifyProductVariantEntity.IsActive"/>=<c>false</c> and excluded from
+    /// future syncs. Three was chosen so a one-off transient failure doesn't deactivate a row
+    /// but a permanently broken target (e.g. the underlying Shopify product was deleted) stops
+    /// being retried after roughly one maintenance cycle.
+    /// </summary>
+    private const int MaxFailedShopifySyncAttempts = 3;
+
     public async Task<SkuAndBarcodeSyncResult> SyncAll(CancellationToken cancellationToken = default)
     {
         logger.LogDebug(
@@ -98,8 +107,8 @@ public class SkuAndBarcodeSyncService(
         }
 
         logger.LogInformation(
-            "SkuLabs item {SkulabsItemId} needs correction on variant {VariantGuid} (drifted: {Drifted}, pending: {Pending}).",
-            skulabsItemId, item.ShopifyProductVariantId, drifted, pending);
+            "SkuLabs item {SkulabsSourceItemId} needs correction on Shopify variant {ShopifyVariantId}: {Reason}.",
+            item.SkulabsSourceItemId, item.ShopifyProductVariant.GlobalVariantId, DescribeCorrectionReason(item, pending));
 
         var corrected = await CorrectDrifted([item], cancellationToken);
         return new SkuAndBarcodeSyncResult(
@@ -169,6 +178,7 @@ public class SkuAndBarcodeSyncService(
                         exception,
                         "Shopify update threw for product {ProductId}. {VariantCount} variant(s) will be retried on the next run — local rows left untouched.",
                         productId, items.Length);
+                    RecordFailedAttempt(items);
                     continue;
                 }
 
@@ -177,6 +187,7 @@ public class SkuAndBarcodeSyncService(
                     logger.LogError(
                         "Shopify rejected drift correction for product {ProductId}. {VariantCount} variant(s) will be retried on the next run — local rows left untouched.",
                         productId, items.Length);
+                    RecordFailedAttempt(items);
                     continue;
                 }
 
@@ -184,6 +195,7 @@ public class SkuAndBarcodeSyncService(
                 {
                     ApplyCorrectionLocally(item);
                     item.ShopifyProductVariant!.PendingShopifySync = false;
+                    item.ShopifyProductVariant!.FailedShopifySyncAttempts = 0;
                     correctedCount++;
                 }
             }
@@ -198,10 +210,9 @@ public class SkuAndBarcodeSyncService(
             }
         }
 
-        if (correctedCount > 0)
-        {
-            await dbContext.SaveChangesAsync(cancellationToken);
-        }
+        // SaveChanges runs unconditionally: even when correctedCount is zero we may have
+        // bumped FailedShopifySyncAttempts or flipped IsActive on failed items.
+        await dbContext.SaveChangesAsync(cancellationToken);
 
         logger.LogInformation(
             "Drift sync done. Corrected {CorrectedCount} of {Candidates} candidate variant(s).",
@@ -236,6 +247,34 @@ public class SkuAndBarcodeSyncService(
         variant.UpdatedOnUtc = DateTime.UtcNow;
     }
 
+    /// <summary>
+    /// Increments the <see cref="ShopifyProductVariantEntity.FailedShopifySyncAttempts"/>
+    /// counter on every variant in the failed group and, when the counter crosses the
+    /// <see cref="MaxFailedShopifySyncAttempts"/> threshold, deactivates the variant so it is
+    /// excluded from subsequent syncs and other queries. A log event is written for each
+    /// deactivation so the change is visible in the variant history.
+    /// </summary>
+    private void RecordFailedAttempt(IReadOnlyList<SkulabsItemEntity> items)
+    {
+        foreach (var item in items)
+        {
+            var variant = item.ShopifyProductVariant!;
+            variant.FailedShopifySyncAttempts++;
+            variant.UpdatedOnUtc = DateTime.UtcNow;
+
+            if (variant.IsActive && variant.FailedShopifySyncAttempts >= MaxFailedShopifySyncAttempts)
+            {
+                variant.IsActive = false;
+                logger.LogWarning(
+                    "Variant {VariantId} deactivated after {FailedAttempts} consecutive failed Shopify sync attempts. It will be excluded from future syncs.",
+                    variant.ShopifyProductVariantId, variant.FailedShopifySyncAttempts);
+                AddVariantLog(
+                    variant.ShopifyProductVariantId,
+                    VariantLogMessages.DeactivatedAfterFailedShopifySyncs(variant.FailedShopifySyncAttempts));
+            }
+        }
+    }
+
     private void AddVariantLog(Guid variantGuid, string message)
     {
         dbContext.ShopifyProductVariantLogEvents.Add(new ShopifyProductVariantLogEventEntity
@@ -248,4 +287,27 @@ public class SkuAndBarcodeSyncService(
     private static bool IsDrifted(SkulabsItemEntity item) =>
         !string.Equals(item.ShopifyProductVariant!.Sku, item.Sku, StringComparison.Ordinal)
         || !string.Equals(item.ShopifyProductVariant!.Barcode, item.Barcode, StringComparison.Ordinal);
+
+    private static string DescribeCorrectionReason(SkulabsItemEntity item, bool pending)
+    {
+        var variant = item.ShopifyProductVariant!;
+        var reasons = new List<string>();
+
+        if (!string.Equals(variant.Sku, item.Sku, StringComparison.Ordinal))
+        {
+            reasons.Add($"SKU '{variant.Sku}' → '{item.Sku}'");
+        }
+
+        if (!string.Equals(variant.Barcode, item.Barcode, StringComparison.Ordinal))
+        {
+            reasons.Add($"barcode '{variant.Barcode}' → '{item.Barcode}'");
+        }
+
+        if (pending)
+        {
+            reasons.Add("pending Shopify push from a previous run");
+        }
+
+        return string.Join("; ", reasons);
+    }
 }
