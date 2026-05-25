@@ -1,9 +1,11 @@
 using System.Net;
 using System.Text;
+using Integration.RateLimiting;
 using Integration.Skulabs.Items;
 using Integration.Skulabs.Options;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using NSubstitute;
 using Shouldly;
 
 namespace Tests.Integration.Skulabs.Items;
@@ -129,6 +131,9 @@ public class SkulabsItemClientResilienceTests
         var services = new ServiceCollection();
         var options = new SkulabsApiOptions { BaseUrl = BaseUrl, ApiKey = "test-key" };
         services.AddSingleton<IOptionsMonitor<SkulabsApiOptions>>(new StaticOptionsMonitor<SkulabsApiOptions>(options));
+        var rateLimitService = Substitute.For<IRateLimitService>();
+        rateLimitService.GetRemainingCooldown(Arg.Any<string>()).Returns((TimeSpan?)null);
+        services.AddSingleton(rateLimitService);
 
         services.AddHttpClient<ISkulabsItemClient, SkulabsItemClient>()
             .ConfigurePrimaryHttpMessageHandler(() => primaryHandler)

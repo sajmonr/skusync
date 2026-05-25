@@ -1,6 +1,7 @@
 using Application.Products.Services;
 using Infrastructure.Database;
 using Infrastructure.Database.Entities;
+using Integration.RateLimiting;
 using Integration.Skulabs.Items;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -161,6 +162,18 @@ public class SkulabsTitleSyncService(
                     "Pushing {Count} SkuLabs title correction(s) via bulk_upsert.",
                     updates.Length);
                 await skulabsItemClient.UpdateItems(updates);
+            }
+            catch (RateLimitedException rateLimited)
+            {
+                logger.LogWarning(
+                    "Skipped {Count} SkuLabs title correction(s); SkuLabs is in rate-limit cooldown for {RetrySeconds}s. Local rows left untouched — the next run will retry.",
+                    updates.Length,
+                    rateLimited.RetryAfter.TotalSeconds);
+                return new SkulabsTitleSyncResult(
+                    Checked: candidates.Count,
+                    Drifted: driftedCount,
+                    Corrected: 0,
+                    Failed: candidates.Count);
             }
             catch (Exception exception)
             {

@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Integration.RateLimiting;
 using Integration.Skulabs.Options;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -16,22 +17,39 @@ namespace Integration.Skulabs.Items;
 public class SkulabsItemClient : ISkulabsItemClient
 {
     private readonly HttpClient _client;
+    private readonly IRateLimitService _rateLimitService;
     private readonly ILogger<SkulabsItemClient> _logger;
 
     public SkulabsItemClient(
         HttpClient httpClient,
         IOptionsMonitor<SkulabsApiOptions> optionsMonitor,
+        IRateLimitService rateLimitService,
         ILogger<SkulabsItemClient> logger
     )
     {
         _logger = logger;
         _client = httpClient;
+        _rateLimitService = rateLimitService;
 
         _client.BaseAddress = new Uri(optionsMonitor.CurrentValue.BaseUrl);
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer",
             optionsMonitor.CurrentValue.ApiKey
         );
+    }
+
+    private void ThrowIfRateLimited(string requestPath)
+    {
+        if (_rateLimitService.GetRemainingCooldown(SkulabsRateLimitHandler.RateLimitKey) is not { } remaining)
+        {
+            return;
+        }
+
+        _logger.LogWarning(
+            "Skipping SkuLabs request to {RequestPath}; client is in rate-limit cooldown for {RemainingSeconds}s.",
+            requestPath,
+            remaining.TotalSeconds);
+        throw new RateLimitedException(SkulabsRateLimitHandler.RateLimitKey, remaining);
     }
 
     /// <summary>
@@ -53,6 +71,7 @@ public class SkulabsItemClient : ISkulabsItemClient
             )
         );
         var requestPath = $"item/get?{queryString}";
+        ThrowIfRateLimited(requestPath);
         _logger.LogDebug("Requesting all items from SkuLabs at {RequestPath}.", requestPath);
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var response = await _client.GetAsync(requestPath);
@@ -101,6 +120,7 @@ public class SkulabsItemClient : ISkulabsItemClient
     public async Task UpdateItems(IEnumerable<SkulabsItemUpdateWithId> updates)
     {
         const string requestPath = "item/bulk_upsert";
+        ThrowIfRateLimited(requestPath);
         var items = updates
             .Select(u => new BulkUpsertItem(u.Id, u.Name))
             .ToArray();
