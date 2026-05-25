@@ -2,8 +2,10 @@ using Application;
 using Application.Skulabs.Services;
 using Infrastructure.Database;
 using Infrastructure.Database.Entities;
+using Integration.RateLimiting;
 using Integration.Skulabs.Items;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.FeatureManagement;
 using NSubstitute;
@@ -129,6 +131,37 @@ public class SkulabsTitleSyncServiceTests : IDisposable
         storedItem.Title.ShouldBe("Old Title");
         storedItem.PendingSkulabsSync.ShouldBeFalse();
         (await _dbContext.ShopifyProductVariantLogEvents.CountAsync()).ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task SyncAll_ShouldReportFailedAndLogWarning_WhenSkulabsIsRateLimited()
+    {
+        var variant = SeedVariant(displayName: "New Title");
+        SeedSkulabsItem(variant.ShopifyProductVariantId, title: "Old Title");
+        await _dbContext.SaveChangesAsync();
+
+        _skulabsItemClient
+            .UpdateItems(Arg.Any<IEnumerable<SkulabsItemUpdateWithId>>())
+            .ThrowsAsync(new RateLimitedException("skulabs", TimeSpan.FromSeconds(180)));
+
+        var logger = new TestLogger<SkulabsTitleSyncService>();
+        var sut = new SkulabsTitleSyncService(_dbContext, _skulabsItemClient, _featureManager, logger);
+
+        var result = await sut.SyncAll();
+
+        result.Failed.ShouldBe(1);
+        result.Corrected.ShouldBe(0);
+
+        var storedItem = await _dbContext.SkulabsItems.SingleAsync();
+        storedItem.Title.ShouldBe("Old Title");
+        storedItem.PendingSkulabsSync.ShouldBeFalse();
+        (await _dbContext.ShopifyProductVariantLogEvents.CountAsync()).ShouldBe(0);
+
+        logger.Entries.ShouldNotContain(e => e.LogLevel == LogLevel.Error);
+        var warning = logger.Entries.SingleOrDefault(e =>
+            e.LogLevel == LogLevel.Warning && e.Message.Contains("rate-limit cooldown"));
+        warning.ShouldNotBeNull();
+        warning.Message.ShouldContain("180");
     }
 
     // ---------- Feature flag ----------
@@ -457,4 +490,18 @@ public class SkulabsTitleSyncServiceTests : IDisposable
         _dbContext.SkulabsItems.Add(entity);
         return entity;
     }
+
+    private sealed class TestLogger<T> : ILogger<T>
+    {
+        public List<LogEntry> Entries { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter) =>
+            Entries.Add(new LogEntry(logLevel, formatter(state, exception), exception));
+    }
+
+    private sealed record LogEntry(LogLevel LogLevel, string Message, Exception? Exception);
 }
