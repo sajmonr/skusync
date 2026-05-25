@@ -69,4 +69,10 @@ internal static class VariantLogMessages
     /// <param name="newTitle">The variant display name now written to SkuLabs.</param>
     public static string SkulabsTitleSyncedFromVariant(string oldTitle, string newTitle) =>
         $"SkuLabs item title corrected to match variant: '{oldTitle}' → '{newTitle}'.";
+
+    /// <summary>Returns a message indicating that the variant was deactivated after too many
+    /// consecutive failed attempts to push a SkuLabs-driven correction to Shopify.</summary>
+    /// <param name="failedAttempts">The number of consecutive failed Shopify push attempts.</param>
+    public static string DeactivatedAfterFailedShopifySyncs(int failedAttempts) =>
+        $"Variant deactivated after {failedAttempts} consecutive failed Shopify sync attempts.";
 }
