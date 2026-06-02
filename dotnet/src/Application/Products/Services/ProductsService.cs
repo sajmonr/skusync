@@ -90,6 +90,10 @@ public class ProductsService(
         // SKUs generated in this batch but not yet persisted — kept so two variants in
         // the same import cannot be issued the same generated SKU.
         var reservedSkus = new HashSet<string>(StringComparer.Ordinal);
+        // Variants created earlier in this same batch, keyed by GlobalVariantId. Shopify can
+        // return the same variant more than once in a single payload; without this guard each
+        // repeat would queue another insert and violate the unique index on GlobalVariantId.
+        var createdByGlobalId = new Dictionary<string, ShopifyProductVariantEntity>(StringComparer.Ordinal);
 
         foreach (var shopifyVariant in shopifyVariants)
         {
@@ -100,9 +104,20 @@ public class ProductsService(
                     updatedEntities.Add(existing);
                 }
             }
+            else if (createdByGlobalId.TryGetValue(shopifyVariant.GlobalVariantId, out var alreadyCreated))
+            {
+                // Repeat of a variant already created in this batch — fold any later values
+                // into the pending insert instead of queueing a duplicate row.
+                logger.LogDebug(
+                    "Shopify returned GlobalVariantId {GlobalVariantId} more than once in this batch; merging into the pending insert.",
+                    shopifyVariant.GlobalVariantId);
+                await TryApplyVariantUpdate(alreadyCreated, shopifyVariant, reservedSkus);
+            }
             else
             {
-                createdEntities.Add(await CreateNewVariant(shopifyVariant, reservedSkus));
+                var created = await CreateNewVariant(shopifyVariant, reservedSkus);
+                createdEntities.Add(created);
+                createdByGlobalId[shopifyVariant.GlobalVariantId] = created;
             }
         }
 

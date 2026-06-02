@@ -1,4 +1,7 @@
 using Application.Jobs.Maintenance;
+using Infrastructure.Database;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
@@ -127,8 +130,51 @@ public class ProductMaintenanceJobTests
         order.ShouldBe(["ordered", "unordered-a", "unordered-b"]);
     }
 
-    private ProductMaintenanceJob CreateSut(params IMaintenanceTask[] tasks) =>
-        new(tasks, _logger);
+    [Fact]
+    public async Task Execute_ShouldGiveEachTask_ItsOwnScopedDbContext()
+    {
+        // Regression: maintenance tasks must not share a DbContext. A failed SaveChanges in
+        // one task leaves entities tracked; a shared context would let the next task's
+        // SaveChanges re-flush them and trip a constraint attributed to the wrong task.
+        var capturedContexts = new List<ApplicationDbContext>();
+        var services = new ServiceCollection();
+        services.AddDbContext<ApplicationDbContext>(o => o.UseInMemoryDatabase(Guid.NewGuid().ToString()));
+        services.AddSingleton(capturedContexts);
+        services.AddTransient<IMaintenanceTask, ContextCapturingTask>();
+        services.AddTransient<IMaintenanceTask, ContextCapturingTask>();
+
+        var scopeFactory = services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
+        var sut = new ProductMaintenanceJob(scopeFactory, _logger);
+
+        await sut.Execute(_context);
+
+        capturedContexts.Count.ShouldBe(2);
+        capturedContexts[0].ShouldNotBeSameAs(capturedContexts[1]);
+    }
+
+    private ProductMaintenanceJob CreateSut(params IMaintenanceTask[] tasks)
+    {
+        var services = new ServiceCollection();
+        foreach (var task in tasks)
+        {
+            services.AddSingleton(task);
+        }
+
+        var scopeFactory = services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
+        return new ProductMaintenanceJob(scopeFactory, _logger);
+    }
+
+    private sealed class ContextCapturingTask(ApplicationDbContext dbContext, List<ApplicationDbContext> captured)
+        : IMaintenanceTask
+    {
+        public string Name => nameof(ContextCapturingTask);
+
+        public Task Execute(CancellationToken cancellationToken)
+        {
+            captured.Add(dbContext);
+            return Task.CompletedTask;
+        }
+    }
 
     private sealed class RecordingTask(string name, List<string> order) : IMaintenanceTask
     {
