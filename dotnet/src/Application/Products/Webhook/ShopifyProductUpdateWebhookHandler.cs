@@ -44,7 +44,12 @@ public class ShopifyProductUpdateWebhookHandler(
             return;
         }
 
-        var existingVariants = await dbContext.ShopifyProductVariants.Where(variant => variant.ProductId == product.Id)
+        // IgnoreQueryFilters so deactivated rows are visible here. Without it, a variant we'd
+        // previously flipped to IsActive=false (after repeated failed Shopify pushes) is hidden
+        // by the global IsActive filter, the lookup below misses it, and we attempt to insert a
+        // fresh row — violating the unique GlobalVariantId/VariantId index on every redelivery.
+        var existingVariants = await dbContext.ShopifyProductVariants.IgnoreQueryFilters()
+            .Where(variant => variant.ProductId == product.Id)
             .ToArrayAsync();
 
         logger.LogDebug(
@@ -89,6 +94,10 @@ public class ShopifyProductUpdateWebhookHandler(
             }
             else
             {
+                // A products/update for a variant we'd previously deactivated means it's live in
+                // Shopify again — revive it so it re-enters the drift sweep.
+                ReactivateIfDormant(entity);
+
                 // Update it
                 var didChange = UpdateEntity(entity, product, variant);
                 var didBarcodeOrSkuChange = DidBarcodeOrSkuChange(entity, variant);
@@ -109,6 +118,27 @@ public class ShopifyProductUpdateWebhookHandler(
             updatedEntities.Select(e => new ProductVariantUpdatedEvent(e.ShopifyProductVariantId)));
         await messageBus.PublishBatch(
             createdEntities.Select(e => new ProductVariantCreatedEvent(e.ShopifyProductVariantId)));
+    }
+
+    private void ReactivateIfDormant(ShopifyProductVariantEntity entity)
+    {
+        if (entity.IsActive)
+        {
+            return;
+        }
+
+        entity.IsActive = true;
+        entity.FailedShopifySyncAttempts = 0;
+
+        dbContext.ShopifyProductVariantLogEvents.Add(new ShopifyProductVariantLogEventEntity
+        {
+            ShopifyProductVariantId = entity.ShopifyProductVariantId,
+            Message = VariantLogMessages.Reactivated()
+        });
+
+        logger.LogInformation(
+            "Reactivating previously-deactivated variant {VariantId} after a products/update webhook.",
+            entity.VariantId);
     }
 
     private bool UpdateEntity(ShopifyProductVariantEntity entity, SqsShopEventProduct product,
