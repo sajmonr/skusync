@@ -72,6 +72,44 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
     }
 
     // -------------------------------------------------------------------------
+    // Deactivated variants — must update, not re-insert
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task Handle_ShouldUpdateNotInsert_WhenMatchingVariantIsInactive()
+    {
+        SeedVariant(100, 200, displayName: "Old Product (Old Variant)", sku: "SKU-A", barcode: "BAR-A",
+            isActive: false, failedShopifySyncAttempts: 3);
+        await _dbContext.SaveChangesAsync();
+
+        var product = CreateProduct(100, productTitle: "New Product",
+            CreateVariant(200, variantTitle: "New Variant", sku: "SKU-A", barcode: "BAR-A"));
+
+        await CreateSut().Handle(product);
+
+        var saved = await _dbContext.ShopifyProductVariants.IgnoreQueryFilters().ToListAsync();
+        saved.Count.ShouldBe(1);
+        saved[0].DisplayName.ShouldBe("New Product (New Variant)");
+    }
+
+    [Fact]
+    public async Task Handle_ShouldReactivateAndResetFailures_WhenInactiveVariantReceivesWebhook()
+    {
+        SeedVariant(100, 200, displayName: "T-Shirt (Large)", sku: "SKU-A", barcode: "BAR-A",
+            isActive: false, failedShopifySyncAttempts: 3);
+        await _dbContext.SaveChangesAsync();
+
+        var product = CreateProduct(100,
+            CreateVariant(200, variantTitle: "Large", sku: "SKU-A", barcode: "BAR-A"));
+
+        await CreateSut().Handle(product);
+
+        var revived = await _dbContext.ShopifyProductVariants.IgnoreQueryFilters().SingleAsync();
+        revived.IsActive.ShouldBeTrue();
+        revived.FailedShopifySyncAttempts.ShouldBe(0);
+    }
+
+    // -------------------------------------------------------------------------
     // Display name updates
     // -------------------------------------------------------------------------
 
@@ -264,7 +302,9 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
         long variantId,
         string displayName = "T-Shirt (Large)",
         string sku = "SKU",
-        string barcode = "BAR")
+        string barcode = "BAR",
+        bool isActive = true,
+        int failedShopifySyncAttempts = 0)
     {
         _dbContext.ShopifyProductVariants.Add(new ShopifyProductVariantEntity
         {
@@ -274,7 +314,9 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
             VariantId = variantId,
             DisplayName = displayName,
             Sku = sku,
-            Barcode = barcode
+            Barcode = barcode,
+            IsActive = isActive,
+            FailedShopifySyncAttempts = failedShopifySyncAttempts
         });
     }
 
