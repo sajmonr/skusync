@@ -75,4 +75,9 @@ internal static class VariantLogMessages
     /// <param name="failedAttempts">The number of consecutive failed Shopify push attempts.</param>
     public static string DeactivatedAfterFailedShopifySyncs(int failedAttempts) =>
         $"Variant deactivated after {failedAttempts} consecutive failed Shopify sync attempts.";
+
+    /// <summary>Returns a message indicating that a previously-deactivated variant was revived
+    /// because Shopify sent a fresh <c>products/update</c> webhook for it.</summary>
+    public static string Reactivated() =>
+        "Variant reactivated after a Shopify products/update webhook.";
 }
