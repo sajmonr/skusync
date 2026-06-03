@@ -1,4 +1,5 @@
 using System.Reflection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Quartz;
 
@@ -10,9 +11,16 @@ namespace Application.Jobs.Maintenance;
 /// than each owning their own cron. A failing task does not abort the run — its exception
 /// is logged and the next task continues.
 /// </summary>
+/// <remarks>
+/// Each task is resolved from its own DI scope so that it gets a fresh
+/// <c>ApplicationDbContext</c>. This isolation is deliberate: a task whose
+/// <c>SaveChanges</c> throws leaves its <c>Added</c>/<c>Modified</c> entities tracked on
+/// that context, and a shared context would let the next task's <c>SaveChanges</c> re-flush
+/// those dangling changes — producing constraint violations attributed to the wrong task.
+/// </remarks>
 [DisallowConcurrentExecution]
 public class ProductMaintenanceJob(
-    IEnumerable<IMaintenanceTask> tasks,
+    IServiceScopeFactory scopeFactory,
     ILogger<ProductMaintenanceJob> logger
 ) : IJob
 {
@@ -29,12 +37,21 @@ public class ProductMaintenanceJob(
         );
 
         var jobStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var taskList = OrderTasks(tasks);
+        var orderedTaskIndices = ResolveOrderedTaskIndices();
         var succeeded = 0;
         var failed = 0;
 
-        foreach (var task in taskList)
+        foreach (var taskIndex in orderedTaskIndices)
         {
+            // Fresh scope per task → fresh DbContext, so a failed SaveChanges in one task
+            // cannot leak tracked entities into the next task's SaveChanges. See the
+            // remarks on this class. Tasks are correlated across scopes by their registration
+            // index, which Microsoft DI keeps stable for IEnumerable<T> resolution.
+            using var scope = scopeFactory.CreateScope();
+            var task = scope.ServiceProvider
+                .GetServices<IMaintenanceTask>()
+                .ElementAt(taskIndex);
+
             await RunTask(task, context.CancellationToken);
             if (context.CancellationToken.IsCancellationRequested)
             {
@@ -49,22 +66,25 @@ public class ProductMaintenanceJob(
         logger.LogInformation(
             "ProductMaintenanceJob completed in {ElapsedMs}ms. Tasks run: {TaskCount}, Succeeded: {Succeeded}, Failed: {Failed}.",
             jobStopwatch.ElapsedMilliseconds,
-            taskList.Count,
+            orderedTaskIndices.Count,
             succeeded,
             failed
         );
 
-        static List<IMaintenanceTask> OrderTasks(IEnumerable<IMaintenanceTask> source) =>
-            source
+        List<int> ResolveOrderedTaskIndices()
+        {
+            using var scope = scopeFactory.CreateScope();
+            return scope.ServiceProvider
+                .GetServices<IMaintenanceTask>()
                 .Select((task, registrationIndex) => (
-                    Task: task,
-                    Order: task.GetType().GetCustomAttribute<TaskOrderAttribute>()?.Order,
-                    RegistrationIndex: registrationIndex))
+                    RegistrationIndex: registrationIndex,
+                    Order: task.GetType().GetCustomAttribute<TaskOrderAttribute>()?.Order))
                 .OrderBy(x => x.Order is null)
                 .ThenBy(x => x.Order ?? int.MaxValue)
                 .ThenBy(x => x.RegistrationIndex)
-                .Select(x => x.Task)
+                .Select(x => x.RegistrationIndex)
                 .ToList();
+        }
 
         async Task RunTask(IMaintenanceTask task, CancellationToken cancellationToken)
         {

@@ -394,6 +394,30 @@ public class ProductsServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ImportProducts_ShouldCreateSingleVariant_WhenShopifyReturnsSameGlobalVariantIdTwiceInBatch()
+    {
+        // Shopify can return the same variant more than once in one payload. Each repeat must
+        // fold into the single pending insert; queueing a second insert would violate the
+        // unique index on GlobalVariantId once the changes are flushed.
+        _shopifyProductService.GetProducts().Returns(
+        [
+            new ShopifyProductVariant("gid://shopify/Product/100", "gid://shopify/ProductVariant/200", "T-Shirt", "SKU-1", "BAR-1"),
+            new ShopifyProductVariant("gid://shopify/Product/100", "gid://shopify/ProductVariant/200", "T-Shirt", "SKU-1", "BAR-1")
+        ]);
+
+        var sut = CreateSut();
+
+        var result = await sut.ImportProductsFromShopify();
+
+        result.IsSuccess.ShouldBeTrue();
+        result.Created.ShouldBe(1);
+
+        var variants = await _dbContext.Set<ShopifyProductVariantEntity>().ToListAsync();
+        variants.Count.ShouldBe(1);
+        variants[0].GlobalVariantId.ShouldBe("gid://shopify/ProductVariant/200");
+    }
+
+    [Fact]
     public async Task ImportProducts_ShouldReturnFailureResult_WhenShopifyCallFails()
     {
         var exception = new InvalidOperationException("Shopify unavailable");
