@@ -11,6 +11,8 @@ services:
       - ConnectionStrings__SkuSync
       - Aws__Auth__SecretKey
       - Aws__Auth__AccessKey
+      - FeatureManagement__SkulabsSyncEnabled
+      - FeatureManagement__SkulabsWriteBack
     depends_on:
       postgres:
         condition: service_healthy
