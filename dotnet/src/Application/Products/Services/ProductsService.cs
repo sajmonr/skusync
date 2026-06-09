@@ -57,9 +57,10 @@ public class ProductsService(
                 "Could not import products from Shopify because variant reconciliation failed.");
         }
 
+        IReadOnlySet<ShopifyProductVariantEntity> droppedInserts;
         try
         {
-            await dbContext.SaveChangesAsync();
+            droppedInserts = await dbContext.SaveChangesToleratingVariantConflicts(logger);
         }
         catch (Exception exception)
         {
@@ -67,6 +68,10 @@ public class ProductsService(
             return ProductImportResult.Failure(
                 "Could not import products from Shopify because the product variants could not be saved to the database.");
         }
+
+        // Variants a concurrent writer beat us to were dropped from the insert; don't announce
+        // them as created here — the writer that won the race publishes their creation event.
+        createdEntities.RemoveAll(droppedInserts.Contains);
 
         await PublishVariantEvents(createdEntities, updatedEntities);
 

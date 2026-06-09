@@ -40,6 +40,7 @@ public class SkulabsTitleSyncService(
         var candidates = await dbContext.SkulabsItems
             .Include(item => item.ShopifyProductVariant)
             .Where(item => item.ShopifyProductVariant != null
+                           && item.ShopifyProductVariant.IsActive
                            && (item.ShopifyProductVariant.DisplayName != item.Title
                                || item.PendingSkulabsSync))
             .ToListAsync(cancellationToken);
@@ -72,13 +73,12 @@ public class SkulabsTitleSyncService(
             return SkulabsTitleSyncResult.Empty;
         }
 
-        // The variant nav is filtered by the global IsActive query filter — when the variant
-        // is inactive the SkuLabs row still loads but the navigation is null. Treat that the
-        // same as "no linked variant" so we don't dereference null downstream.
-        if (item.ShopifyProductVariant is null)
+        // A variant deactivated after repeated failed Shopify pushes is excluded from sync;
+        // the null check is defensive for an unlinked row.
+        if (item.ShopifyProductVariant is null || !item.ShopifyProductVariant.IsActive)
         {
             logger.LogDebug(
-                "Variant {VariantId} is inactive; skipping SkuLabs title push for linked item {SkulabsItemId}.",
+                "Variant {VariantId} is inactive or unlinked; skipping SkuLabs title push for linked item {SkulabsItemId}.",
                 variantId, item.SkulabsItemId);
             return SkulabsTitleSyncResult.Empty;
         }
@@ -102,10 +102,10 @@ public class SkulabsTitleSyncService(
             return SkulabsTitleSyncResult.Empty;
         }
 
-        if (item.ShopifyProductVariant is null)
+        if (item.ShopifyProductVariant is null || !item.ShopifyProductVariant.IsActive)
         {
             logger.LogWarning(
-                "SkuLabs item {SkulabsItemId} has no linked Shopify variant. Nothing to compare.",
+                "SkuLabs item {SkulabsItemId} has no active linked Shopify variant. Nothing to compare.",
                 skulabsItemId);
             return SkulabsTitleSyncResult.Empty;
         }

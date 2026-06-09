@@ -98,10 +98,12 @@ public class ShopifyProductCreateWebhookHandler(
         }
 
         await dbContext.ShopifyProductVariants.AddRangeAsync(entities);
-        await dbContext.SaveChangesAsync();
+        var droppedInserts = await dbContext.SaveChangesToleratingVariantConflicts(logger);
 
-        // Enqueue only after a successful save so no phantom events enter the queue.
-        await messageBus.PublishBatch(
-            entities.Select(e => new ProductVariantCreatedEvent(e.ShopifyProductVariantId)));
+        // Enqueue only after a successful save so no phantom events enter the queue, and skip any
+        // variant a concurrent writer had already committed — re-inserting it was redundant.
+        await messageBus.PublishBatch(entities
+            .Where(e => !droppedInserts.Contains(e))
+            .Select(e => new ProductVariantCreatedEvent(e.ShopifyProductVariantId)));
     }
 }
