@@ -87,7 +87,7 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
 
         await CreateSut().Handle(product);
 
-        var saved = await _dbContext.ShopifyProductVariants.IgnoreQueryFilters().ToListAsync();
+        var saved = await _dbContext.ShopifyProductVariants.ToListAsync();
         saved.Count.ShouldBe(1);
         saved[0].DisplayName.ShouldBe("New Product (New Variant)");
     }
@@ -104,7 +104,7 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
 
         await CreateSut().Handle(product);
 
-        var revived = await _dbContext.ShopifyProductVariants.IgnoreQueryFilters().SingleAsync();
+        var revived = await _dbContext.ShopifyProductVariants.SingleAsync();
         revived.IsActive.ShouldBeTrue();
         revived.FailedShopifySyncAttempts.ShouldBe(0);
     }

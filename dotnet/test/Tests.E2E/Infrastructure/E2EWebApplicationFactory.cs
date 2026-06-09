@@ -137,9 +137,7 @@ public class E2EWebApplicationFactory : WebApplicationFactory<Program>, IAsyncLi
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         await db.SkulabsItems.ExecuteDeleteAsync();
         await db.ShopifyProductVariantLogEvents.ExecuteDeleteAsync();
-        // IgnoreQueryFilters bypasses the IsActive global filter so deactivated rows from a
-        // previous test don't survive ResetAsync.
-        await db.ShopifyProductVariants.IgnoreQueryFilters().ExecuteDeleteAsync();
+        await db.ShopifyProductVariants.ExecuteDeleteAsync();
 
         WireMock.Reset();
         // Full reset (configured Returns + received calls). ClearReceivedCalls alone leaves

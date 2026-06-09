@@ -52,7 +52,6 @@ public class SkuAndBarcodeSyncTests(E2EWebApplicationFactory factory) : IAsyncLi
         {
             var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             var stored = await db.ShopifyProductVariants
-                .IgnoreQueryFilters()
                 .SingleAsync(v => v.ShopifyProductVariantId == variantGuid);
 
             stored.FailedShopifySyncAttempts.ShouldBe(3);
