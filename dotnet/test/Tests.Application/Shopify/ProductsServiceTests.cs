@@ -95,6 +95,43 @@ public class ProductsServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ImportProducts_ShouldMatchAndUpdateInactiveVariant_WithoutReInserting()
+    {
+        // A deactivated row must be matched on its GlobalVariantId — otherwise the import treats
+        // it as new and the insert violates the unique index, failing the whole batch. The
+        // import does not reactivate it (see issue #32); that remains the drift sweep's job.
+        var inactive = SeedVariant(
+            "gid://shopify/ProductVariant/200",
+            displayName: "Old Title",
+            sku: "SKU-1",
+            barcode: "BAR-1",
+            isActive: false);
+        await _dbContext.SaveChangesAsync();
+
+        _shopifyProductService.GetProducts().Returns(
+        [
+            new ShopifyProductVariant(
+                "gid://shopify/Product/100",
+                "gid://shopify/ProductVariant/200",
+                "New Title",
+                "SKU-1",
+                "BAR-1")
+        ]);
+
+        var result = await CreateSut().ImportProductsFromShopify();
+
+        result.IsSuccess.ShouldBeTrue();
+
+        var rows = await _dbContext.Set<ShopifyProductVariantEntity>()
+            .Where(v => v.GlobalVariantId == "gid://shopify/ProductVariant/200")
+            .ToListAsync();
+        rows.Count.ShouldBe(1);
+        rows[0].ShopifyProductVariantId.ShouldBe(inactive.ShopifyProductVariantId);
+        rows[0].DisplayName.ShouldBe("New Title");
+        rows[0].IsActive.ShouldBeFalse();
+    }
+
+    [Fact]
     public async Task ImportProducts_ShouldNotUpdateSku_WhenSkuAlreadySetInDatabase()
     {
         SeedVariant("gid://shopify/ProductVariant/200", displayName: "T-Shirt", sku: "OLD-SKU", barcode: "BAR-1");
@@ -808,7 +845,8 @@ public class ProductsServiceTests : IDisposable
         string sku = "SKU",
         string barcode = "BAR",
         long variantId = 200,
-        long productId = 100)
+        long productId = 100,
+        bool isActive = true)
     {
         var entity = new ShopifyProductVariantEntity
         {
@@ -819,7 +857,8 @@ public class ProductsServiceTests : IDisposable
             VariantId = variantId,
             DisplayName = displayName,
             Sku = sku,
-            Barcode = barcode
+            Barcode = barcode,
+            IsActive = isActive
         };
 
         _dbContext.Set<ShopifyProductVariantEntity>().Add(entity);

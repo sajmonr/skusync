@@ -44,11 +44,11 @@ public class ShopifyProductUpdateWebhookHandler(
             return;
         }
 
-        // IgnoreQueryFilters so deactivated rows are visible here. Without it, a variant we'd
-        // previously flipped to IsActive=false (after repeated failed Shopify pushes) is hidden
-        // by the global IsActive filter, the lookup below misses it, and we attempt to insert a
-        // fresh row — violating the unique GlobalVariantId/VariantId index on every redelivery.
-        var existingVariants = await dbContext.ShopifyProductVariants.IgnoreQueryFilters()
+        // Deactivated rows (IsActive=false after repeated failed Shopify pushes) must be matched
+        // here too — otherwise the lookup below misses them and we insert a fresh row, violating
+        // the unique GlobalVariantId/VariantId index on every redelivery. There is no global
+        // query filter, so a plain query already sees them.
+        var existingVariants = await dbContext.ShopifyProductVariants
             .Where(variant => variant.ProductId == product.Id)
             .ToArrayAsync();
 

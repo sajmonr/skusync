@@ -53,11 +53,13 @@ public class ShopifyProductVariantConfiguration : IEntityTypeConfiguration<Shopi
         builder.HasIndex(x => x.PendingShopifySync)
             .HasFilter("\"PendingShopifySync\" = true");
 
-        // Inactive rows are excluded from every read; a filtered index keeps the global
-        // query filter cheap on tables that grow over time.
+        // Filtered index over the active rows. The two maintenance sweeps that skip
+        // deactivated variants (SkuAndBarcodeSyncService, SkulabsTitleSyncService) filter
+        // on IsActive explicitly; there is deliberately no global query filter, because
+        // every key-matching read path (import, webhooks, SkuLabs reconciliation, SKU
+        // uniqueness) must see deactivated rows or it re-inserts them and violates the
+        // unique GlobalVariantId/VariantId index.
         builder.HasIndex(x => x.IsActive)
             .HasFilter("\"IsActive\" = true");
-
-        builder.HasQueryFilter(x => x.IsActive);
     }
 }

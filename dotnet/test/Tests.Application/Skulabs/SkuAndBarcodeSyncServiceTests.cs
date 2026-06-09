@@ -401,9 +401,7 @@ public class SkuAndBarcodeSyncServiceTests : IDisposable
 
         await CreateSut().SyncAll();
 
-        // Global query filter hides inactive rows — opt out with IgnoreQueryFilters to assert state.
         var stored = await _dbContext.ShopifyProductVariants
-            .IgnoreQueryFilters()
             .SingleAsync();
         stored.FailedShopifySyncAttempts.ShouldBe(3);
         stored.IsActive.ShouldBeFalse();
