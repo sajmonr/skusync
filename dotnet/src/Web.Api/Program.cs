@@ -17,6 +17,7 @@ builder.Host.UseSerilog((context, loggerConfig) => loggerConfig.ReadFrom.Configu
 
 // Add application parts
 builder.AddIntegration()
+    .AddSqsWebhookConsumer()
     .AddInfrastructure()
     .AddApplication()
     .AddPresentation();
