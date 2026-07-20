@@ -25,8 +25,8 @@ public static class DependencyInjection
         where T : IHostApplicationBuilder
     {
         /// <summary>
-        /// Registers all Application-layer services, webhook handlers, and the Quartz.NET
-        /// scheduled job infrastructure with the dependency injection container.
+        /// Registers Application-layer services and their supporting configuration with the
+        /// dependency injection container. This method does not start hosted processing.
         /// </summary>
         /// <returns>The builder instance for further chaining.</returns>
         public T AddApplication()
@@ -34,14 +34,21 @@ public static class DependencyInjection
             builder.Services.AddFeatureManagement();
             builder.AddOptionsFromConfiguration<SkuGeneratorOptions>(SkuGeneratorOptions.SectionKey);
 
-            return builder
-                .AddApplicationServicesServices()
-                .AddShopifyWebhooks()
-                .AddMessageBus()
-                .AddScheduledJobs();
+            builder.Services.AddTransient<IProductsService, ProductsService>();
+            builder.Services.AddTransient<ISkulabsItemSyncService, SkulabsItemSyncService>();
+            builder.Services.AddTransient<ISkuGenerator, SkuGenerator>();
+            builder.Services.AddTransient<ISkuAndBarcodeSyncService, SkuAndBarcodeSyncService>();
+            builder.Services.AddTransient<ISkulabsTitleSyncService, SkulabsTitleSyncService>();
+
+            return builder;
         }
 
-        private T AddShopifyWebhooks()
+        /// <summary>
+        /// Registers the handlers for Shopify webhook topics. Only hosts responsible for
+        /// webhook processing should call this method.
+        /// </summary>
+        /// <returns>The builder instance for further chaining.</returns>
+        public T AddShopifyWebhookHandlers()
         {
             builder.Services.AddTransient<
                 IShopifyWebhookHandler,
@@ -55,22 +62,12 @@ public static class DependencyInjection
             return builder;
         }
 
-        private T AddApplicationServicesServices()
-        {
-            builder.Services.AddTransient<IProductsService, ProductsService>();
-            builder.Services.AddTransient<ISkulabsItemSyncService, SkulabsItemSyncService>();
-            builder.Services.AddTransient<ISkuGenerator, SkuGenerator>();
-            builder.Services.AddTransient<ISkuAndBarcodeSyncService, SkuAndBarcodeSyncService>();
-            builder.Services.AddTransient<ISkulabsTitleSyncService, SkulabsTitleSyncService>();
-
-            builder.Services.AddTransient<IMaintenanceTask, ShopifyProductSyncTask>();
-            builder.Services.AddTransient<IMaintenanceTask, SkuAndBarcodeSyncTask>();
-            builder.Services.AddTransient<IMaintenanceTask, SkulabsTitleSyncTask>();
-
-            return builder;
-        }
-
-        private T AddMessageBus()
+        /// <summary>
+        /// Registers the in-memory message bus and discovers Application-layer event consumers.
+        /// Only hosts responsible for processing application events should call this method.
+        /// </summary>
+        /// <returns>The builder instance for further chaining.</returns>
+        public T AddInMemoryEventProcessing()
         {
             builder.Services.AddSlimMessageBus(busBuilder =>
             {
@@ -85,8 +82,17 @@ public static class DependencyInjection
             return builder;
         }
 
-        private T AddScheduledJobs()
+        /// <summary>
+        /// Registers maintenance tasks, Quartz jobs, and the hosted Quartz scheduler. Only hosts
+        /// responsible for scheduled background processing should call this method.
+        /// </summary>
+        /// <returns>The builder instance for further chaining.</returns>
+        public T AddScheduledJobs()
         {
+            builder.Services.AddTransient<IMaintenanceTask, ShopifyProductSyncTask>();
+            builder.Services.AddTransient<IMaintenanceTask, SkuAndBarcodeSyncTask>();
+            builder.Services.AddTransient<IMaintenanceTask, SkulabsTitleSyncTask>();
+
             builder.AddOptionsFromConfiguration<ScheduledJobsOptions>(
                 ScheduledJobsOptions.SectionKey
             );
