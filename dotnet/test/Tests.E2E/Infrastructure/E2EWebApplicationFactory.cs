@@ -34,6 +34,8 @@ public class E2EWebApplicationFactory : WebApplicationFactory<Program>, IAsyncLi
     private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:18.3")
         .Build();
 
+    public string PostgreSqlConnectionString => _postgres.GetConnectionString();
+
     /// <summary>Local WireMock server for outbound HTTP we own (Skulabs). Started per-fixture.</summary>
     public WireMockServer WireMock { get; private set; } = null!;
 

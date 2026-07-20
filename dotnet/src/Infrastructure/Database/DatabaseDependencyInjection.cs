@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using SharedKernel.Options;
@@ -11,13 +11,16 @@ public static class DatabaseDependencyInjection
 
     extension(IHost app)
     {
-        public void ApplyDatabaseMigrations()
+        public async Task ApplyDatabaseMigrations(CancellationToken cancellationToken = default)
         {
-            var scopeFactory = app.Services.GetRequiredService<IServiceScopeFactory>();
-            using var scope = scopeFactory.CreateScope();
-            var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var applicationLifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
+            using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken,
+                applicationLifetime.ApplicationStopping);
 
-            dbContext.Database.Migrate();
+            await using var scope = app.Services.CreateAsyncScope();
+            var migrationRunner = scope.ServiceProvider.GetRequiredService<DatabaseMigrationRunner>();
+            await migrationRunner.Run(linkedCancellation.Token);
         }
     }
 
@@ -27,6 +30,9 @@ public static class DatabaseDependencyInjection
         {
             var skuSyncConnectionString = builder.GetConnectionStringOrThrow(ConnectionStringConfigurationKey);
 
+            builder.AddOptionsFromConfiguration<DatabaseMigrationOptions>(
+                DatabaseMigrationOptions.SectionKey);
+
             builder.Services.AddHealthChecks()
                 .AddNpgSql(
                     skuSyncConnectionString,
@@ -35,6 +41,8 @@ public static class DatabaseDependencyInjection
 
             builder.Services.AddDbContext<ApplicationDbContext>(options =>
                 options.UseNpgsql(skuSyncConnectionString));
+            builder.Services.AddScoped<IDatabaseMigrator, EfCoreDatabaseMigrator>();
+            builder.Services.AddScoped<DatabaseMigrationRunner>();
 
             return builder;
         }
