@@ -6,6 +6,8 @@ EXPOSE 8080
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
+COPY ["Directory.Packages.props", "."]
+COPY ["src/SharedKernel/SharedKernel.csproj", "src/SharedKernel/"]
 COPY ["src/ProductionTest.Api/ProductionTest.Api.csproj", "src/ProductionTest.Api/"]
 RUN dotnet restore "src/ProductionTest.Api/ProductionTest.Api.csproj"
 COPY . .
