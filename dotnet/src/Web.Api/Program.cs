@@ -20,6 +20,9 @@ builder.AddIntegration()
     .AddSqsWebhookConsumer()
     .AddInfrastructure()
     .AddApplication()
+    .AddShopifyWebhookHandlers()
+    .AddInMemoryEventProcessing()
+    .AddScheduledJobs()
     .AddPresentation();
 
 var app = builder.Build();
