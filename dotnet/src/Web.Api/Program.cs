@@ -34,7 +34,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI(options => options.SwaggerEndpoint("/openapi/v1.json", "Swagger"));
 }
 
-app.ApplyDatabaseMigrations();
+await app.ApplyDatabaseMigrations();
 
 app.MapHealthCheckEndpoints();
 
