@@ -22,8 +22,8 @@ public static class DependencyInjection
         where T : IHostApplicationBuilder
     {
         /// <summary>
-        /// Registers all Integration-layer services — Shopify GraphQL client, SkuLabs HTTP
-        /// client, and the AWS SQS message bus poller — with the dependency injection container.
+        /// Registers Integration-layer outbound clients and their supporting services with the
+        /// dependency injection container. This method does not start hosted message consumers.
         /// </summary>
         /// <returns>The builder instance for further chaining.</returns>
         public T AddIntegration()
@@ -49,8 +49,18 @@ public static class DependencyInjection
             builder.Services.AddTransient<IShopifyProductService, ShopifyProductService>();
             
             builder.Services.AddShopifySharpServiceFactories();
-            
-            // AWS SQS
+
+            return builder;
+        }
+
+        /// <summary>
+        /// Registers the AWS SQS poller that receives Shopify webhook messages and dispatches
+        /// them to the configured message handler. Only hosts responsible for webhook processing
+        /// should call this method.
+        /// </summary>
+        /// <returns>The builder instance for further chaining.</returns>
+        public T AddSqsWebhookConsumer()
+        {
             var awsAuthConfig = builder.GetRequiredConfigValue<AwsAuthOptions>(AwsAuthOptions.OptionsKey);
             var sqsOptions = builder.GetRequiredConfigValue<SqsOptions>(SqsOptions.OptionsKey);
 
@@ -67,7 +77,7 @@ public static class DependencyInjection
     
                 busBuilder.AddMessageHandler<SqsShopEventProductHandler, SqsShopEventProductMessage>();
             });
-            
+
             return builder;
         }
 
