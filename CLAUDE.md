@@ -73,7 +73,7 @@ npm run lint
 
 ## Notes
 
-- CI/CD: `.github/workflows/build.yml` (GitHub Actions, .NET only)
+- CI: GitHub Actions verifies PRs — `pr-develop.yml` (build + tests, no E2E) and `pr-main.yml` (build + tests incl. E2E). Building and deployment are done by Dokploy on a build server using each service's Dockerfile (`src/Web.Api/Dockerfile`, `src/AppServer/Dockerfile`), not GitHub Actions.
 - Frontend uses SQLite (dev) via Prisma; backend uses PostgreSQL via EF Core
 - NuGet versions are centrally managed in `dotnet/Directory.Packages.props`
 

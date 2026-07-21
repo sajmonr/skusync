@@ -454,5 +454,6 @@ The configuration is discovered automatically — no manual `modelBuilder.Entity
 
 ## CI/CD
 
-- GitHub Actions: `.github/workflows/build.yml` (builds and tests the .NET solution only).
+- CI (GitHub Actions): `pr-develop.yml` (build + tests, no E2E) and `pr-main.yml` (build + tests incl. E2E) verify pull requests.
+- Build & deploy: handled by Dokploy on a build server, which builds each service from its Dockerfile (`src/Web.Api/Dockerfile`, `src/AppServer/Dockerfile`). Not done in GitHub Actions.
 - NuGet versions are centrally managed in `dotnet/Directory.Packages.props`.

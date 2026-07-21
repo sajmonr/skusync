@@ -1,8 +1,5 @@
 # SkuSync
 
-[![Staging deploy (develop)](https://github.com/sajmonr/skusync/actions/workflows/staging-deploy.yml/badge.svg?branch=develop)](https://github.com/sajmonr/skusync/actions/workflows/staging-deploy.yml)
-[![Production deploy (main)](https://github.com/sajmonr/skusync/actions/workflows/prod-deploy.yml/badge.svg?branch=main)](https://github.com/sajmonr/skusync/actions/workflows/prod-deploy.yml)
-
 Monorepo with a .NET 10 backend and a Node.js / React Shopify app frontend.
 The backend keeps Shopify product variants in sync with SkuLabs inventory items;
 the frontend is the embedded Shopify admin app.
@@ -90,14 +87,17 @@ Key files:
 
 ## CI / CD
 
-GitHub Actions workflows in `.github/workflows/`:
+**CI** — GitHub Actions verifies pull requests (`.github/workflows/`):
 
-- `staging-deploy.yml` — builds and deploys the .NET backend to staging on
-  pushes to `develop`.
-- `prod-deploy.yml` — builds and deploys to production on pushes to `main`.
+- `pr-develop.yml` — build + unit/integration/architecture tests (E2E excluded)
+  on PRs targeting `develop`.
+- `pr-main.yml` — full build + tests, **including** E2E, on PRs targeting `main`.
 
-The status badges at the top of this file report on the staging workflow run
-against each branch.
+**Build & deploy** — handled by [Dokploy](https://dokploy.com) on a dedicated
+build server, which builds each backend service from its Dockerfile
+([`dotnet/src/Web.Api/Dockerfile`](dotnet/src/Web.Api/Dockerfile) and
+[`dotnet/src/AppServer/Dockerfile`](dotnet/src/AppServer/Dockerfile)). Image
+builds and deployments no longer run in GitHub Actions.
 
 ## Notes
 
