@@ -13,7 +13,7 @@ namespace Tests.E2E.Scenarios;
 /// covered by the same engine and EF Core provider used in production. The in-memory provider
 /// can't reproduce it — it doesn't enforce unique indexes.
 [Collection(E2ETestCollection.Name)]
-public class VariantConflictTolerantSaveTests(E2EWebApplicationFactory factory) : IAsyncLifetime
+public class VariantConflictTolerantSaveTests(AppServerTestHost factory) : IAsyncLifetime
 {
     public Task InitializeAsync() => factory.ResetAsync();
     public Task DisposeAsync() => Task.CompletedTask;

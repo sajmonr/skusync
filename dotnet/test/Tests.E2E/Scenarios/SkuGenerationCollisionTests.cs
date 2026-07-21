@@ -15,7 +15,7 @@ namespace Tests.E2E.Scenarios;
 /// the in-memory provider.
 /// </summary>
 [Collection(E2ETestCollection.Name)]
-public class SkuGenerationCollisionTests(E2EWebApplicationFactory factory) : IAsyncLifetime
+public class SkuGenerationCollisionTests(AppServerTestHost factory) : IAsyncLifetime
 {
     public Task InitializeAsync() => factory.ResetAsync();
     public Task DisposeAsync() => Task.CompletedTask;

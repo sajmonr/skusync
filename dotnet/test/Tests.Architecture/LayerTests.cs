@@ -76,4 +76,40 @@ public class LayerTests : BaseTest
 
         result.IsSuccessful.ShouldBeTrue();
     }
+
+    [Fact]
+    public void ApplicationLayer_ShouldNotHaveDependencyOn_AppServerHost()
+    {
+        var result = Types
+            .InAssembly(ApplicationAssembly)
+            .Should()
+            .NotHaveDependencyOn(AppServerAssembly.GetName().Name)
+            .GetResult();
+
+        result.IsSuccessful.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void IntegrationLayer_ShouldNotHaveDependencyOn_AppServerHost()
+    {
+        var result = Types
+            .InAssembly(IntegrationAssembly)
+            .Should()
+            .NotHaveDependencyOn(AppServerAssembly.GetName().Name)
+            .GetResult();
+
+        result.IsSuccessful.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void InfrastructureLayer_ShouldNotHaveDependencyOn_AppServerHost()
+    {
+        var result = Types
+            .InAssembly(InfrastructureAssembly)
+            .Should()
+            .NotHaveDependencyOn(AppServerAssembly.GetName().Name)
+            .GetResult();
+
+        result.IsSuccessful.ShouldBeTrue();
+    }
 }

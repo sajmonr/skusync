@@ -17,7 +17,7 @@ using WireMock.ResponseBuilders;
 namespace Tests.E2E.Scenarios;
 
 [Collection(E2ETestCollection.Name)]
-public class SkulabsItemSyncTests(E2EWebApplicationFactory factory) : IAsyncLifetime
+public class SkulabsItemSyncTests(AppServerTestHost factory) : IAsyncLifetime
 {
     private const long MatchingVariantId = 45696210862241L;
 

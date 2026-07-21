@@ -1,9 +1,8 @@
+using AppServer;
 using AWS.Messaging;
 using Infrastructure.Database;
 using Integration.Aws.Sqs;
 using Integration.Shopify.GraphQl;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -17,11 +16,16 @@ using WireMock.Server;
 namespace Tests.E2E.Infrastructure;
 
 /// <summary>
-/// Boots the real Web.Api host against a Testcontainers Postgres + WireMock + a substituted
-/// Shopify GraphQL client. Shared across all tests in a class via IClassFixture so the
-/// container + WireMock cost is paid once.
+/// Boots the real AppServer Generic Host — the owner of all background processing (SQS webhook
+/// consumption, Shopify webhook handlers, in-memory event consumers, scheduled jobs) — against
+/// a Testcontainers Postgres + WireMock + a substituted Shopify GraphQL client. Shared across
+/// the E2E collection so the container + WireMock cost is paid once.
 /// </summary>
 /// <remarks>
+/// AppServer is a Generic Host worker with no HTTP surface, so this fixture composes the host
+/// via <see cref="DependencyInjection.AddAppServer"/> — the same entry point Program.cs uses —
+/// and starts it directly rather than through WebApplicationFactory.
+///
 /// Why substitute IShopifyGraphQlService instead of pointing ShopifySharp at WireMock?
 /// ShopifySharp hardcodes https://{shop}/admin/... and builds its own HttpClient, so
 /// redirecting it to WireMock requires HTTPS + custom cert handling that doesn't add coverage
@@ -29,12 +33,36 @@ namespace Tests.E2E.Infrastructure;
 /// substituting it lets ShopifyProductService.UpdateVariants run for real and lets us assert
 /// on the GraphQL query and variables it produces.
 /// </remarks>
-public class E2EWebApplicationFactory : WebApplicationFactory<Program>, IAsyncLifetime
+public class AppServerTestHost : IAsyncLifetime
 {
     private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:18.3")
         .Build();
 
+    private IHost _host = null!;
+
     public string PostgreSqlConnectionString => _postgres.GetConnectionString();
+
+    /// <summary>The built host's service provider. Resolve scoped services from here in tests.</summary>
+    public IServiceProvider Services => _host.Services;
+
+    /// <summary>
+    /// When <c>false</c> (the default) the AWS SQS poller hosted service is stripped before the
+    /// host starts, so tests never contact a real queue. Toggled independently of Quartz.
+    /// </summary>
+    public bool EnableSqsPolling { get; init; }
+
+    /// <summary>
+    /// When <c>false</c> (the default) the Quartz scheduler hosted service is stripped before
+    /// the host starts, so cron jobs never fire. Toggled independently of SQS polling.
+    /// </summary>
+    public bool EnableQuartzScheduling { get; init; }
+
+    /// <summary>
+    /// Snapshot of AppServer's service registrations taken before test-only removals, so
+    /// composition tests can assert what the host wires up (SQS poller, Quartz, in-memory
+    /// consumers) without those hosted services actually running.
+    /// </summary>
+    public IReadOnlyList<ServiceDescriptor> RegisteredServices { get; private set; } = [];
 
     /// <summary>Local WireMock server for outbound HTTP we own (Skulabs). Started per-fixture.</summary>
     public WireMockServer WireMock { get; private set; } = null!;
@@ -47,10 +75,10 @@ public class E2EWebApplicationFactory : WebApplicationFactory<Program>, IAsyncLi
         await _postgres.StartAsync();
         WireMock = WireMockServer.Start();
 
-        // Program.cs reads configuration values during builder.AddInfrastructure() — before
-        // WebApplicationFactory's ConfigureAppConfiguration callbacks would normally run. The
-        // reliable seam is environment variables: WebApplication.CreateBuilder includes them
-        // in its default configuration. Double underscores map to colons in .NET config keys.
+        // Configuration reaches the host through environment variables:
+        // Host.CreateApplicationBuilder includes them in its default configuration, and
+        // AddAppServer reads several values at registration time. Double underscores map to
+        // colons in .NET config keys.
         var skulabsBase = WireMock.Url!;
         SetEnv("ConnectionStrings__SkuSync", _postgres.GetConnectionString());
         SetEnv("Shopify__ShopUrl", "https://e2e-test.myshopify.com");
@@ -79,8 +107,48 @@ public class E2EWebApplicationFactory : WebApplicationFactory<Program>, IAsyncLi
         SetEnv("ScheduledJobs__SkulabsItemSync__RunOnStart", "false");
         SetEnv("ScheduledJobs__SkulabsItemSync__CronExpression", "0 0 0 * * ?");
 
-        // Force the host to build now so DI overrides apply and migrations run against the container.
-        _ = Services;
+        var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
+        {
+            EnvironmentName = "Testing"
+        });
+
+        // Compose the host exactly as Program.cs does.
+        builder.AddAppServer();
+
+        // Snapshot the full registration set before any test-only removals so composition
+        // tests can assert what the host wires up.
+        RegisteredServices = builder.Services.ToList();
+
+        // Replace the real Shopify GraphQL client with a substitute so we can capture and
+        // assert on outbound calls without going through ShopifySharp/HTTPS.
+        builder.Services.RemoveAll<IShopifyGraphQlService>();
+        builder.Services.AddSingleton(ShopifyGraphQl);
+
+        // Disable background services we don't want in tests, each toggled independently:
+        //   - AWS SQS poller (would connect to real AWS)
+        //   - Quartz scheduler (would fire cron jobs)
+        // Webhook handlers and consumers are invoked directly or via the in-memory bus.
+        var needles = new List<string>();
+        if (!EnableSqsPolling)
+        {
+            needles.Add("AWS.Messaging");
+            needles.Add("MessagePump");
+        }
+        if (!EnableQuartzScheduling)
+        {
+            needles.Add("Quartz");
+        }
+        if (needles.Count > 0)
+        {
+            RemoveHostedServicesByTypeName(builder.Services, [.. needles]);
+        }
+
+        _host = builder.Build();
+
+        // Run migrations against the container before starting hosted services, mirroring
+        // Program.cs so the in-memory bus and any remaining workloads see a current schema.
+        await _host.ApplyDatabaseMigrations();
+        await _host.StartAsync();
     }
 
     private static void SetEnv(string key, string value) =>
@@ -88,29 +156,11 @@ public class E2EWebApplicationFactory : WebApplicationFactory<Program>, IAsyncLi
 
     async Task IAsyncLifetime.DisposeAsync()
     {
+        await _host.StopAsync();
+        _host.Dispose();
         WireMock.Stop();
         WireMock.Dispose();
         await _postgres.DisposeAsync();
-        await base.DisposeAsync();
-    }
-
-    protected override void ConfigureWebHost(IWebHostBuilder builder)
-    {
-        builder.UseEnvironment("Testing");
-
-        builder.ConfigureServices(services =>
-        {
-            // Replace the real Shopify GraphQL client with a substitute so we can capture and
-            // assert on outbound calls without going through ShopifySharp/HTTPS.
-            services.RemoveAll<IShopifyGraphQlService>();
-            services.AddSingleton(ShopifyGraphQl);
-
-            // Disable background services we don't want in tests:
-            //   - Quartz scheduler (would fire cron jobs)
-            //   - AWS SQS poller (would connect to real AWS)
-            // Webhook handlers and consumers are invoked directly or via the in-memory bus.
-            RemoveHostedServicesByTypeName(services, "Quartz", "AWS.Messaging", "MessagePump");
-        });
     }
 
     private static void RemoveHostedServicesByTypeName(IServiceCollection services, params string[] needles)
@@ -131,7 +181,7 @@ public class E2EWebApplicationFactory : WebApplicationFactory<Program>, IAsyncLi
     /// Wipes the variant + log-event tables, clears WireMock mappings + request log, and
     /// resets recorded calls on the Shopify GraphQL substitute. Call from each test's
     /// <c>InitializeAsync</c> so state doesn't leak across tests in the same class fixture
-    /// (or across classes — the factory is shared via <see cref="E2ETestCollection"/>).
+    /// (or across classes — the host is shared via <see cref="E2ETestCollection"/>).
     /// </summary>
     public async Task ResetAsync()
     {
