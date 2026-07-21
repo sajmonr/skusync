@@ -2,6 +2,7 @@
 <project version="4">
   <component name="UserContentModel">
     <attachedFolders>
+      <Path>../../add-appserver</Path>
       <Path>../.github</Path>
     </attachedFolders>
     <explicitIncludes />

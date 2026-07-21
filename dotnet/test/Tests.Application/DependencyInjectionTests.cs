@@ -21,15 +21,20 @@ public class DependencyInjectionTests
         builder.AddApplication();
 
         builder.Services.ShouldContain(descriptor =>
-            descriptor.ServiceType == typeof(IProductsService));
+            descriptor.ServiceType == typeof(IProductsService)
+        );
         builder.Services.ShouldNotContain(descriptor =>
-            descriptor.ServiceType == typeof(IShopifyWebhookHandler));
+            descriptor.ServiceType == typeof(IShopifyWebhookHandler)
+        );
         builder.Services.ShouldNotContain(descriptor =>
-            descriptor.ServiceType == typeof(IMessageBus));
+            descriptor.ServiceType == typeof(IMessageBus)
+        );
         builder.Services.ShouldNotContain(descriptor =>
-            descriptor.ServiceType == typeof(IMaintenanceTask));
+            descriptor.ServiceType == typeof(IMaintenanceTask)
+        );
         builder.Services.ShouldNotContain(descriptor =>
-            descriptor.ServiceType == typeof(IHostedService));
+            descriptor.ServiceType == typeof(IHostedService)
+        );
     }
 
     [Fact]
@@ -37,12 +42,14 @@ public class DependencyInjectionTests
     {
         var builder = CreateBuilder();
 
-        builder.AddShopifyWebhookHandlers();
+        builder.AddWebhookProcessing();
 
-        builder.Services.Count(descriptor =>
-            descriptor.ServiceType == typeof(IShopifyWebhookHandler)).ShouldBe(2);
+        builder
+            .Services.Count(descriptor => descriptor.ServiceType == typeof(IShopifyWebhookHandler))
+            .ShouldBe(2);
         builder.Services.ShouldNotContain(descriptor =>
-            descriptor.ServiceType == typeof(IHostedService));
+            descriptor.ServiceType == typeof(IHostedService)
+        );
     }
 
     [Fact]
@@ -50,31 +57,35 @@ public class DependencyInjectionTests
     {
         var builder = CreateBuilder();
 
-        builder.AddInMemoryEventProcessing();
+        builder.AddEventProcessing();
 
-        builder.Services.ShouldContain(descriptor =>
-            descriptor.ServiceType == typeof(IMessageBus));
+        builder.Services.ShouldContain(descriptor => descriptor.ServiceType == typeof(IMessageBus));
     }
 
     [Fact]
     public void AddScheduledJobs_ShouldRegisterMaintenanceTasksAndHostedScheduler()
     {
-        var builder = CreateBuilder(new Dictionary<string, string?>
-        {
-            ["ScheduledJobs:SkulabsItemSync:Enabled"] = "false",
-            ["ScheduledJobs:ProductMaintenance:Enabled"] = "false"
-        });
+        var builder = CreateBuilder(
+            new Dictionary<string, string?>
+            {
+                ["ScheduledJobs:SkulabsItemSync:Enabled"] = "false",
+                ["ScheduledJobs:ProductMaintenance:Enabled"] = "false",
+            }
+        );
 
         builder.AddScheduledJobs();
 
-        builder.Services.Count(descriptor =>
-            descriptor.ServiceType == typeof(IMaintenanceTask)).ShouldBe(3);
+        builder
+            .Services.Count(descriptor => descriptor.ServiceType == typeof(IMaintenanceTask))
+            .ShouldBe(3);
         builder.Services.ShouldContain(descriptor =>
-            descriptor.ServiceType == typeof(IHostedService));
+            descriptor.ServiceType == typeof(IHostedService)
+        );
     }
 
     private static IHostApplicationBuilder CreateBuilder(
-        IReadOnlyDictionary<string, string?>? settings = null)
+        IReadOnlyDictionary<string, string?>? settings = null
+    )
     {
         var configuration = new ConfigurationManager();
         if (settings is not null)
