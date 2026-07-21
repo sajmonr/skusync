@@ -11,14 +11,10 @@ public abstract class BaseTest
     protected static readonly Assembly InfrastructureAssembly =
         typeof(Infrastructure.DependencyInjection).Assembly;
 
-    // Resolved via Web.Api's DependencyInjection type rather than its global Program class,
-    // which would be ambiguous with AppServer's top-level Program.
+    // Resolved via each host's DependencyInjection type rather than its global Program class:
+    // both Web.Api and AppServer declare a top-level Program, so typeof(Program) is ambiguous.
     protected static readonly Assembly PresentationAssembly =
         typeof(Web.Api.DependencyInjection).Assembly;
-
-    // AppServer composes everything inline in its (internal) top-level Program and exposes no
-    // public type to anchor on, so its assembly is loaded by name. The project reference in
-    // Tests.Architecture.csproj guarantees AppServer.dll sits alongside the test assembly.
     protected static readonly Assembly AppServerAssembly =
-        Assembly.Load("AppServer");
+        typeof(AppServer.DependencyInjection).Assembly;
 }

@@ -1,8 +1,6 @@
-using Application;
+using AppServer;
 using AWS.Messaging;
-using Infrastructure;
 using Infrastructure.Database;
-using Integration;
 using Integration.Aws.Sqs;
 using Integration.Shopify.GraphQl;
 using Microsoft.EntityFrameworkCore;
@@ -25,9 +23,8 @@ namespace Tests.E2E.Infrastructure;
 /// </summary>
 /// <remarks>
 /// AppServer is a Generic Host worker with no HTTP surface, so this fixture composes the host
-/// with the same layer registrations AppServer's Program.cs applies (kept in sync manually —
-/// the composition is inlined in both) and starts it directly rather than through
-/// WebApplicationFactory.
+/// via <see cref="DependencyInjection.AddAppServer"/> — the same entry point Program.cs uses —
+/// and starts it directly rather than through WebApplicationFactory.
 ///
 /// Why substitute IShopifyGraphQlService instead of pointing ShopifySharp at WireMock?
 /// ShopifySharp hardcodes https://{shop}/admin/... and builds its own HttpClient, so
@@ -115,16 +112,8 @@ public class AppServerTestHost : IAsyncLifetime
             EnvironmentName = "Testing"
         });
 
-        // Compose the host exactly as AppServer/Program.cs does. Keep this chain in sync with
-        // Program.cs — the composition is inlined in both (there is no shared helper).
-        builder
-            .AddIntegration()
-            .AddSqsWebhookConsumer()
-            .AddInfrastructure()
-            .AddApplication()
-            .AddWebhookProcessing()
-            .AddEventProcessing()
-            .AddScheduledJobs();
+        // Compose the host through the same entry point Program.cs uses.
+        builder.AddAppServer();
 
         // Snapshot the full registration set before any test-only removals so composition
         // tests can assert what the host wires up.

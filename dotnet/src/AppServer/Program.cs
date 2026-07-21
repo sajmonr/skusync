@@ -1,7 +1,5 @@
-using Application;
-using Infrastructure;
+using AppServer;
 using Infrastructure.Database;
-using Integration;
 using Serilog;
 
 var builder = Host.CreateApplicationBuilder(args);
@@ -13,15 +11,8 @@ builder.Services.AddSerilog(
 
 // AppServer owns all background processing: SQS webhook consumption, Shopify webhook
 // handlers, in-memory event consumers, and scheduled Quartz jobs. Web.Api registers none
-// of these — it serves HTTP only. Keep this composition in sync with that division.
-builder
-    .AddIntegration()
-    .AddSqsWebhookConsumer()
-    .AddInfrastructure()
-    .AddApplication()
-    .AddWebhookProcessing()
-    .AddEventProcessing()
-    .AddScheduledJobs();
+// of these — it serves HTTP only.
+builder.AddAppServer();
 
 var host = builder.Build();
 
