@@ -58,9 +58,12 @@ public class SkulabsTitleSyncTests(AppServerTestHost factory) : IAsyncLifetime
 
         await factory.DispatchWebhookAsync(envelope);
 
+        // Wait for the terminal state — the local mirror committed — not just the PUT. The
+        // consumer calls SkuLabs first and only then commits the local title/log in a separate
+        // scope, so synchronizing on the PUT alone races that commit (flaky under CI timing).
         await AsyncWait.UntilAsync(
-            () => CapturedBulkUpsertBodies().Any(),
-            because: "SkulabsTitleSyncConsumer should have run and called PUT /item/bulk_upsert.");
+            () => CapturedBulkUpsertBodies().Any() && SkulabsItemHasTitle("Testprod1"),
+            because: "SkulabsTitleSyncConsumer should have called PUT /item/bulk_upsert and mirrored the corrected title locally.");
 
         var bodies = CapturedBulkUpsertBodies();
         bodies.Count.ShouldBe(1);
@@ -97,9 +100,11 @@ public class SkulabsTitleSyncTests(AppServerTestHost factory) : IAsyncLifetime
 
         await RunSkulabsItemSyncJobAsync();
 
+        // Wait for the local mirror to commit, not just the PUT (see the note in the webhook
+        // test above — synchronizing on the PUT alone races the consumer's separate commit).
         await AsyncWait.UntilAsync(
-            () => CapturedBulkUpsertBodies().Any(),
-            because: "Post-link SkulabsTitleSyncConsumer should have pushed the variant DisplayName to SkuLabs.");
+            () => CapturedBulkUpsertBodies().Any() && SkulabsItemHasTitle("Authoritative Display Name"),
+            because: "Post-link SkulabsTitleSyncConsumer should have pushed the variant DisplayName to SkuLabs and mirrored it locally.");
 
         var bodies = CapturedBulkUpsertBodies();
         bodies.Count.ShouldBe(1);
@@ -227,6 +232,13 @@ public class SkulabsTitleSyncTests(AppServerTestHost factory) : IAsyncLifetime
                 .WithStatusCode(200)
                 .WithHeader("Content-Type", "application/json")
                 .WithBody(json));
+    }
+
+    private bool SkulabsItemHasTitle(string title)
+    {
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        return db.SkulabsItems.AsNoTracking().Any(item => item.Title == title);
     }
 
     private List<string> CapturedBulkUpsertBodies() =>
