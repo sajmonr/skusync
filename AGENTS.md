@@ -10,15 +10,17 @@ Monorepo with a .NET 10 backend and a Node.js/React Shopify app frontend.
 skusync/          # Node.js Shopify app (React Router 7, TypeScript, Prisma, SQLite)
 dotnet/           # .NET 10 backend (Clean Architecture, EF Core, PostgreSQL)
   src/
-    Web.Api/          — ASP.NET Core controllers, OpenAPI
+    Web.Api/          — ASP.NET Core HTTP host (OpenAPI + health); serves traffic only
+    AppServer/        — Generic Host worker; owns SQS webhooks, event consumers, Quartz jobs
     Application/      — Business logic, use cases, Quartz jobs, services
     Integration/      — Shopify & AWS SQS integrations
-    Infrastructure/   — EF Core DbContext, health checks
+    Infrastructure/   — EF Core DbContext, migrations, health checks
     SharedKernel/     — Common types, abstractions, extensions
   test/
     Tests.Application/    — Unit tests for business logic
     Tests.Integration/    — Integration tests
-    ArchitectureTests/    — Clean Architecture rule enforcement
+    Tests.E2E/            — End-to-end scenarios (Testcontainers Postgres + WireMock)
+    Tests.Architecture/   — Clean Architecture rule enforcement
 ```
 
 ---
@@ -33,8 +35,8 @@ dotnet restore SkuSync.slnx
 dotnet build SkuSync.slnx
 dotnet test SkuSync.slnx
 
-# Run locally (PostgreSQL on port 5433)
-docker compose up
+# Run the full stack — postgres, seq, web.api, app.server (PostgreSQL on host port 5433)
+docker compose up --build
 ```
 
 ### Frontend (Node.js)
