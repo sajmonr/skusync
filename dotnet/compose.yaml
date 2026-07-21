@@ -1,21 +1,68 @@
 name: skusync
+
+# Full local stack:
+#   postgres   — database
+#   seq        — structured log aggregation (UI at http://localhost:8081)
+#   web.api    — HTTP API host (serves traffic + health only)
+#   app.server — Generic Host worker that owns all background processing
+#
+# Runs out of the box with `docker compose up --build`. Every value below has a sensible
+# default and can be overridden via the shell environment or a .env file. Real Shopify / Skulabs
+# / AWS credentials should be supplied that way — the placeholders only let the worker boot.
+
 services:
-  web.api:
-    build: .
+  postgres:
+    image: postgres:18.3
     environment:
-      - DOTNET_ENVIRONMENT
-      - Skulabs__Api__ApiKey
-      - Skulabs__Admin__Username
-      - Skulabs__Admin__Password
-      - Shopify__ApiKey
-      - ConnectionStrings__SkuSync
-      - Aws__Auth__SecretKey
-      - Aws__Auth__AccessKey
-      - FeatureManagement__SkulabsSyncEnabled
-      - FeatureManagement__SkulabsWriteBack
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=${POSTGRES_DB:-skusync}
+    ports:
+      # Exposed on 5433 locally so it doesn't clash with a host Postgres on 5432.
+      - "5433:5432"
+    volumes:
+      # Postgres 18+ recommends mounting the parent dir; data lives in a version subdirectory.
+      - postgres-data:/var/lib/postgresql
+    # Both hosts wait for this to report healthy before starting. pg_isready exits 0 only when
+    # the server is accepting connections, so neither host tries to migrate against a
+    # half-booted Postgres.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  seq:
+    image: datalust/seq:latest
+    environment:
+      - ACCEPT_EULA=Y
+      # Local dev only: skip Seq's first-run admin-password setup so the UI opens without login.
+      - SEQ_FIRSTRUN_NOAUTHENTICATION=true
+    ports:
+      # Seq UI. Log ingestion happens in-network on seq:5341, which the Development Serilog
+      # configuration already targets.
+      - "8081:80"
+    volumes:
+      - seq-data:/data
+
+  web.api:
+    build:
+      context: .
+      dockerfile: src/Web.Api/Dockerfile
+    # Web.Api serves HTTP only; post-cutover it owns no background processing and needs no
+    # SQS/queue, Shopify, Skulabs, or feature-flag configuration — just a database connection
+    # for migrations and its readiness probe.
+    environment:
+      - DOTNET_ENVIRONMENT=${DOTNET_ENVIRONMENT:-Development}
+      - ConnectionStrings__SkuSync=Host=postgres;Port=5432;Database=${POSTGRES_DB:-skusync};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "8080:8080"
     depends_on:
       postgres:
         condition: service_healthy
+      seq:
+        condition: service_started
     # Probes the narrowest possible signal — /_health/live runs only the "self" check, so
     # external dependency outages can't trigger a container-restart loop. A Postgres outage
     # makes /_health/ready unhealthy (gating LB traffic) without killing the process.
@@ -26,17 +73,33 @@ services:
       retries: 3
       start_period: 30s
 
-  postgres:
-    image: postgres:18.3
+  app.server:
+    build:
+      context: .
+      dockerfile: src/AppServer/Dockerfile
+    # AppServer owns all background processing: SQS webhook consumption, Shopify webhook
+    # handlers, in-memory event consumers, and scheduled Quartz jobs. The Shopify/Skulabs/AWS
+    # values below are placeholders that satisfy start-up validation; supply real credentials
+    # via the environment or a .env file to talk to the live services.
     environment:
-      - POSTGRES_USER
-      - POSTGRES_PASSWORD
-    # web.api waits for this to report healthy before starting. pg_isready exits 0 only when
-    # the server is accepting connections, so the API never tries to migrate against a
-    # half-booted Postgres.
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postgres}"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-      start_period: 10s
+      - DOTNET_ENVIRONMENT=${DOTNET_ENVIRONMENT:-Development}
+      - ConnectionStrings__SkuSync=Host=postgres;Port=5432;Database=${POSTGRES_DB:-skusync};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-postgres}
+      - Shopify__ApiKey=${Shopify__ApiKey:-local-dev-placeholder}
+      - Skulabs__Api__ApiKey=${Skulabs__Api__ApiKey:-local-dev-placeholder}
+      - Skulabs__Admin__Username=${Skulabs__Admin__Username:-local-dev-placeholder}
+      - Skulabs__Admin__Password=${Skulabs__Admin__Password:-local-dev-placeholder}
+      - Aws__Auth__AccessKey=${Aws__Auth__AccessKey:-local-dev-placeholder}
+      - Aws__Auth__SecretKey=${Aws__Auth__SecretKey:-local-dev-placeholder}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      seq:
+        condition: service_started
+    # Exactly one replica must run: the SQS poller and the Quartz scheduler are process-wide
+    # singletons, and running two would double-process webhooks and fire jobs twice.
+    deploy:
+      replicas: 1
+
+volumes:
+  postgres-data:
+  seq-data:
