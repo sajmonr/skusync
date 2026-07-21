@@ -32,7 +32,9 @@ public static class DependencyInjection
         public T AddApplication()
         {
             builder.Services.AddFeatureManagement();
-            builder.AddOptionsFromConfiguration<SkuGeneratorOptions>(SkuGeneratorOptions.SectionKey);
+            builder.AddOptionsFromConfiguration<SkuGeneratorOptions>(
+                SkuGeneratorOptions.SectionKey
+            );
 
             builder.Services.AddTransient<IProductsService, ProductsService>();
             builder.Services.AddTransient<ISkulabsItemSyncService, SkulabsItemSyncService>();
@@ -48,7 +50,7 @@ public static class DependencyInjection
         /// webhook processing should call this method.
         /// </summary>
         /// <returns>The builder instance for further chaining.</returns>
-        public T AddShopifyWebhookHandlers()
+        public T AddWebhookProcessing()
         {
             builder.Services.AddTransient<
                 IShopifyWebhookHandler,
@@ -63,11 +65,11 @@ public static class DependencyInjection
         }
 
         /// <summary>
-        /// Registers the in-memory message bus and discovers Application-layer event consumers.
+        /// Registers the message bus and discovers Application-layer event consumers.
         /// Only hosts responsible for processing application events should call this method.
         /// </summary>
         /// <returns>The builder instance for further chaining.</returns>
-        public T AddInMemoryEventProcessing()
+        public T AddEventProcessing()
         {
             builder.Services.AddSlimMessageBus(busBuilder =>
             {

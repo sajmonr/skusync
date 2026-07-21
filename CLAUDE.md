@@ -26,24 +26,28 @@ dotnet test SkuSync.slnx
 
 ```bash
 cd dotnet
-docker compose up
+docker compose up --build
 ```
 
-PostgreSQL runs on port 5433 locally.
+Starts the full stack: PostgreSQL (host port 5433), Seq for structured logs (UI at http://localhost:8081), the `web.api` HTTP host (http://localhost:8080), and the `app.server` worker. Postgres credentials live in `dotnet/.env`; each host's Shopify / SkuLabs / AWS config comes from its .NET user secrets, bind-mounted into the container.
 
 ### Architecture
 
 Clean Architecture with these layers:
-- `src/Web.Api` — ASP.NET Core controllers, OpenAPI
+- `src/Web.Api` — ASP.NET Core HTTP host (OpenAPI + health endpoints). Serves traffic only; owns no background processing.
+- `src/AppServer` — .NET Generic Host worker. Owns all background processing: SQS webhook consumption, Shopify webhook handlers, in-memory event consumers, and Quartz jobs. Composed via `AddAppServer()`.
 - `src/Application` — Business logic, use cases, Quartz jobs
 - `src/Integration` — Shopify & AWS SQS integrations
-- `src/Infrastructure` — EF Core DbContext, health checks
+- `src/Infrastructure` — EF Core DbContext, coordinated startup migration lock, health checks
 - `src/SharedKernel` — Common types and abstractions
+
+Both hosts run the coordinated startup migration — guarded by a Postgres advisory lock so only one migrates at a time — before serving traffic or starting background workloads.
 
 Test projects:
 - `test/Tests.Application` — Unit tests for business logic
 - `test/Tests.Integration` — Integration tests
-- `test/ArchitectureTests` — Clean Architecture rule enforcement
+- `test/Tests.E2E` — End-to-end scenarios booting the AppServer host (Testcontainers Postgres + WireMock)
+- `test/Tests.Architecture` — Clean Architecture rule enforcement
 
 ## Frontend (Node.js)
 
@@ -69,7 +73,7 @@ npm run lint
 
 ## Notes
 
-- CI/CD: `.github/workflows/build.yml` (GitHub Actions, .NET only)
+- CI: GitHub Actions verifies PRs — `pr-develop.yml` (build + tests, no E2E) and `pr-main.yml` (build + tests incl. E2E). Building and deployment are done by Dokploy on a build server using each service's Dockerfile (`src/Web.Api/Dockerfile`, `src/AppServer/Dockerfile`), not GitHub Actions.
 - Frontend uses SQLite (dev) via Prisma; backend uses PostgreSQL via EF Core
 - NuGet versions are centrally managed in `dotnet/Directory.Packages.props`
 

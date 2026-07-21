@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/Solution Items/" />
+  <Project Path="src/AppServer/AppServer.csproj" />
   <Project Path="src/Application/Application.csproj" />
   <Project Path="src/Infrastructure/Infrastructure.csproj" />
   <Project Path="src/Integration/Integration.csproj" />

@@ -8,7 +8,7 @@ using Tests.E2E.Infrastructure;
 namespace Tests.E2E.Scenarios;
 
 [Collection(E2ETestCollection.Name)]
-public class DatabaseMigrationRunnerTests(E2EWebApplicationFactory factory)
+public class DatabaseMigrationRunnerTests(AppServerTestHost factory)
 {
     [Fact]
     public async Task Run_ShouldSerializeConcurrentMigrationAttempts()

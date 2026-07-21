@@ -1,8 +1,5 @@
-using Application;
 using Infrastructure;
 using Infrastructure.Database;
-using Integration;
-using Integration.Shopify.Products;
 using Serilog;
 using Web.Api;
 
@@ -15,14 +12,10 @@ builder.Services.AddOpenApi();
 // Add Serilog
 builder.Host.UseSerilog((context, loggerConfig) => loggerConfig.ReadFrom.Configuration(context.Configuration));
 
-// Add application parts
-builder.AddIntegration()
-    .AddSqsWebhookConsumer()
-    .AddInfrastructure()
-    .AddApplication()
-    .AddShopifyWebhookHandlers()
-    .AddInMemoryEventProcessing()
-    .AddScheduledJobs()
+// Web.Api serves HTTP only. All background processing — SQS webhook consumption, Shopify
+// webhook handlers, in-memory event consumers, and scheduled jobs — is owned by AppServer,
+// so this host registers none of it and requires no SQS/queue configuration to start.
+builder.AddInfrastructure()
     .AddPresentation();
 
 var app = builder.Build();

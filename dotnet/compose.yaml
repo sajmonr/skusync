@@ -1,21 +1,79 @@
 name: skusync
+
+# Full local stack:
+#   postgres   — database
+#   seq        — structured log aggregation (UI at http://localhost:8081)
+#   web.api    — HTTP API host (serves traffic + health only)
+#   app.server — Generic Host worker that owns all background processing
+#
+# Runs with `docker compose up --build`. Postgres credentials live once in .env (auto-loaded by
+# Compose) and are interpolated everywhere below, so changing one value keeps every service in
+# sync. Each app's Shopify / Skulabs / AWS configuration comes from its .NET user secrets,
+# bind-mounted into the container (see per-service `volumes`) — no secret env vars needed. User
+# secrets load only in the Development environment, which is the default here.
+
+# Defined once, aliased into both app services (see *skusync-connection-string). The
+# ${POSTGRES_*} placeholders are interpolated from .env at compose time.
+x-skusync-connection-string: &skusync-connection-string
+  Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
+
 services:
-  web.api:
-    build: .
+  postgres:
+    image: postgres:18.3
     environment:
-      - DOTNET_ENVIRONMENT
-      - Skulabs__Api__ApiKey
-      - Skulabs__Admin__Username
-      - Skulabs__Admin__Password
-      - Shopify__ApiKey
-      - ConnectionStrings__SkuSync
-      - Aws__Auth__SecretKey
-      - Aws__Auth__AccessKey
-      - FeatureManagement__SkulabsSyncEnabled
-      - FeatureManagement__SkulabsWriteBack
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      # Exposed on 5433 locally so it doesn't clash with a host Postgres on 5432.
+      - "5433:5432"
+    volumes:
+      # Postgres 18+ recommends mounting the parent dir; data lives in a version subdirectory.
+      - postgres-data:/var/lib/postgresql
+    # Both hosts wait for this to report healthy before starting. pg_isready exits 0 only when
+    # the server is accepting connections, so neither host tries to migrate against a
+    # half-booted Postgres.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  seq:
+    image: datalust/seq:latest
+    environment:
+      ACCEPT_EULA: "Y"
+      # Local dev only: skip Seq's first-run admin-password setup so the UI opens without login.
+      SEQ_FIRSTRUN_NOAUTHENTICATION: "true"
+    ports:
+      # Seq UI. Log ingestion happens in-network on seq:5341, which the Development Serilog
+      # configuration already targets.
+      - "8081:80"
+    volumes:
+      - seq-data:/data
+
+  web.api:
+    build:
+      context: .
+      dockerfile: src/Web.Api/Dockerfile
+    # Web.Api serves HTTP only; post-cutover it owns no background processing and needs only a
+    # database connection for migrations and its readiness probe.
+    environment:
+      DOTNET_ENVIRONMENT: ${DOTNET_ENVIRONMENT:-Development}
+      ConnectionStrings__SkuSync: *skusync-connection-string
+    ports:
+      - "8080:8080"
+    volumes:
+      # Bring the project's .NET user secrets into the container read-only. .NET resolves them
+      # at $HOME/.microsoft/usersecrets/<UserSecretsId>/secrets.json; the app user's home is
+      # /home/app. Matches Web.Api.csproj's <UserSecretsId>.
+      - ${HOME}/.microsoft/usersecrets/1d2e6729-fede-42f1-95e8-0e127120bec0:/home/app/.microsoft/usersecrets/1d2e6729-fede-42f1-95e8-0e127120bec0:ro
     depends_on:
       postgres:
         condition: service_healthy
+      seq:
+        condition: service_started
     # Probes the narrowest possible signal — /_health/live runs only the "self" check, so
     # external dependency outages can't trigger a container-restart loop. A Postgres outage
     # makes /_health/ready unhealthy (gating LB traffic) without killing the process.
@@ -26,17 +84,31 @@ services:
       retries: 3
       start_period: 30s
 
-  postgres:
-    image: postgres:18.3
+  app.server:
+    build:
+      context: .
+      dockerfile: src/AppServer/Dockerfile
+    # AppServer owns all background processing: SQS webhook consumption, Shopify webhook
+    # handlers, in-memory event consumers, and scheduled Quartz jobs. Its Shopify/Skulabs/AWS
+    # configuration comes from the user secrets bind-mounted below — no secret env vars needed.
     environment:
-      - POSTGRES_USER
-      - POSTGRES_PASSWORD
-    # web.api waits for this to report healthy before starting. pg_isready exits 0 only when
-    # the server is accepting connections, so the API never tries to migrate against a
-    # half-booted Postgres.
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postgres}"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-      start_period: 10s
+      DOTNET_ENVIRONMENT: ${DOTNET_ENVIRONMENT:-Development}
+      ConnectionStrings__SkuSync: *skusync-connection-string
+    volumes:
+      # Bring the project's .NET user secrets into the container read-only. .NET resolves them
+      # at $HOME/.microsoft/usersecrets/<UserSecretsId>/secrets.json; the app user's home is
+      # /home/app. Matches AppServer.csproj's <UserSecretsId>.
+      - ${HOME}/.microsoft/usersecrets/b937c043-246e-43de-a447-f5bbd6941c7c:/home/app/.microsoft/usersecrets/b937c043-246e-43de-a447-f5bbd6941c7c:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      seq:
+        condition: service_started
+    # Exactly one replica must run: the SQS poller and the Quartz scheduler are process-wide
+    # singletons, and running two would double-process webhooks and fire jobs twice.
+    deploy:
+      replicas: 1
+
+volumes:
+  postgres-data:
+  seq-data:

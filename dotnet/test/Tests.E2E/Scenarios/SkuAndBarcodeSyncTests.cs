@@ -13,7 +13,7 @@ using Tests.E2E.Infrastructure;
 namespace Tests.E2E.Scenarios;
 
 [Collection(E2ETestCollection.Name)]
-public class SkuAndBarcodeSyncTests(E2EWebApplicationFactory factory) : IAsyncLifetime
+public class SkuAndBarcodeSyncTests(AppServerTestHost factory) : IAsyncLifetime
 {
     public Task InitializeAsync() => factory.ResetAsync();
     public Task DisposeAsync() => Task.CompletedTask;
