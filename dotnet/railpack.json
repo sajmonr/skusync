@@ -1,4 +1,0 @@
-{
-  "$schema": "https://railpack.com",
-  "project": "${APP_PATH}"
-}
