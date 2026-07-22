@@ -1,0 +1,130 @@
+<section class="table-surface" aria-label="Product variants">
+  <div class="table-toolbar">
+    <div class="search-field">
+      <label for="variant-search">Search variants</label>
+      <span class="search-input">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="11" cy="11" r="6.5" />
+          <path d="m16 16 4 4" />
+        </svg>
+        <input
+          pInputText
+          id="variant-search"
+          type="search"
+          autocomplete="off"
+          placeholder="Name, SKU, or barcode"
+          [formField]="searchForm.search"
+        />
+      </span>
+      @if (searchModel().search) {
+        <button
+          pButton
+          type="button"
+          severity="secondary"
+          label="Clear"
+          (click)="clearSearch()"
+        ></button>
+      }
+    </div>
+  </div>
+
+  @if (error(); as errorMessage) {
+    <div class="error-banner" role="alert">
+      <div>
+        <strong>Unable to load variants</strong>
+        <span>{{ errorMessage }}</span>
+      </div>
+      <button
+        pButton
+        type="button"
+        severity="secondary"
+        label="Try again"
+        (click)="retry()"
+      ></button>
+    </div>
+  }
+
+  <p-table
+    [value]="tableItems()"
+    [lazy]="true"
+    [paginator]="true"
+    [rows]="pageSize()"
+    [first]="first()"
+    [totalRecords]="totalCount()"
+    [loading]="loading()"
+    [rowsPerPageOptions]="[10, 25, 50, 100]"
+    [showCurrentPageReport]="true"
+    currentPageReportTemplate="Showing {first} to {last} of {totalRecords} variants"
+    sortField="updatedOnUtc"
+    [sortOrder]="-1"
+    [scrollable]="true"
+    [tableStyle]="{ 'min-width': '76rem' }"
+    (onLazyLoad)="load($event)"
+  >
+    <ng-template #header>
+      <tr>
+        <th pSortableColumn="displayName">Variant <p-sort-icon field="displayName" /></th>
+        <th pSortableColumn="sku">SKU <p-sort-icon field="sku" /></th>
+        <th pSortableColumn="barcode">Barcode <p-sort-icon field="barcode" /></th>
+        <th pSortableColumn="productId">Product ID <p-sort-icon field="productId" /></th>
+        <th pSortableColumn="variantId">Variant ID <p-sort-icon field="variantId" /></th>
+        <th pSortableColumn="pendingSync">Sync <p-sort-icon field="pendingSync" /></th>
+        <th pSortableColumn="failedSyncAttempts">
+          Attempts <p-sort-icon field="failedSyncAttempts" />
+        </th>
+        <th pSortableColumn="active">Status <p-sort-icon field="active" /></th>
+        <th pSortableColumn="updatedOnUtc">Updated <p-sort-icon field="updatedOnUtc" /></th>
+      </tr>
+    </ng-template>
+
+    <ng-template #body let-variant>
+      <tr>
+        <td>
+          <div class="variant-name">
+            <strong>{{ variant.displayName || 'Untitled variant' }}</strong>
+            <span>{{ variant.id }}</span>
+          </div>
+        </td>
+        <td>
+          <span class="code-value">{{ variant.sku || '—' }}</span>
+        </td>
+        <td>
+          <span class="code-value">{{ variant.barcode || '—' }}</span>
+        </td>
+        <td>{{ variant.productId }}</td>
+        <td>{{ variant.variantId }}</td>
+        <td>
+          <span class="status-badge" [class.warning]="variant.pendingSync">
+            {{ variant.pendingSync ? 'Pending' : 'Synced' }}
+          </span>
+        </td>
+        <td>
+          <span [class.attempt-warning]="variant.failedSyncAttempts > 0">
+            {{ variant.failedSyncAttempts }}
+          </span>
+        </td>
+        <td>
+          <span class="status-badge" [class.inactive]="!variant.active">
+            {{ variant.active ? 'Active' : 'Inactive' }}
+          </span>
+        </td>
+        <td>
+          <time [attr.datetime]="variant.updatedOnUtc">
+            {{ variant.updatedOnUtc | date: 'MMM d, y, h:mm a' }}
+          </time>
+        </td>
+      </tr>
+    </ng-template>
+
+    <ng-template #emptymessage>
+      <tr>
+        <td colspan="9">
+          <div class="empty-message">
+            <strong>No product variants found</strong>
+            <span>Try adjusting the search or import products into the database.</span>
+          </div>
+        </td>
+      </tr>
+    </ng-template>
+  </p-table>
+</section>

@@ -1,0 +1,8 @@
+<app-product-variant-table
+  [items]="store.items()"
+  [totalCount]="store.totalCount()"
+  [loading]="store.loading()"
+  [error]="store.error()"
+  (queryChange)="load($event)"
+  (retryRequest)="retry()"
+/>

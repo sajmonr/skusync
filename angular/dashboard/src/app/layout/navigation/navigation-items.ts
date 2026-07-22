@@ -1,4 +1,4 @@
-export type NavigationIcon = 'dashboard' | 'variants' | 'activity';
+export type NavigationIcon = 'dashboard' | 'variants';
 
 export interface NavigationItem {
   readonly label: string;
@@ -9,6 +9,5 @@ export interface NavigationItem {
 
 export const NAVIGATION_ITEMS: readonly NavigationItem[] = [
   { label: 'Dashboard', route: '/', icon: 'dashboard', enabled: true },
-  { label: 'Product variants', route: '/variants', icon: 'variants', enabled: false },
-  { label: 'Sync activity', route: '/activity', icon: 'activity', enabled: false }
+  { label: 'Product variants', route: '/variants', icon: 'variants', enabled: true }
 ];

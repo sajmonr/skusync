@@ -7,11 +7,6 @@
   <aside class="sidebar" aria-label="Primary navigation">
     <div class="sidebar-header">
       <a class="brand" routerLink="/" aria-label="SkuSync dashboard home">
-        <span class="brand-mark" aria-hidden="true">
-          <svg viewBox="0 0 32 32">
-            <path d="M8 10.5h14.5M19 6.5l4 4-4 4M24 21.5H9.5M13 17.5l-4 4 4 4" />
-          </svg>
-        </span>
         <span class="brand-copy">
           <strong>SkuSync</strong>
           <span>Admin console</span>
@@ -43,7 +38,6 @@
     </div>
 
     <nav class="sidebar-nav">
-      <p class="nav-heading">Workspace</p>
       @for (item of navigationItems; track item.label) {
         @if (item.enabled) {
           <a
@@ -102,27 +96,7 @@
         >
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
         </button>
-        <div>
-          <span>Workspace</span>
-          <h1>Dashboard</h1>
-        </div>
-      </div>
-
-      <div class="topbar-actions">
-        <span
-          class="connection-state"
-          [class.connected]="apiConnectionState() === 'connected'"
-          [class.unavailable]="apiConnectionState() === 'unavailable'"
-        >
-          <span aria-hidden="true"></span>
-          {{ apiConnectionLabel() }}
-        </span>
-        <button pButton type="button" class="topbar-button" aria-label="Open settings">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M12 15.25A3.25 3.25 0 1 0 12 8.75a3.25 3.25 0 0 0 0 6.5Z" />
-            <path d="M19 13.5v-3l-2-.7a7 7 0 0 0-.7-1.7l.9-1.9-2.1-2.1-1.9.9a7 7 0 0 0-1.7-.7l-.7-2h-3l-.7 2a7 7 0 0 0-1.7.7l-1.9-.9-2.1 2.1.9 1.9a7 7 0 0 0-.7 1.7l-2 .7v3l2 .7a7 7 0 0 0 .7 1.7l-.9 1.9 2.1 2.1 1.9-.9a7 7 0 0 0 1.7.7l.7 2h3l.7-2a7 7 0 0 0 1.7-.7l1.9.9 2.1-2.1-.9-1.9a7 7 0 0 0 .7-1.7l2-.7Z" />
-          </svg>
-        </button>
+        <h1>{{ pageTitle() }}</h1>
       </div>
     </header>
 
@@ -140,9 +114,6 @@
       }
       @case ('variants') {
         <svg viewBox="0 0 24 24"><path d="m4 7 8-4 8 4-8 4-8-4Zm0 5 8 4 8-4M4 17l8 4 8-4" /></svg>
-      }
-      @case ('activity') {
-        <svg viewBox="0 0 24 24"><path d="M4 12h3l2.5-6 5 12 2.5-6h3" /></svg>
       }
     }
   </span>

@@ -67,6 +67,9 @@ features/product-variants/
   Ensure template updates are scheduled through signals, changed inputs, template listeners,
   `AsyncPipe`, or an explicit `markForCheck()` notification.
 - Prefer signal inputs, signal outputs, computed signals, and local signals for new code.
+- Use Signal Forms from `@angular/forms/signals` for new forms and filter controls. Prefer a
+  signal-backed form model, `[formField]`, and schema rules such as `debounce()` over Reactive
+  Forms unless integration constraints require the older API.
 - Keep a component's TypeScript, template, stylesheet, and tests together.
 - Use page components for orchestration and keep reusable UI components presentational.
 - Keep HTTP calls and feature state out of shared UI components.
@@ -80,10 +83,14 @@ features/product-variants/
 - Put application-wide infrastructure in `core`, including API configuration, interceptors,
   authentication, logging, notifications, and global error handling.
 - Put feature-specific services in `features/<feature>/data-access`.
-- Name services by responsibility. Examples: `ProductVariantsApiService`,
-  `ProductVariantsStore`, and `NotificationService`.
-- API services perform HTTP requests and transport mapping. Stores coordinate feature state,
-  loading status, query options, and actions.
+- Name services by responsibility. Examples: `ProductVariantsStore`,
+  `ProductVariantMutationsService`, and `NotificationService`.
+- Prefer `httpResource` for reactive GET requests. Drive its request from signals and consume its
+  value, loading, and error signals directly; it preserves configured `HttpClient` interceptors and
+  cancels obsolete requests when reactive dependencies change.
+- Use `HttpClient` directly for mutations and imperative request workflows. API services perform
+  those requests and transport mapping. Stores coordinate feature state, loading status, query
+  options, and actions.
 - Use root provision only for intentionally application-wide singleton services. Provide feature
   state at the route or page level when its lifetime should match that feature.
 - Do not introduce a generic HTTP wrapper over `HttpClient`; feature API services should use

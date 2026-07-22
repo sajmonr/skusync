@@ -12,8 +12,12 @@ export const appConfig: ApplicationConfig = {
     provideHttpClient(withInterceptors([apiErrorInterceptor])),
     provideRouter(routes),
     providePrimeNG({
+      license: 'eyJpZCI6IjAyYWU3MDE2LTBkOWMtNDUyNC1iNjE1LWE2ZmNiNTE0MThiMCIsInByb2R1Y3QiOiJwcmltZXVpIiwidGllciI6ImNvbW11bml0eSIsInR5cGUiOiJkZXYiLCJpYXQiOjE3ODQ3NDMwNzgsImV4cCI6MTgxNjI3OTA3OH0.tSZBCewJQAopBjzBSNBT-0WqCzKvMNR8sAUoH5YZlAsjwHktOaArlNX1fkJ7c2pFQyeL6FbORmAv2gbOcOJ5DA',
       theme: {
-        preset: Aura
+        preset: Aura,
+        options: {
+          darkModeSelector: 'system'
+        }
       }
     })
   ]
