@@ -34,9 +34,16 @@ cd dotnet
 dotnet restore SkuSync.slnx
 dotnet build SkuSync.slnx
 dotnet test SkuSync.slnx
+```
 
-# Run the full stack — postgres, seq, web.api, app.server (PostgreSQL on host port 5433)
-docker compose up --build
+Run the apps locally with [process-compose](https://github.com/F1bonacc1/process-compose)
+(from the repo root). Bring up your own PostgreSQL first — the app expects it on
+`localhost:5433` by default; adjust the connection string in `process-compose.yaml`.
+
+```bash
+# Launches web-api (http://localhost:5257) and the Angular dashboard (http://localhost:4200).
+# app.server (background processing) is not started here.
+process-compose up
 ```
 
 ### Frontend (Node.js)

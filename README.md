@@ -26,17 +26,20 @@ dotnet test    SkuSync.slnx
 
 ### Run locally
 
+Bring up your own PostgreSQL (the app expects it on `localhost:5433` by default — see
+[`process-compose.yaml`](process-compose.yaml)), then launch the apps with
+[process-compose](https://github.com/F1bonacc1/process-compose):
+
 ```bash
-cd dotnet
-docker compose up --build
+process-compose up
 ```
 
-This brings up the full stack: PostgreSQL (exposed on host port `5433`), Seq for
-structured logs (UI at <http://localhost:8081>), the `web.api` HTTP host
-(<http://localhost:8080>), and the `app.server` background worker. Postgres
-credentials live in [`dotnet/.env`](dotnet/.env); each host's Shopify / SkuLabs /
-AWS configuration is read from its .NET user secrets, bind-mounted into the
-container, so no secret environment variables need to be set.
+This starts the `web-api` HTTP host (<http://localhost:5257>) and the Angular
+dashboard (<http://localhost:4200>). The database connection string is set in
+[`process-compose.yaml`](process-compose.yaml); each host's Shopify / SkuLabs / AWS
+configuration is read from its .NET user secrets, which `dotnet run` loads
+automatically in Development, so no secret environment variables need to be set.
+Background processing (`app.server`) is not started here.
 
 ### Architecture
 
