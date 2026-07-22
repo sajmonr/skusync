@@ -42,6 +42,9 @@ configuration is read from its .NET user secrets, which `dotnet run` loads
 automatically in Development, so no secret environment variables need to be set.
 Background processing (`app.server`) is not started here.
 
+The dashboard proxies `/api` requests to the local Web.Api host. Use
+`GET http://localhost:5257/api/status` to verify the REST connection directly.
+
 ### Architecture
 
 Clean Architecture, with these projects under `dotnet/src`:

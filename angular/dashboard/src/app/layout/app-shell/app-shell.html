@@ -109,9 +109,13 @@
       </div>
 
       <div class="topbar-actions">
-        <span class="connection-state">
+        <span
+          class="connection-state"
+          [class.connected]="apiConnectionState() === 'connected'"
+          [class.unavailable]="apiConnectionState() === 'unavailable'"
+        >
           <span aria-hidden="true"></span>
-          API setup pending
+          {{ apiConnectionLabel() }}
         </span>
         <button pButton type="button" class="topbar-button" aria-label="Open settings">
           <svg viewBox="0 0 24 24" aria-hidden="true">

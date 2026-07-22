@@ -1,13 +1,23 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { of } from 'rxjs';
 import { App } from './app';
 import { routes } from './app.routes';
+import { ApiStatusService } from './core/api/api-status.service';
 
 describe('App', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [App],
-      providers: [provideRouter(routes)]
+      providers: [
+        provideRouter(routes),
+        {
+          provide: ApiStatusService,
+          useValue: {
+            getStatus: () => of({ status: 'ok', utcNow: '2026-07-22T16:00:00Z' })
+          }
+        }
+      ]
     }).compileComponents();
   });
 

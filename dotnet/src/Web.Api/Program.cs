@@ -1,7 +1,9 @@
+using FastEndpoints;
 using Infrastructure;
 using Infrastructure.Database;
 using Serilog;
 using Web.Api;
+using Web.Api.Common;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -32,6 +34,17 @@ await app.ApplyDatabaseMigrations();
 app.MapHealthCheckEndpoints();
 
 app.UseSerilogRequestLogging();
+app.UseExceptionHandler();
+app.UseStatusCodePages();
+
+app.UseFastEndpoints(configuration =>
+{
+    configuration.Endpoints.RoutePrefix = ApiDefaults.RoutePrefix;
+    configuration.Binding.UsePropertyNamingPolicy = true;
+    configuration.Errors.ContentType = ApiDefaults.ProblemDetailsContentType;
+    configuration.Errors.ProducesMetadataType = typeof(Microsoft.AspNetCore.Mvc.ValidationProblemDetails);
+    configuration.Errors.ResponseBuilder = ApiProblemDetails.CreateValidationResponse;
+});
 
 await app.RunAsync();
 

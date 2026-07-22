@@ -8,6 +8,7 @@
   <Project Path="src\SharedKernel\SharedKernel.csproj" />
   <Project Path="test/Tests.Application/Tests.Application.csproj" />
   <Project Path="test/Tests.Integration/Tests.Integration.csproj" />
+  <Project Path="test/Tests.Web.Api/Tests.Web.Api.csproj" />
   <Project Path="test/Tests.E2E/Tests.E2E.csproj" />
   <Project Path="test\Tests.Architecture\Tests.Architecture.csproj" />
 </Solution>
