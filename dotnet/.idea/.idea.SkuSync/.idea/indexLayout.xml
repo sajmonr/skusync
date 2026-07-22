@@ -3,6 +3,7 @@
   <component name="UserContentModel">
     <attachedFolders>
       <Path>../../add-appserver</Path>
+      <Path>../../add-initial-dashboard</Path>
       <Path>../.github</Path>
     </attachedFolders>
     <explicitIncludes />

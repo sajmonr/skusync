@@ -23,7 +23,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Integration\Integration.csproj" />
+    <ProjectReference Include="..\..\src\shared\Integration\Integration.csproj" />
   </ItemGroup>
 
   <ItemGroup>
