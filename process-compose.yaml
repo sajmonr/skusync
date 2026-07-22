@@ -1,0 +1,62 @@
+# process-compose.yaml — local dev launcher for the Web.Api HTTP host and the Angular dashboard.
+#
+#   process-compose up      # start both processes (run from the repo root)
+#   process-compose down    # stop them
+#
+# PostgreSQL is NOT started here — run your own database and point web-api at it via the
+# ConnectionStrings__SkuSync entry below. Each host's Shopify / SkuLabs / AWS configuration still
+# comes from its .NET user secrets, which `dotnet run` loads automatically in the Development
+# environment. Background processing (SQS, Shopify webhooks, Quartz jobs) lives in AppServer and is
+# intentionally not launched here.
+version: "0.5"
+
+processes:
+  web-api:
+    description: "ASP.NET Core HTTP host (OpenAPI + health) on http://localhost:5257"
+    working_dir: dotnet
+    # No port/env overrides: the `http` launch profile in src/Web.Api/Properties/launchSettings.json
+    # sets the URL (http://localhost:5257) and ASPNETCORE_ENVIRONMENT=Development, so this runs on
+    # the same port as a plain `dotnet run`. The DB connection string lives in
+    # src/Web.Api/appsettings.Development.json (ConnectionStrings:SkuSync).
+    command: dotnet run --project src/Web.Api
+    readiness_probe:
+      # /_health/ready runs the Postgres check, so "ready" means the API can actually serve.
+      http_get:
+        host: 127.0.0.1
+        port: 5257
+        path: /_health/ready
+      initial_delay_seconds: 10
+      period_seconds: 5
+      timeout_seconds: 3
+      failure_threshold: 30
+    availability:
+      restart: on_failure
+      max_restarts: 5
+
+  dashboard-install:
+    description: "Install the dashboard's npm dependencies (one-shot)"
+    working_dir: angular/dashboard
+    command: npm install
+    availability:
+      # One-shot: run to completion, don't restart. `dashboard` waits for a clean exit.
+      restart: no
+
+  dashboard:
+    description: "Angular dashboard (ng serve) on http://localhost:4200"
+    working_dir: angular/dashboard
+    command: npm start
+    depends_on:
+      dashboard-install:
+        condition: process_completed_successfully
+    readiness_probe:
+      http_get:
+        host: 127.0.0.1
+        port: 4200
+        path: /
+      initial_delay_seconds: 10
+      period_seconds: 5
+      timeout_seconds: 3
+      failure_threshold: 30
+    availability:
+      restart: on_failure
+      max_restarts: 5
