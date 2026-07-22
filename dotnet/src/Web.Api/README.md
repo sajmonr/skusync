@@ -19,7 +19,7 @@ belong under `Common/`; business logic does not.
 
 ## Routes and responses
 
-- FastEndpoints applies the `/api` prefix globally. Endpoint routes omit that prefix.
+- Endpoint routes are served directly by this HTTP API; no additional `/api` prefix is applied.
 - Until authentication is implemented, endpoints explicitly call `AllowAnonymous()`.
 - Return the documented response DTO directly. Do not wrap successful responses in a universal
   envelope.

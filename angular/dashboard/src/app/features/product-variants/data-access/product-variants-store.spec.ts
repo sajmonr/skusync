@@ -22,7 +22,7 @@ describe('ProductVariantsStore', () => {
     TestBed.tick();
 
     const initialRequest = httpTestingController.expectOne(
-      (request) => request.url === '/api/product-variants'
+      (request) => request.url === 'http://localhost:5257/product-variants'
     );
     expect(initialRequest.request.params.get('page')).toBe('1');
     expect(initialRequest.request.params.get('pageSize')).toBe('25');
@@ -62,7 +62,7 @@ describe('ProductVariantsStore', () => {
     TestBed.tick();
 
     const filteredRequest = httpTestingController.expectOne(
-      (request) => request.url === '/api/product-variants' && request.params.get('page') === '2'
+      (request) => request.url === 'http://localhost:5257/product-variants' && request.params.get('page') === '2'
     );
     expect(filteredRequest.request.params.get('filter')).toBe('sku=*shirt/i');
     expect(filteredRequest.request.params.get('orderBy')).toBe('sku, id');
@@ -79,7 +79,7 @@ describe('ProductVariantsStore', () => {
     const httpTestingController = TestBed.inject(HttpTestingController);
     TestBed.tick();
 
-    httpTestingController.expectOne('/api/product-variants?page=1&pageSize=25&orderBy=updatedOnUtc%20desc,%20id').flush(
+    httpTestingController.expectOne('http://localhost:5257/product-variants?page=1&pageSize=25&orderBy=updatedOnUtc%20desc,%20id').flush(
       {
         title: 'Unable to load variants.',
         status: 503,
@@ -94,7 +94,7 @@ describe('ProductVariantsStore', () => {
     store.retry();
     TestBed.tick();
     httpTestingController
-      .expectOne('/api/product-variants?page=1&pageSize=25&orderBy=updatedOnUtc%20desc,%20id')
+      .expectOne('http://localhost:5257/product-variants?page=1&pageSize=25&orderBy=updatedOnUtc%20desc,%20id')
       .flush({ items: [], totalCount: 0, page: 1, pageSize: 25 });
     await TestBed.inject(ApplicationRef).whenStable();
 

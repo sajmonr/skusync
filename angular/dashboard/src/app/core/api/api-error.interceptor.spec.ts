@@ -24,9 +24,9 @@ describe('apiErrorInterceptor', () => {
 
   it('should normalize Problem Details responses', () => {
     let receivedError: unknown;
-    httpClient.get('/api/test').subscribe({ error: (error: unknown) => (receivedError = error) });
+    httpClient.get('http://localhost:5257/test').subscribe({ error: (error: unknown) => (receivedError = error) });
 
-    httpTestingController.expectOne('/api/test').flush(
+    httpTestingController.expectOne('http://localhost:5257/test').flush(
       {
         type: 'https://example.test/validation',
         title: 'One or more validation errors occurred.',

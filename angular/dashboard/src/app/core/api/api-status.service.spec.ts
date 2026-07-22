@@ -14,7 +14,7 @@ describe('ApiStatusService', () => {
 
     service.getStatus().subscribe((response) => (status = response.status));
 
-    httpTestingController.expectOne('/api/status').flush({
+    httpTestingController.expectOne('http://localhost:5257/status').flush({
       status: 'ok',
       utcNow: '2026-07-22T16:00:00Z'
     });

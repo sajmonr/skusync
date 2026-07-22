@@ -10,6 +10,10 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
+builder.Services.AddCors(options => options.AddPolicy("dashboard", policy => policy
+    .WithOrigins("http://localhost:4200", "http://127.0.0.1:4200")
+    .AllowAnyHeader()
+    .AllowAnyMethod()));
 
 // Add Serilog
 builder.Host.UseSerilog((context, loggerConfig) => loggerConfig.ReadFrom.Configuration(context.Configuration));
@@ -36,10 +40,13 @@ app.MapHealthCheckEndpoints();
 app.UseSerilogRequestLogging();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
+if (app.Environment.IsDevelopment())
+{
+    app.UseCors("dashboard");
+}
 
 app.UseFastEndpoints(configuration =>
 {
-    configuration.Endpoints.RoutePrefix = ApiDefaults.RoutePrefix;
     configuration.Binding.UsePropertyNamingPolicy = true;
     configuration.Errors.ContentType = ApiDefaults.ProblemDetailsContentType;
     configuration.Errors.ProducesMetadataType = typeof(Microsoft.AspNetCore.Mvc.ValidationProblemDetails);

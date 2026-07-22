@@ -11,7 +11,7 @@ public class ApiProblemDetailsTests
     public void CreateValidationResponse_ShouldGroupErrorsAndUseJsonPropertyNames()
     {
         var context = new DefaultHttpContext();
-        context.Request.Path = "/api/product-variants";
+        context.Request.Path = "/product-variants";
         context.TraceIdentifier = "trace-id";
         var failures = new List<ValidationFailure>
         {
@@ -23,7 +23,7 @@ public class ApiProblemDetailsTests
         var result = ApiProblemDetails.CreateValidationResponse(failures, context, 400);
 
         result.Status.ShouldBe(400);
-        result.Instance.ShouldBe("/api/product-variants");
+        result.Instance.ShouldBe("/product-variants");
         result.Errors["pageSize"].ShouldBe(["Page size is too large."]);
         result.Errors["filters[0].fieldName"].ShouldBe(["Field name is invalid."]);
         result.Extensions["traceId"].ShouldBe("trace-id");

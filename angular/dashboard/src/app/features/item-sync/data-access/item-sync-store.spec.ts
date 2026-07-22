@@ -22,7 +22,7 @@ describe('ItemSyncStore', () => {
     TestBed.tick();
 
     const initialRequest = httpTestingController.expectOne(
-      (request) => request.url === '/api/item-sync',
+      (request) => request.url === 'http://localhost:5257/item-sync',
     );
     expect(initialRequest.request.params.get('page')).toBe('1');
     expect(initialRequest.request.params.get('pageSize')).toBe('25');
@@ -34,7 +34,7 @@ describe('ItemSyncStore', () => {
     TestBed.tick();
 
     const filteredRequest = httpTestingController.expectOne(
-      (request) => request.url === '/api/item-sync' && request.params.get('search') === 'alpine',
+      (request) => request.url === 'http://localhost:5257/item-sync' && request.params.get('search') === 'alpine',
     );
     expect(filteredRequest.request.params.get('status')).toBe('out-of-sync');
     filteredRequest.flush({ items: [], totalCount: 0, page: 1, pageSize: 25 });
