@@ -1,12 +1,9 @@
-import { Component, signal } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
+import { Component } from '@angular/core';
+import { AppShell } from './layout/app-shell/app-shell';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet],
-  templateUrl: './app.html',
-  styleUrl: './app.scss'
+  imports: [AppShell],
+  template: '<app-shell />'
 })
-export class App {
-  protected readonly title = signal('dashboard');
-}
+export class App {}
