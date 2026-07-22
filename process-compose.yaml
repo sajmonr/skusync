@@ -50,7 +50,7 @@ processes:
         condition: process_completed_successfully
     readiness_probe:
       http_get:
-        host: 127.0.0.1
+        host: localhost
         port: 4200
         path: /
       initial_delay_seconds: 10

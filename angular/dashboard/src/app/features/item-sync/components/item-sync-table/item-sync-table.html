@@ -1,0 +1,143 @@
+<section class="table-surface" aria-label="Item sync comparison">
+  <div class="table-toolbar">
+    <div class="search-field">
+      <label for="item-sync-search">Search items</label>
+      <span class="search-input">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="11" cy="11" r="6.5" />
+          <path d="m16 16 4 4" />
+        </svg>
+        <input
+          pInputText
+          id="item-sync-search"
+          type="search"
+          autocomplete="off"
+          placeholder="Name, ID, SKU, or barcode"
+          [formField]="filterForm.search"
+        />
+      </span>
+    </div>
+
+    <div class="filter-actions">
+      <select
+        class="status-select"
+        aria-label="Filter by sync status"
+        [formField]="filterForm.status"
+      >
+        @for (option of statusOptions; track option.value) {
+          <option [value]="option.value">{{ option.label }}</option>
+        }
+      </select>
+      @if (filterModel().search || filterModel().status !== 'all') {
+        <button
+          pButton
+          type="button"
+          severity="secondary"
+          label="Clear"
+          (click)="clearFilters()"
+        ></button>
+      }
+    </div>
+  </div>
+
+  @if (error(); as errorMessage) {
+    <div class="empty-message" role="alert">
+      <strong>Could not load item sync data</strong>
+      <span>{{ errorMessage }}</span>
+      <button pButton type="button" severity="secondary" label="Retry" (click)="retryRequest.emit()"></button>
+    </div>
+  } @else {
+  <p-table
+    [value]="tableItems()"
+    [lazy]="true"
+    [paginator]="true"
+    [rows]="pageSize()"
+    [first]="first()"
+    [totalRecords]="totalCount()"
+    [loading]="loading()"
+    [rowsPerPageOptions]="[10, 25, 50, 100]"
+    [showCurrentPageReport]="true"
+    currentPageReportTemplate="Showing {first} to {last} of {totalRecords} items"
+    [tableStyle]="{ 'min-width': '52rem' }"
+    (onLazyLoad)="load($event)"
+  >
+    <ng-template #header>
+      <tr>
+        <th class="expander-column"><span class="sr-only">Details</span></th>
+        <th>Item</th>
+        <th>Shopify ID</th>
+        <th>Skulabs ID</th>
+        <th>Status</th>
+      </tr>
+    </ng-template>
+
+    <ng-template #body let-item>
+      <tr
+        class="summary-row"
+        [class.expanded]="isExpanded(item.id)"
+        [attr.aria-expanded]="isExpanded(item.id)"
+        (click)="toggleItem(item.id)"
+      >
+        <td class="expander-column">
+          <button
+            type="button"
+            class="row-toggle"
+            [attr.aria-label]="
+              isExpanded(item.id) ? 'Collapse item comparison' : 'Expand item comparison'
+            "
+            (click)="$event.stopPropagation(); toggleItem(item.id)"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" [class.expanded]="isExpanded(item.id)">
+              <path d="m9 18 6-6-6-6" />
+            </svg>
+          </button>
+        </td>
+        <td>
+          <strong class="item-name">{{ item.displayName }}</strong>
+        </td>
+        <td>
+          <span class="code-value">{{ item.shopifyProductId }}</span>
+        </td>
+        <td>
+          <span class="code-value">{{ item.skulabs?.id ?? '—' }}</span>
+        </td>
+        <td>
+          <span class="status-badge" [class]="item.status">{{ statusLabel(item.status) }}</span>
+        </td>
+      </tr>
+
+      @if (isExpanded(item.id)) {
+        <tr class="detail-row">
+          <td colspan="5">
+            <section class="comparison" [attr.aria-label]="item.displayName + ' comparison'">
+              <div class="comparison-heading">
+                <div>Property</div>
+                <div>Shopify</div>
+                <div>Skulabs</div>
+              </div>
+              @for (comparison of item.comparisons; track comparison.property) {
+                <div class="comparison-line" [class]="comparison.state">
+                  <strong>{{ comparison.property }}</strong>
+                  <span>{{ comparison.shopifyValue ?? '—' }}</span>
+                  <span>{{ comparison.skulabsValue ?? '—' }}</span>
+                </div>
+              }
+            </section>
+          </td>
+        </tr>
+      }
+    </ng-template>
+
+    <ng-template #emptymessage>
+      <tr>
+        <td colspan="5">
+          <div class="empty-message">
+            <strong>No matching items</strong>
+            <span>Try adjusting the search or status filter.</span>
+          </div>
+        </td>
+      </tr>
+    </ng-template>
+  </p-table>
+  }
+</section>

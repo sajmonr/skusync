@@ -110,10 +110,17 @@
   <span class="nav-icon" aria-hidden="true">
     @switch (icon) {
       @case ('dashboard') {
-        <svg viewBox="0 0 24 24"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z" /></svg>
+        <svg viewBox="0 0 24 24">
+          <path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z" />
+        </svg>
       }
       @case ('variants') {
         <svg viewBox="0 0 24 24"><path d="m4 7 8-4 8 4-8 4-8-4Zm0 5 8 4 8-4M4 17l8 4 8-4" /></svg>
+      }
+      @case ('sync') {
+        <svg viewBox="0 0 24 24">
+          <path d="M20 7h-9a4 4 0 0 0-4 4v1M4 17h9a4 4 0 0 0 4-4v-1M17 4l3 3-3 3M7 20l-3-3 3-3" />
+        </svg>
       }
     }
   </span>
