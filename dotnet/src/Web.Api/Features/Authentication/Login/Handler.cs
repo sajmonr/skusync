@@ -1,13 +1,11 @@
 using System.Security.Claims;
-using System.Security.Cryptography;
-using System.Text;
 using FastEndpoints;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 
 namespace Web.Api.Features.Authentication.Login;
 
-public class LoginHandler(DashboardAuthenticationOptions options) : Endpoint<LoginRequest>
+public class LoginHandler(DashboardPasswordValidator passwordValidator) : Endpoint<LoginRequest>
 {
     public override void Configure()
     {
@@ -18,7 +16,7 @@ public class LoginHandler(DashboardAuthenticationOptions options) : Endpoint<Log
 
     public override async Task HandleAsync(LoginRequest request, CancellationToken cancellationToken)
     {
-        if (!IsPasswordValid(request.Password))
+        if (!passwordValidator.IsValid(request.Password))
         {
             await Send.UnauthorizedAsync(cancellationToken);
             return;
@@ -27,10 +25,6 @@ public class LoginHandler(DashboardAuthenticationOptions options) : Endpoint<Log
         await SignInAsync();
         await Send.NoContentAsync(cancellationToken);
     }
-
-    private bool IsPasswordValid(string password) =>
-        options.IsBypassed(HttpContext.RequestServices.GetRequiredService<IHostEnvironment>()) ||
-        PasswordsMatch(password, options.Password);
 
     private Task SignInAsync() => HttpContext.SignInAsync(
         CookieAuthenticationDefaults.AuthenticationScheme,
@@ -41,12 +35,4 @@ public class LoginHandler(DashboardAuthenticationOptions options) : Endpoint<Log
         [new Claim(ClaimTypes.NameIdentifier, "dashboard")],
         CookieAuthenticationDefaults.AuthenticationScheme));
 
-    private static bool PasswordsMatch(string supplied, string expected)
-    {
-        var suppliedBytes = Encoding.UTF8.GetBytes(supplied);
-        var expectedBytes = Encoding.UTF8.GetBytes(expected);
-
-        return suppliedBytes.Length == expectedBytes.Length &&
-               CryptographicOperations.FixedTimeEquals(suppliedBytes, expectedBytes);
-    }
 }

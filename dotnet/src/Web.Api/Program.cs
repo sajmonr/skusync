@@ -35,6 +35,7 @@ var dashboardAuthenticationOptions = builder.GetRequiredConfigValue<DashboardAut
 dashboardAuthenticationOptions.Validate(builder.Environment);
 
 builder.Services.AddSingleton(dashboardAuthenticationOptions);
+builder.Services.AddSingleton<DashboardPasswordValidator>();
 builder.Services
     .AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
