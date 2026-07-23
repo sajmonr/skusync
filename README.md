@@ -31,15 +31,19 @@ Bring up your own PostgreSQL (the app expects it on `localhost:5433` by default 
 [process-compose](https://github.com/F1bonacc1/process-compose):
 
 ```bash
-process-compose up
+process-compose --no-server up
 ```
 
 This starts the `web-api` HTTP host (<http://localhost:5257>) and the Angular
-dashboard (<http://localhost:4200>). The database connection string is set in
-[`process-compose.yaml`](process-compose.yaml); each host's Shopify / SkuLabs / AWS
+dashboard (<http://localhost:4200>). The `--no-server` flag prevents Process Compose
+from binding its HTTP server to port `8080`. The database connection string is set
+in [`process-compose.yaml`](process-compose.yaml); each host's Shopify / SkuLabs / AWS
 configuration is read from its .NET user secrets, which `dotnet run` loads
 automatically in Development, so no secret environment variables need to be set.
 Background processing (`app.server`) is not started here.
+
+The dashboard proxies `/api` requests to the local Web.Api host. Use
+`GET http://localhost:5257/api/status` to verify the REST connection directly.
 
 ### Architecture
 

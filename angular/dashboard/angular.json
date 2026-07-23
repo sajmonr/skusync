@@ -30,13 +30,17 @@
               }
             ],
             "styles": [
-              "src/styles.scss",
-	      "node_modules/primeng/resources/themes/lara-light-blue/theme.css",
-	      "node_modules/primeng/resources/primeng.min.css"
+              "src/styles.scss"
             ]
           },
           "configurations": {
             "production": {
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.production.ts"
+                }
+              ],
               "budgets": [
                 {
                   "type": "initial",

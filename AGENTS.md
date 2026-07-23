@@ -43,7 +43,7 @@ Run the apps locally with [process-compose](https://github.com/F1bonacc1/process
 ```bash
 # Launches web-api (http://localhost:5257) and the Angular dashboard (http://localhost:4200).
 # app.server (background processing) is not started here.
-process-compose up
+process-compose --no-server up
 ```
 
 ### Frontend (Node.js)

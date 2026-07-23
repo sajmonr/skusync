@@ -1,7 +1,7 @@
 # process-compose.yaml — local dev launcher for the Web.Api HTTP host and the Angular dashboard.
 #
-#   process-compose up      # start both processes (run from the repo root)
-#   process-compose down    # stop them
+#   process-compose --no-server up   # start both processes without the Process Compose HTTP server
+#   Ctrl+C                           # stop them
 #
 # PostgreSQL is NOT started here — run your own database and point web-api at it via the
 # ConnectionStrings__SkuSync entry below. Each host's Shopify / SkuLabs / AWS configuration still
@@ -50,7 +50,7 @@ processes:
         condition: process_completed_successfully
     readiness_probe:
       http_get:
-        host: 127.0.0.1
+        host: localhost
         port: 4200
         path: /
       initial_delay_seconds: 10
