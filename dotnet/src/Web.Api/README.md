@@ -7,15 +7,17 @@ case:
 Features/
 └── ProductVariants/
     └── GetProductVariants/
-        ├── Endpoint.cs
+        ├── Handler.cs
         ├── Request.cs
         ├── RequestValidator.cs
         ├── Response.cs
         └── ProductVariantGridMapper.cs
 ```
 
-Keep endpoint request, validation, response, and mapping code together. Shared transport concerns
-belong under `Common/`; business logic does not.
+Keep endpoint request, validation, response, handler, and mapping code together. Omit files that
+do not apply to an endpoint. Keep handler methods short by extracting focused private helpers when
+that makes the request flow clearer. Shared transport concerns belong under `Common/`; business
+logic does not.
 
 ## Routes and responses
 
