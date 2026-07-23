@@ -60,6 +60,12 @@ features/product-variants/
 
 ## Components
 
+- Do not introduce component-level explicit foreground, background, border, shadow, or status
+  colors unless the user specifically asks for a color treatment. Rely on the established global
+  theme and component library so light and dark modes remain consistent.
+- Use PrimeNG components and directives for dashboard UI controls by default. Use native controls
+  only when PrimeNG has no suitable component or the native element is materially simpler and does
+  not need visual styling.
 - Use standalone components. Angular v22 uses `OnPush` by default, so do not add an explicit
   `changeDetection` setting unless intentionally opting into `ChangeDetectionStrategy.Eager` or
   `ChangeDetectionStrategy.Default` for an exceptional case.

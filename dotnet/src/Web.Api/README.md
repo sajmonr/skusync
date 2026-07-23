@@ -7,20 +7,23 @@ case:
 Features/
 └── ProductVariants/
     └── GetProductVariants/
-        ├── Endpoint.cs
+        ├── Handler.cs
         ├── Request.cs
         ├── RequestValidator.cs
         ├── Response.cs
         └── ProductVariantGridMapper.cs
 ```
 
-Keep endpoint request, validation, response, and mapping code together. Shared transport concerns
-belong under `Common/`; business logic does not.
+Keep endpoint request, validation, response, handler, and mapping code together. Omit files that
+do not apply to an endpoint. Keep handler methods short by extracting focused private helpers when
+that makes the request flow clearer. Shared transport concerns belong under `Common/`; business
+logic does not.
 
 ## Routes and responses
 
 - Endpoint routes are served directly by this HTTP API; no additional `/api` prefix is applied.
-- Until authentication is implemented, endpoints explicitly call `AllowAnonymous()`.
+- Endpoints require the dashboard cookie by default. Only the authentication endpoints use
+  `AllowAnonymous()`; health probes remain anonymous for container monitoring.
 - Return the documented response DTO directly. Do not wrap successful responses in a universal
   envelope.
 - Paged endpoints return `PagedResponse<T>` with `items`, `totalCount`, `page`, and `pageSize`.

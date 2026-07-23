@@ -23,6 +23,14 @@ dotnet/           # .NET 10 backend (Clean Architecture, EF Core, PostgreSQL)
     Tests.Architecture/   — Clean Architecture rule enforcement
 ```
 
+### Web API endpoint layout
+
+Organize every FastEndpoints endpoint in its own use-case directory under
+`dotnet/src/Web.Api/Features/<Feature>/<EndpointName>/`. Keep its `Handler.cs`, `Request.cs`,
+`Response.cs`, `RequestValidator.cs`, and any endpoint-specific mapping files together; omit only
+files that do not apply to that endpoint. Decompose handler workflows into focused private methods
+when doing so makes the request flow easier to read.
+
 ---
 
 ## Build & Run

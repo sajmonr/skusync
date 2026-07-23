@@ -7,7 +7,6 @@ public class GetApiStatusEndpoint : EndpointWithoutRequest<ApiStatusResponse>
     public override void Configure()
     {
         Get("status");
-        AllowAnonymous();
         Summary(summary =>
         {
             summary.Summary = "Get API status";

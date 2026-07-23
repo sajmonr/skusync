@@ -42,6 +42,23 @@ configuration is read from its .NET user secrets, which `dotnet run` loads
 automatically in Development, so no secret environment variables need to be set.
 Background processing (`app.server`) is not started here.
 
+### Dashboard authentication
+
+The dashboard uses a secure, HTTP-only cookie issued by `Web.Api`. In production set this
+secret on the API service:
+
+```text
+DashboardAuthentication__Password=<a long unique password>
+```
+
+The deployed dashboard origin must be `https://skulabs.darkflux.app` and the API origin must be
+`https://api.skulabs.darkflux.app`; credentialed CORS is restricted to that dashboard origin.
+`DashboardAuthentication:BypassOnDevelopment` is enabled only in Development, allowing local
+dashboard work without a password. It has no effect outside Development.
+
+When operating more than one API replica, configure ASP.NET Core Data Protection keys on shared
+persistent storage so cookie sessions remain valid across replicas and deployments.
+
 The dashboard proxies `/api` requests to the local Web.Api host. Use
 `GET http://localhost:5257/api/status` to verify the REST connection directly.
 
