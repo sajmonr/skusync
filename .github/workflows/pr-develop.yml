@@ -7,6 +7,7 @@ on:
     types: [opened, synchronize, reopened]
     paths:
       - 'dotnet/**'
+      - 'angular/dashboard/**'
       - '.github/workflows/pr-develop.yml'
 
 defaults:
@@ -25,10 +26,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
 
       - name: Setup .NET 10 SDK
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6.0.0
         with:
           dotnet-version: ${{ vars.DOTNET_VERSION }}
 
@@ -51,9 +52,42 @@ jobs:
           --results-directory ${{ github.workspace }}/TestResults
 
       - name: Publish test results to PR
-        uses: EnricoMi/publish-unit-test-result-action@v2
+        uses: EnricoMi/publish-unit-test-result-action@v2.24.0
         if: always()
         with:
           files: ${{ github.workspace }}/TestResults/**/*.trx
           comment_mode: always
           check_name: Test results (develop PR)
+
+  test-dashboard:
+    name: Test Angular dashboard
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: angular/dashboard/package-lock.json
+
+      - name: Install dashboard dependencies
+        working-directory: angular/dashboard
+        run: npm ci
+
+      - name: Run dashboard tests
+        working-directory: angular/dashboard
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/TestResults"
+          npm test -- --watch=false --reporters=junit --output-file="$GITHUB_WORKSPACE/TestResults/dashboard.junit.xml"
+
+      - name: Publish dashboard test results to PR
+        uses: EnricoMi/publish-unit-test-result-action@v2.24.0
+        if: always()
+        with:
+          files: ${{ github.workspace }}/TestResults/dashboard.junit.xml
+          comment_mode: always
+          check_name: Dashboard test results (develop PR)
