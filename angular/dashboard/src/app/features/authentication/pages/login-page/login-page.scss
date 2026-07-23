@@ -1,0 +1,21 @@
+.login-page {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 1.5rem;
+}
+
+.login-card {
+  border-radius: 0.75rem;
+  display: grid;
+  gap: 0.75rem;
+  max-width: 24rem;
+  padding: 2rem;
+  width: 100%;
+}
+
+label { font-weight: 600; }
+input, button { border-radius: 0.375rem; font: inherit; padding: 0.75rem; }
+button { cursor: pointer; font-weight: 600; }
+button:disabled { cursor: wait; opacity: 0.7; }

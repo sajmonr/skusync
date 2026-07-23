@@ -11,7 +11,6 @@ public class GetItemSyncItemsEndpoint(ApplicationDbContext dbContext)
     public override void Configure()
     {
         Get("item-sync");
-        AllowAnonymous();
         Summary(summary =>
         {
             summary.Summary = "List item synchronization records";

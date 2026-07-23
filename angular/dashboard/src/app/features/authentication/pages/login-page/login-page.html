@@ -1,0 +1,23 @@
+<main class="login-page">
+  <form class="login-card" (submit)="submit(); $event.preventDefault()">
+    <label for="password">Password</label>
+    <input
+      pInputText
+      id="password"
+      type="password"
+      autocomplete="current-password"
+      [value]="password()"
+      (input)="password.set($any($event.target).value)"
+      [disabled]="submitting()"
+      autofocus
+      required
+    />
+    <button
+      pButton
+      type="submit"
+      [disabled]="submitting()"
+    >
+      Sign in
+    </button>
+  </form>
+</main>

@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { App } from './app';
 import { routes } from './app.routes';
+import { AppShell } from './layout/app-shell/app-shell';
 
 describe('App', () => {
   beforeEach(async () => {
@@ -17,8 +18,18 @@ describe('App', () => {
     expect(app).toBeTruthy();
   });
 
+});
+
+describe('AppShell', () => {
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [AppShell],
+      providers: [provideRouter(routes)]
+    }).compileComponents();
+  });
+
   it('should render the application shell', async () => {
-    const fixture = TestBed.createComponent(App);
+    const fixture = TestBed.createComponent(AppShell);
     await fixture.whenStable();
     const compiled = fixture.nativeElement as HTMLElement;
 
@@ -29,7 +40,7 @@ describe('App', () => {
   });
 
   it('should collapse the desktop sidebar', () => {
-    const fixture = TestBed.createComponent(App);
+    const fixture = TestBed.createComponent(AppShell);
     fixture.detectChanges();
 
     const toggle = fixture.nativeElement.querySelector(

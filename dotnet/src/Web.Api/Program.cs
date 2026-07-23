@@ -1,7 +1,9 @@
 using FastEndpoints;
 using Infrastructure;
 using Infrastructure.Database;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Serilog;
+using SharedKernel.Options;
 using Web.Api;
 using Web.Api.Common;
 
@@ -11,9 +13,13 @@ var builder = WebApplication.CreateBuilder(args);
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 builder.Services.AddCors(options => options.AddPolicy("dashboard", policy => policy
-    .WithOrigins("http://localhost:4200", "http://127.0.0.1:4200")
+    .WithOrigins(
+        "https://skulabs.darkflux.app",
+        "http://localhost:4200",
+        "http://127.0.0.1:4200")
     .AllowAnyHeader()
-    .AllowAnyMethod()));
+    .AllowAnyMethod()
+    .AllowCredentials()));
 
 // Add Serilog
 builder.Host.UseSerilog((context, loggerConfig) => loggerConfig.ReadFrom.Configuration(context.Configuration));
@@ -23,6 +29,43 @@ builder.Host.UseSerilog((context, loggerConfig) => loggerConfig.ReadFrom.Configu
 // so this host registers none of it and requires no SQS/queue configuration to start.
 builder.AddInfrastructure()
     .AddPresentation();
+
+var dashboardAuthenticationOptions = builder.GetRequiredConfigValue<DashboardAuthenticationOptions>(
+    DashboardAuthenticationOptions.SectionName);
+dashboardAuthenticationOptions.Validate(builder.Environment);
+
+builder.Services.AddSingleton(dashboardAuthenticationOptions);
+builder.Services
+    .AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(options =>
+    {
+        options.Cookie.Name = "__Host-skusync-dashboard";
+        options.Cookie.HttpOnly = true;
+        options.Cookie.SameSite = SameSiteMode.Strict;
+        options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+        options.ExpireTimeSpan = TimeSpan.FromHours(dashboardAuthenticationOptions.SessionDurationHours);
+        options.SlidingExpiration = true;
+        options.Events.OnRedirectToLogin = context =>
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return Task.CompletedTask;
+        };
+        options.Events.OnRedirectToAccessDenied = context =>
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return Task.CompletedTask;
+        };
+    });
+builder.Services.AddAuthorization(options =>
+{
+    options.DefaultPolicy = new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder()
+        .AddAuthenticationSchemes(CookieAuthenticationDefaults.AuthenticationScheme)
+        .RequireAssertion((Microsoft.AspNetCore.Authorization.AuthorizationHandlerContext context) =>
+            dashboardAuthenticationOptions.IsBypassed(builder.Environment) ||
+            context.User.Identity?.IsAuthenticated == true)
+        .Build();
+});
+builder.Services.AddDashboardLoginRateLimiting();
 
 var app = builder.Build();
 
@@ -40,13 +83,14 @@ app.MapHealthCheckEndpoints();
 app.UseSerilogRequestLogging();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
-if (app.Environment.IsDevelopment())
-{
-    app.UseCors("dashboard");
-}
+app.UseCors("dashboard");
 
+app.UseAuthentication();
+app.UseAuthorization();
+app.UseRateLimiter();
 app.UseFastEndpoints(configuration =>
 {
+    configuration.Endpoints.Configurator = endpoint => endpoint.Options(options => options.RequireAuthorization());
     configuration.Binding.UsePropertyNamingPolicy = true;
     configuration.Errors.ContentType = ApiDefaults.ProblemDetailsContentType;
     configuration.Errors.ProducesMetadataType = typeof(Microsoft.AspNetCore.Mvc.ValidationProblemDetails);

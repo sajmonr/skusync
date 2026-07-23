@@ -4,12 +4,14 @@ import { provideRouter } from '@angular/router';
 import Aura from '@primeuix/themes/aura';
 import { providePrimeNG } from 'primeng/config';
 import { routes } from './app.routes';
+import { apiCredentialsInterceptor } from './core/auth/api-credentials.interceptor';
+import { unauthorizedInterceptor } from './core/auth/unauthorized.interceptor';
 import { apiErrorInterceptor } from './core/api/api-error.interceptor';
 
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
-    provideHttpClient(withInterceptors([apiErrorInterceptor])),
+    provideHttpClient(withInterceptors([apiCredentialsInterceptor, unauthorizedInterceptor, apiErrorInterceptor])),
     provideRouter(routes),
     providePrimeNG({
       license: 'eyJpZCI6IjAyYWU3MDE2LTBkOWMtNDUyNC1iNjE1LWE2ZmNiNTE0MThiMCIsInByb2R1Y3QiOiJwcmltZXVpIiwidGllciI6ImNvbW11bml0eSIsInR5cGUiOiJkZXYiLCJpYXQiOjE3ODQ3NDMwNzgsImV4cCI6MTgxNjI3OTA3OH0.tSZBCewJQAopBjzBSNBT-0WqCzKvMNR8sAUoH5YZlAsjwHktOaArlNX1fkJ7c2pFQyeL6FbORmAv2gbOcOJ5DA',

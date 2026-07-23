@@ -20,7 +20,8 @@ belong under `Common/`; business logic does not.
 ## Routes and responses
 
 - Endpoint routes are served directly by this HTTP API; no additional `/api` prefix is applied.
-- Until authentication is implemented, endpoints explicitly call `AllowAnonymous()`.
+- Endpoints require the dashboard cookie by default. Only the authentication endpoints use
+  `AllowAnonymous()`; health probes remain anonymous for container monitoring.
 - Return the documented response DTO directly. Do not wrap successful responses in a universal
   envelope.
 - Paged endpoints return `PagedResponse<T>` with `items`, `totalCount`, `page`, and `pageSize`.
