@@ -56,7 +56,7 @@ jobs:
         with:
           files: ${{ github.workspace }}/TestResults/**/*.trx
           comment_mode: always
-          check_name: Test results (main PR)
+          check_name: .NET test results (main PR)
 
   test-dashboard:
     name: Test Angular dashboard
