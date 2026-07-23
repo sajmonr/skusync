@@ -1,4 +1,4 @@
 {
-  "apiBaseUrl": "https://replace-with-production-web-api-url.example.com",
+  "apiBaseUrl": "https://api.skusync.darkflux.app",
   "environmentName": "Production"
 }
