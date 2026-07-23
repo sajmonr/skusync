@@ -12,11 +12,9 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
+var corsOptions = builder.GetRequiredConfigValue<DashboardCorsOptions>(DashboardCorsOptions.SectionName);
 builder.Services.AddCors(options => options.AddPolicy("dashboard", policy => policy
-    .WithOrigins(
-        "https://skulabs.darkflux.app",
-        "http://localhost:4200",
-        "http://127.0.0.1:4200")
+    .WithOrigins(corsOptions.GetSanitizedOrigins())
     .AllowAnyHeader()
     .AllowAnyMethod()
     .AllowCredentials()));
