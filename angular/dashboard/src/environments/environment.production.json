@@ -1,3 +1,4 @@
 {
-  "apiBaseUrl": "https://replace-with-production-web-api-url.example.com"
+  "apiBaseUrl": "https://replace-with-production-web-api-url.example.com",
+  "environmentName": "Production"
 }

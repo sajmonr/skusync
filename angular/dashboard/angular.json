@@ -38,7 +38,7 @@
               "fileReplacements": [
                 {
                   "replace": "src/environments/environment.ts",
-                  "with": "src/environments/environment.production.json"
+                  "with": "src/environments/environment.production.ts"
                 }
               ],
               "budgets": [

@@ -5,6 +5,7 @@ import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } fro
 import { ButtonModule } from 'primeng/button';
 import { filter, map, startWith } from 'rxjs';
 import { NAVIGATION_ITEMS } from '../navigation/navigation-items';
+import environment from '../../../environments/environment';
 
 @Component({
   selector: 'app-shell',
@@ -18,6 +19,7 @@ export class AppShell {
   protected readonly sidebarCollapsed = signal(false);
   protected readonly mobileNavigationOpen = signal(false);
   protected readonly navigationItems = NAVIGATION_ITEMS;
+  protected readonly environmentName = environment.environmentName;
   protected readonly pageTitle = toSignal(
     this.router.events.pipe(
       filter((event) => event instanceof NavigationEnd),
