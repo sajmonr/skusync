@@ -15,15 +15,16 @@ export interface SkulabsItemSyncDetails {
   readonly sku: string;
   readonly barcode: string;
   readonly pendingSkulabsSync: boolean;
+  readonly url: string;
 }
 
 export interface ItemSyncListItem {
   readonly id: string;
   readonly displayName: string;
-  readonly shopifyProductId: number;
-  readonly shopifyVariantId: number;
+  readonly shopifyId: number;
   readonly sku: string;
   readonly barcode: string;
   readonly pendingShopifySync: boolean;
+  readonly shopifyUrl: string;
   readonly skulabs: SkulabsItemSyncDetails | null;
 }

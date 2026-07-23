@@ -1,23 +1,13 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of } from 'rxjs';
 import { App } from './app';
 import { routes } from './app.routes';
-import { ApiStatusService } from './core/api/api-status.service';
 
 describe('App', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [App],
-      providers: [
-        provideRouter(routes),
-        {
-          provide: ApiStatusService,
-          useValue: {
-            getStatus: () => of({ status: 'ok', utcNow: '2026-07-22T16:00:00Z' })
-          }
-        }
-      ]
+      providers: [provideRouter(routes)]
     }).compileComponents();
   });
 
@@ -33,7 +23,7 @@ describe('App', () => {
     const compiled = fixture.nativeElement as HTMLElement;
 
     expect(compiled.querySelector('.brand-copy strong')?.textContent).toContain('SkuSync');
-    expect(compiled.querySelector('h1')?.textContent).toContain('Dashboard');
+    expect(compiled.querySelector('h1')?.textContent).toContain('Item sync');
     expect(compiled.querySelector('.sidebar')).toBeTruthy();
     expect(compiled.querySelector('.main-content')).toBeTruthy();
   });

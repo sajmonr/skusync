@@ -147,6 +147,17 @@
   font-size: 0.72rem;
 }
 
+.code-link {
+  color: var(--app-text);
+  text-decoration: underline;
+  text-decoration-color: var(--app-border);
+  text-underline-offset: 0.18em;
+}
+
+.code-link:hover {
+  text-decoration-color: currentColor;
+}
+
 .status-badge {
   display: inline-flex;
   padding: 0.28rem 0.5rem;

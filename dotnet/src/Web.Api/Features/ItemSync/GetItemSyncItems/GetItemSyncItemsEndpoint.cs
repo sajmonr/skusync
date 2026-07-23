@@ -31,7 +31,7 @@ public class GetItemSyncItemsEndpoint(ApplicationDbContext dbContext)
         query = query.ApplyItemSyncSearch(request.Search);
         query = query.ApplyItemSyncStatusFilter(request.Status);
 
-        var response = await query
+        var pagedResponse = await query
             .OrderBy(entity => entity.DisplayName)
             .ThenBy(entity => entity.ShopifyProductVariantId)
             .ToPagedResponseAsync(
@@ -39,6 +39,12 @@ public class GetItemSyncItemsEndpoint(ApplicationDbContext dbContext)
                 ItemSyncGridMapper.Instance,
                 ItemSyncListItem.Projection,
                 cancellationToken);
+
+        var response = new PagedResponse<ItemSyncListItem>(
+            pagedResponse.Items.Select(item => item.WithExternalUrls()).ToArray(),
+            pagedResponse.TotalCount,
+            pagedResponse.Page,
+            pagedResponse.PageSize);
 
         await Send.OkAsync(response, cancellationToken);
     }

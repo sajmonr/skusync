@@ -43,17 +43,18 @@ function createItem(): ItemSyncListItem {
   return {
     id: 'item-1',
     displayName: 'Classic Tee · Navy / M',
-    shopifyProductId: 100,
-    shopifyVariantId: 200,
+    shopifyId: 200,
     sku: 'TEE-NVY-M',
     barcode: '5061054981324',
     pendingShopifySync: false,
+    shopifyUrl: 'https://admin.shopify.com/store/ivyandlavyboutique/products/100/variants/200',
     skulabs: {
       id: '300',
       title: 'Classic Tee · Navy / M',
       sku: 'TEE-NVY-M',
       barcode: '5061054981324',
       pendingSkulabsSync: false,
+      url: 'https://app.skulabs.com/item?id=300',
     },
   };
 }

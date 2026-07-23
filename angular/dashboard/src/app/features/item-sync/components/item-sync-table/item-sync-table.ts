@@ -89,11 +89,6 @@ export class ItemSyncTable {
     return this.expandedItemId() === itemId;
   }
 
-  protected clearFilters(): void {
-    this.filterForm.search().value.set('');
-    this.filterForm.status().value.set('all');
-  }
-
   private requestPage(
     event: TableLazyLoadEvent,
     search = this.filterModel().search,

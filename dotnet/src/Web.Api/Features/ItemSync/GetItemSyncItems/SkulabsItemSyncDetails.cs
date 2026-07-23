@@ -5,4 +5,5 @@ public readonly record struct SkulabsItemSyncDetails(
     string Title,
     string Sku,
     string Barcode,
-    bool PendingSkulabsSync);
+    bool PendingSkulabsSync,
+    string Url);

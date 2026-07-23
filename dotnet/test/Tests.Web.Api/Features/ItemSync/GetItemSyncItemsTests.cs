@@ -103,6 +103,28 @@ public class GetItemSyncItemsTests
         result.IsValid.ShouldBeTrue();
     }
 
+    [Fact]
+    public void WithExternalUrls_ShouldAddUrlsForShopifyAndSkulabs()
+    {
+        var item = new ItemSyncListItem(
+            Guid.CreateVersion7(),
+            "Alpine Cap Black",
+            8470520925418,
+            46844138324153,
+            "CAP-ALP-BLK",
+            "5061054981447",
+            false,
+            "",
+            new SkulabsItemSyncDetails("100517", "Alpine Cap Black", "CAP-ALP-BLK", "5061054981447", false, ""));
+
+        var result = item.WithExternalUrls();
+
+        result.ShopifyId.ShouldBe(46844138324153);
+        result.ShopifyUrl.ShouldBe(
+            "https://admin.shopify.com/store/ivyandlavyboutique/products/8470520925418/variants/46844138324153");
+        result.Skulabs!.Value.Url.ShouldBe("https://app.skulabs.com/item?id=100517");
+    }
+
     private static Task<PagedResponse<ItemSyncListItem>> ApplyRequest(
         ApplicationDbContext dbContext,
         GetItemSyncItemsRequest request)

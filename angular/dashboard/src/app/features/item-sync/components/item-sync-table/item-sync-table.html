@@ -28,15 +28,6 @@
           <option [value]="option.value">{{ option.label }}</option>
         }
       </select>
-      @if (filterModel().search || filterModel().status !== 'all') {
-        <button
-          pButton
-          type="button"
-          severity="secondary"
-          label="Clear"
-          (click)="clearFilters()"
-        ></button>
-      }
     </div>
   </div>
 
@@ -96,10 +87,26 @@
           <strong class="item-name">{{ item.displayName }}</strong>
         </td>
         <td>
-          <span class="code-value">{{ item.shopifyProductId }}</span>
+          <a
+            class="code-value code-link"
+            [href]="item.shopifyUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+            (click)="$event.stopPropagation()"
+          >{{ item.shopifyId }}</a>
         </td>
         <td>
-          <span class="code-value">{{ item.skulabs?.id ?? '—' }}</span>
+          @if (item.skulabs; as skulabs) {
+            <a
+              class="code-value code-link"
+              [href]="skulabs.url"
+              target="_blank"
+              rel="noopener noreferrer"
+              (click)="$event.stopPropagation()"
+            >{{ skulabs.id }}</a>
+          } @else {
+            <span class="code-value">—</span>
+          }
         </td>
         <td>
           <span class="status-badge" [class]="item.status">{{ statusLabel(item.status) }}</span>

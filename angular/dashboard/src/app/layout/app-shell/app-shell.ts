@@ -28,10 +28,10 @@ export class AppShell {
           route = route.firstChild;
         }
 
-        return (route.data['pageTitle'] as string | undefined) ?? 'Dashboard';
+        return (route.data['pageTitle'] as string | undefined) ?? 'Item sync';
       })
     ),
-    { initialValue: 'Dashboard' }
+    { initialValue: 'Item sync' }
   );
 
   protected toggleSidebar(): void {
