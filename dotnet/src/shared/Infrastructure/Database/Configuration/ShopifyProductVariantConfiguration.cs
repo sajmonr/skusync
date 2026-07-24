@@ -47,19 +47,27 @@ public class ShopifyProductVariantConfiguration : IEntityTypeConfiguration<Shopi
             .IsRequired()
             .HasDefaultValue(true);
 
+        builder.Property(x => x.IsDeleted)
+            .IsRequired()
+            .HasDefaultValue(false);
+
+        builder.Property(x => x.DeletedOn)
+            .IsRequired()
+            .HasDefaultValueDateTimeMinSql();
+
         builder.HasIndex(x => x.GlobalVariantId).IsUnique();
         builder.HasIndex(x => x.VariantId).IsUnique();
         // Filtered index so the drift sweep scans a small subset even at high variant counts.
         builder.HasIndex(x => x.PendingShopifySync)
             .HasFilter("\"PendingShopifySync\" = true");
 
-        // Filtered index over the active rows. The two maintenance sweeps that skip
-        // deactivated variants (SkuAndBarcodeSyncService, SkulabsTitleSyncService) filter
-        // on IsActive explicitly; there is deliberately no global query filter, because
-        // every key-matching read path (import, webhooks, SkuLabs reconciliation, SKU
-        // uniqueness) must see deactivated rows or it re-inserts them and violates the
-        // unique GlobalVariantId/VariantId index.
+        // Filtered index over the rows eligible for sync work. The maintenance sweeps and the
+        // item-sync list skip both deactivated (IsActive=false) and deleted (IsDeleted=true)
+        // variants, filtering on these columns explicitly; there is deliberately no global query
+        // filter, because every key-matching read path (import, webhooks, SkuLabs reconciliation,
+        // SKU uniqueness) must see excluded rows or it re-inserts them and violates the unique
+        // GlobalVariantId/VariantId index.
         builder.HasIndex(x => x.IsActive)
-            .HasFilter("\"IsActive\" = true");
+            .HasFilter("\"IsActive\" = true AND \"IsDeleted\" = false");
     }
 }

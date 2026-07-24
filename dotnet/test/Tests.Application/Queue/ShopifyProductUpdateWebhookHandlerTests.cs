@@ -264,6 +264,84 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
     }
 
     // -------------------------------------------------------------------------
+    // Removed variants — default-variant replacement
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task Handle_ShouldMarkVariantDeleted_WhenAbsentFromPayload()
+    {
+        // The standalone default variant Shopify drops once real variants are created.
+        var defaultVariant = SeedVariant(100, 200, displayName: "Necklace", sku: "SKU-DEFAULT", barcode: "");
+        await _dbContext.SaveChangesAsync();
+
+        var product = CreateProduct(100, productTitle: "Necklace",
+            CreateVariant(201, variantTitle: "Small", sku: "SKU-S", barcode: "BAR-S"),
+            CreateVariant(202, variantTitle: "Large", sku: "SKU-L", barcode: "BAR-L"));
+
+        await CreateSut().Handle(product);
+
+        var deleted = await _dbContext.ShopifyProductVariants.SingleAsync(v => v.VariantId == 200);
+        deleted.IsDeleted.ShouldBeTrue();
+        deleted.DeletedOn.ShouldBeGreaterThan(DateTime.MinValue);
+
+        var liveVariants = await _dbContext.ShopifyProductVariants
+            .Where(v => v.VariantId != 200)
+            .ToListAsync();
+        liveVariants.Count.ShouldBe(2);
+        liveVariants.ShouldAllBe(v => !v.IsDeleted);
+    }
+
+    [Fact]
+    public async Task Handle_ShouldWriteDeletionLogEvent_WhenMarkingDeleted()
+    {
+        var defaultVariant = SeedVariant(100, 200, displayName: "Necklace", sku: "SKU-DEFAULT");
+        await _dbContext.SaveChangesAsync();
+
+        var product = CreateProduct(100, productTitle: "Necklace",
+            CreateVariant(201, variantTitle: "Small", sku: "SKU-S", barcode: "BAR-S"));
+
+        await CreateSut().Handle(product);
+
+        var logMessages = await _dbContext.ShopifyProductVariantLogEvents
+            .Where(e => e.ShopifyProductVariantId == defaultVariant.ShopifyProductVariantId)
+            .Select(e => e.Message)
+            .ToListAsync();
+        logMessages.ShouldContain(m => m.Contains("deleted"));
+    }
+
+    [Fact]
+    public async Task Handle_ShouldNotResurrectOrDuplicate_WhenPayloadReferencesDeletedVariant()
+    {
+        SeedVariant(100, 200, displayName: "Frozen Name", sku: "SKU-A", barcode: "BAR-A", isDeleted: true);
+        await _dbContext.SaveChangesAsync();
+
+        var product = CreateProduct(100, productTitle: "New Product",
+            CreateVariant(200, variantTitle: "New Variant", sku: "SKU-A", barcode: "NEW-BAR"));
+
+        await CreateSut().Handle(product);
+
+        var variants = await _dbContext.ShopifyProductVariants.ToListAsync();
+        variants.Count.ShouldBe(1);
+        variants[0].IsDeleted.ShouldBeTrue();
+        variants[0].DisplayName.ShouldBe("Frozen Name");
+        await AssertNoEventsPublished();
+    }
+
+    [Fact]
+    public async Task Handle_ShouldNotMarkDeleted_WhenPayloadHasNoVariants()
+    {
+        SeedVariant(100, 200, sku: "SKU-A", barcode: "BAR-A");
+        await _dbContext.SaveChangesAsync();
+
+        var product = CreateProduct(100, productTitle: "T-Shirt");
+
+        await CreateSut().Handle(product);
+
+        var variant = await _dbContext.ShopifyProductVariants.SingleAsync();
+        variant.IsDeleted.ShouldBeFalse();
+    }
+
+    // -------------------------------------------------------------------------
     // Feature flag
     // -------------------------------------------------------------------------
 
@@ -297,16 +375,17 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
             Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
     }
 
-    private void SeedVariant(
+    private ShopifyProductVariantEntity SeedVariant(
         long productId,
         long variantId,
         string displayName = "T-Shirt (Large)",
         string sku = "SKU",
         string barcode = "BAR",
         bool isActive = true,
-        int failedShopifySyncAttempts = 0)
+        int failedShopifySyncAttempts = 0,
+        bool isDeleted = false)
     {
-        _dbContext.ShopifyProductVariants.Add(new ShopifyProductVariantEntity
+        var entity = new ShopifyProductVariantEntity
         {
             GlobalProductId = $"gid://shopify/Product/{productId}",
             ProductId = productId,
@@ -316,8 +395,11 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
             Sku = sku,
             Barcode = barcode,
             IsActive = isActive,
-            FailedShopifySyncAttempts = failedShopifySyncAttempts
-        });
+            FailedShopifySyncAttempts = failedShopifySyncAttempts,
+            IsDeleted = isDeleted
+        };
+        _dbContext.ShopifyProductVariants.Add(entity);
+        return entity;
     }
 
     private static SqsShopEventProduct CreateProduct(long id, params SqsShopEventVariant[] variants) =>

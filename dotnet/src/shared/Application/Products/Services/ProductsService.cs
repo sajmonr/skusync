@@ -41,9 +41,10 @@ public class ProductsService(
 
         List<ShopifyProductVariantEntity> createdEntities;
         List<ShopifyProductVariantEntity> updatedEntities;
+        int deletedCount;
         try
         {
-            (createdEntities, updatedEntities) =
+            (createdEntities, updatedEntities, deletedCount) =
                 await ReconcileVariants(shopifyVariants, dbVariantsByGlobalId);
         }
         catch (Exception exception)
@@ -75,8 +76,8 @@ public class ProductsService(
 
         await PublishVariantEvents(createdEntities, updatedEntities);
 
-        logger.LogDebug("Synchronization complete. Created: {Created}, Updated: {Updated}.",
-            createdEntities.Count, updatedEntities.Count);
+        logger.LogDebug("Synchronization complete. Created: {Created}, Updated: {Updated}, Deleted: {Deleted}.",
+            createdEntities.Count, updatedEntities.Count, deletedCount);
 
         return ProductImportResult.Success(createdEntities.Count, updatedEntities.Count);
     }
@@ -84,8 +85,9 @@ public class ProductsService(
     /// <summary>
     /// Walks the Shopify variant set and partitions it into created and updated entities,
     /// tracking entities in the DbContext as a side effect but not yet calling SaveChanges.
+    /// Local variants absent from the (authoritative, complete) Shopify set are marked deleted.
     /// </summary>
-    private async Task<(List<ShopifyProductVariantEntity> Created, List<ShopifyProductVariantEntity> Updated)>
+    private async Task<(List<ShopifyProductVariantEntity> Created, List<ShopifyProductVariantEntity> Updated, int Deleted)>
         ReconcileVariants(
             ShopifyProductVariant[] shopifyVariants,
             IReadOnlyDictionary<string, ShopifyProductVariantEntity> dbVariantsByGlobalId)
@@ -99,11 +101,26 @@ public class ProductsService(
         // return the same variant more than once in a single payload; without this guard each
         // repeat would queue another insert and violate the unique index on GlobalVariantId.
         var createdByGlobalId = new Dictionary<string, ShopifyProductVariantEntity>(StringComparer.Ordinal);
+        // Every GlobalVariantId Shopify returned this run. Any tracked DB variant not in this set
+        // is absent from Shopify and gets marked deleted below.
+        var seenGlobalVariantIds = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var shopifyVariant in shopifyVariants)
         {
+            seenGlobalVariantIds.Add(shopifyVariant.GlobalVariantId);
+
             if (dbVariantsByGlobalId.TryGetValue(shopifyVariant.GlobalVariantId, out var existing))
             {
+                // Deletion is terminal: a row we've marked deleted stays frozen even if the
+                // import happens to surface its id again. Never resurrect or mutate it.
+                if (existing.IsDeleted)
+                {
+                    logger.LogDebug(
+                        "Skipping variant {GlobalVariantId} during import; it is marked deleted.",
+                        shopifyVariant.GlobalVariantId);
+                    continue;
+                }
+
                 if (await TryApplyVariantUpdate(existing, shopifyVariant, reservedSkus))
                 {
                     updatedEntities.Add(existing);
@@ -126,7 +143,65 @@ public class ProductsService(
             }
         }
 
-        return (createdEntities, updatedEntities);
+        var deletedCount = MarkVariantsRemovedFromShopify(
+            shopifyVariants, dbVariantsByGlobalId, seenGlobalVariantIds);
+
+        return (createdEntities, updatedEntities, deletedCount);
+    }
+
+    /// <summary>
+    /// Marks every locally-tracked variant absent from the Shopify variant set as deleted. The
+    /// set from <see cref="IShopifyProductService.GetProducts"/> is authoritative and complete
+    /// (fully paginated, and a failed fetch throws rather than returning an empty set), so a
+    /// stored variant not present has been removed in Shopify. Rows are preserved for history;
+    /// the flag is terminal.
+    /// </summary>
+    /// <returns>The number of variants newly marked deleted.</returns>
+    private int MarkVariantsRemovedFromShopify(
+        ShopifyProductVariant[] shopifyVariants,
+        IReadOnlyDictionary<string, ShopifyProductVariantEntity> dbVariantsByGlobalId,
+        ISet<string> seenGlobalVariantIds)
+    {
+        var liveVariantCount = dbVariantsByGlobalId.Values.Count(variant => !variant.IsDeleted);
+
+        // Defence-in-depth: a fetch that returns zero variants while we still hold live ones is
+        // far more likely a misconfiguration (wrong shop, revoked token) than a genuinely emptied
+        // catalogue. Because deletion is terminal, refuse to wipe every variant on an empty fetch.
+        // A real fetch failure already throws upstream and never reaches this point.
+        if (shopifyVariants.Length == 0 && liveVariantCount > 0)
+        {
+            logger.LogWarning(
+                "Shopify returned zero variants while {LiveCount} live variant(s) exist locally. Skipping removal reconciliation to avoid deleting the entire catalogue on a suspected misconfiguration.",
+                liveVariantCount);
+            return 0;
+        }
+
+        var deletedCount = 0;
+        foreach (var (globalVariantId, entity) in dbVariantsByGlobalId)
+        {
+            if (entity.IsDeleted || seenGlobalVariantIds.Contains(globalVariantId))
+            {
+                continue;
+            }
+
+            entity.IsDeleted = true;
+            entity.DeletedOn = DateTime.UtcNow;
+            entity.UpdatedOnUtc = DateTime.UtcNow;
+
+            dbContext.ShopifyProductVariantLogEvents.Add(new ShopifyProductVariantLogEventEntity
+            {
+                ShopifyProductVariantId = entity.ShopifyProductVariantId,
+                Message = VariantLogMessages.DeletedFromShopify()
+            });
+
+            logger.LogInformation(
+                "Marking variant {VariantId} (GlobalVariantId {GlobalVariantId}) as deleted; it is absent from the full Shopify import.",
+                entity.VariantId, entity.GlobalVariantId);
+
+            deletedCount++;
+        }
+
+        return deletedCount;
     }
 
     /// <summary>
@@ -242,7 +317,10 @@ public class ProductsService(
         HashSet<string> duplicateBarcodes;
         try
         {
+            // Deleted rows are excluded: a dead variant's SKU/barcode must not be counted as a
+            // collision that would force a live variant to be renamed, and deleted rows are frozen.
             duplicateSkus = (await dbContext.ShopifyProductVariants
+                .Where(v => !v.IsDeleted)
                 .GroupBy(v => v.Sku)
                 .Where(g => g.Count() > 1)
                 .Select(g => g.Key)
@@ -250,6 +328,7 @@ public class ProductsService(
                 .ToHashSet();
 
             duplicateBarcodes = (await dbContext.ShopifyProductVariants
+                .Where(v => !v.IsDeleted)
                 .GroupBy(v => v.Barcode)
                 .Where(g => g.Count() > 1)
                 .Select(g => g.Key)
@@ -277,7 +356,8 @@ public class ProductsService(
         try
         {
             variants = await dbContext.ShopifyProductVariants
-                .Where(v => duplicateSkus.Contains(v.Sku) || duplicateBarcodes.Contains(v.Barcode))
+                .Where(v => !v.IsDeleted
+                            && (duplicateSkus.Contains(v.Sku) || duplicateBarcodes.Contains(v.Barcode)))
                 .ToListAsync();
         }
         catch (Exception exception)

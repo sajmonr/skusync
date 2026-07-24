@@ -24,7 +24,7 @@ public class GetItemSyncItemsEndpoint(ApplicationDbContext dbContext)
     {
         var query = dbContext.ShopifyProductVariants
             .AsNoTracking()
-            .Where(entity => entity.IsActive)
+            .Where(entity => entity.IsActive && !entity.IsDeleted)
             .AsQueryable();
 
         query = query.ApplyItemSyncSearch(request.Search);

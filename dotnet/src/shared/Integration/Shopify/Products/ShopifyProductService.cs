@@ -9,43 +9,44 @@ internal class ShopifyProductService(IShopifyGraphQlService graphQlService, ILog
 {
     public async Task<ShopifyProductVariant[]> GetProducts()
     {
-        try
+        // Paginates the shop-wide productVariants connection so every variant is returned — the
+        // previous per-product variants(first: 50) sub-selection silently truncated products with
+        // more than 50 variants. Exceptions are intentionally NOT swallowed: the caller treats a
+        // thrown error as a failed fetch (and skips removal reconciliation), whereas an empty
+        // result is an authoritative "the shop has no variants". Returning [] on error would blur
+        // those two cases and could drive the full sync to delete the entire catalogue.
+        var allVariants = new List<ShopifyProductVariant>();
+        var page = 1;
+        var filter = CreateFilter();
+
+        logger.LogDebug("Starting Shopify product variant fetch.");
+
+        while (true)
         {
-            var allVariants = new List<ShopifyProductVariant>();
-            var page = 1;
-            var filter = CreateFilter();
+            var response =
+                await graphQlService.ExecuteAsync<GetAllProductVariantsGraphResponse>(GetAllProductVariantsQuery, filter);
 
-            logger.LogDebug("Starting Shopify product fetch.");
+            var newItems = response.ProductVariants.nodes
+                .Where(variant => variant is not null)
+                .Select(variant => ToProductVariant(variant!))
+                .ToArray();
 
-            while (true)
+            allVariants.AddRange(newItems);
+
+            logger.LogDebug("Fetched Shopify variant page {Page}. Variants: {VariantCount}.",
+                page, newItems.Length);
+
+            if (!response.ProductVariants.pageInfo!.hasNextPage)
             {
-                var response =
-                    await graphQlService.ExecuteAsync<GetAllProductsGraphResponse>(GetAllProductsQuery, filter);
-                var newItems = response.Products.nodes.SelectMany(product => ToProductVariants(product!))
-                    .ToArray();
-
-                allVariants.AddRange(newItems);
-
-                logger.LogDebug("Fetched Shopify page {Page}. Products: {ProductCount}, variants: {VariantCount}.",
-                    page, response.Products.nodes.Count(), newItems.Length);
-
-                if (!response.Products.pageInfo!.hasNextPage)
-                {
-                    break;
-                }
-
-                filter = CreateFilter(response.Products.pageInfo.endCursor);
-                page++;
+                break;
             }
 
-            logger.LogDebug("Completed Shopify product fetch. Total variants: {VariantCount}.", allVariants.Count);
-            return allVariants.ToArray();
+            filter = CreateFilter(response.ProductVariants.pageInfo.endCursor);
+            page++;
         }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to fetch products from Shopify.");
-            return [];
-        }
+
+        logger.LogDebug("Completed Shopify product variant fetch. Total variants: {VariantCount}.", allVariants.Count);
+        return allVariants.ToArray();
     }
 
     public async Task<bool> UpdateVariants(string productId, IEnumerable<ShopifyUpdateProductVariant> variants)
@@ -98,23 +99,21 @@ internal class ShopifyProductService(IShopifyGraphQlService graphQlService, ILog
         return new Dictionary<string, object?> { { "after", endCursor } };
     }
 
-    private static IEnumerable<ShopifyProductVariant> ToProductVariants(Product product)
+    private static ShopifyProductVariant ToProductVariant(ProductVariant variant)
     {
-        return product!.variants!.nodes.Select(variant =>
+        var product = variant.product;
+        var productTitle = product?.title ?? string.Empty;
+        var variantTitle = variant.title ?? string.Empty;
+        return new ShopifyProductVariant(
+            product?.id ?? string.Empty,
+            variant.id ?? string.Empty,
+            ShopifyDisplayName.Compose(productTitle, variantTitle),
+            variant.sku ?? string.Empty,
+            variant.barcode ?? string.Empty)
         {
-            var productTitle = product.title ?? string.Empty;
-            var variantTitle = variant!.title ?? string.Empty;
-            return new ShopifyProductVariant(
-                product.id ?? string.Empty,
-                variant.id ?? string.Empty,
-                ShopifyDisplayName.Compose(productTitle, variantTitle),
-                variant.sku ?? string.Empty,
-                variant.barcode ?? string.Empty)
-            {
-                ProductTitle = productTitle,
-                VariantTitle = variantTitle,
-            };
-        });
+            ProductTitle = productTitle,
+            VariantTitle = variantTitle,
+        };
     }
 
     private const string BulkUpdateVariantsQuery = """
@@ -128,26 +127,24 @@ internal class ShopifyProductService(IShopifyGraphQlService graphQlService, ILog
                                                    }
                                                    """;
 
-    private const string GetAllProductsQuery = """
-                                               query GetProducts($after: String){
-                                                   products(first: 250, after: $after){
-                                                       nodes{
-                                                           id
-                                                           title
-                                                           variants(first: 50){
-                                                               nodes{
-                                                                   id
-                                                                   title
-                                                                   barcode
-                                                                   sku
-                                                               }
-                                                           }
-                                                       }
-                                                       pageInfo{
-                                                           hasNextPage
-                                                           endCursor
-                                                       }
-                                                   }
-                                               }
-                                               """;
+    private const string GetAllProductVariantsQuery = """
+                                                      query GetProductVariants($after: String){
+                                                          productVariants(first: 250, after: $after){
+                                                              nodes{
+                                                                  id
+                                                                  title
+                                                                  barcode
+                                                                  sku
+                                                                  product{
+                                                                      id
+                                                                      title
+                                                                  }
+                                                              }
+                                                              pageInfo{
+                                                                  hasNextPage
+                                                                  endCursor
+                                                              }
+                                                          }
+                                                      }
+                                                      """;
 }

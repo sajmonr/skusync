@@ -572,6 +572,76 @@ public class ProductsServiceTests : IDisposable
         debugLogs.Length.ShouldBeGreaterThan(0);
     }
 
+    // -------------------------------------------------------------------------
+    // Removal reconciliation — variants absent from the full Shopify import
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task ImportProducts_ShouldMarkVariantDeleted_WhenAbsentFromShopifyPayload()
+    {
+        var present = SeedVariant("gid://shopify/ProductVariant/100", displayName: "Present", sku: "SKU-A", barcode: "BAR-A", variantId: 100);
+        var removed = SeedVariant("gid://shopify/ProductVariant/200", displayName: "Removed", sku: "SKU-B", barcode: "BAR-B", variantId: 200);
+        await _dbContext.SaveChangesAsync();
+
+        _shopifyProductService.GetProducts().Returns(
+        [
+            new ShopifyProductVariant("gid://shopify/Product/100", "gid://shopify/ProductVariant/100", "Present", "SKU-A", "BAR-A")
+        ]);
+
+        await CreateSut().ImportProductsFromShopify();
+
+        var removedRow = await _dbContext.Set<ShopifyProductVariantEntity>()
+            .SingleAsync(v => v.ShopifyProductVariantId == removed.ShopifyProductVariantId);
+        removedRow.IsDeleted.ShouldBeTrue();
+        removedRow.DeletedOn.ShouldBeGreaterThan(DateTime.MinValue);
+
+        var presentRow = await _dbContext.Set<ShopifyProductVariantEntity>()
+            .SingleAsync(v => v.ShopifyProductVariantId == present.ShopifyProductVariantId);
+        presentRow.IsDeleted.ShouldBeFalse();
+
+        var logMessages = await _dbContext.ShopifyProductVariantLogEvents
+            .Where(e => e.ShopifyProductVariantId == removed.ShopifyProductVariantId)
+            .Select(e => e.Message)
+            .ToListAsync();
+        logMessages.ShouldContain(m => m.Contains("deleted"));
+    }
+
+    [Fact]
+    public async Task ImportProducts_ShouldNotDeleteEntireCatalog_WhenShopifyReturnsEmpty()
+    {
+        SeedVariant("gid://shopify/ProductVariant/100", displayName: "Kept", sku: "SKU-A", barcode: "BAR-A", variantId: 100);
+        await _dbContext.SaveChangesAsync();
+
+        _shopifyProductService.GetProducts().Returns([]);
+
+        await CreateSut().ImportProductsFromShopify();
+
+        var row = await _dbContext.Set<ShopifyProductVariantEntity>().SingleAsync();
+        row.IsDeleted.ShouldBeFalse();
+        _logger.Entries.ShouldContain(e => e.LogLevel == LogLevel.Warning);
+    }
+
+    [Fact]
+    public async Task ImportProducts_ShouldLeaveDeletedVariantFrozen_WhenItReappearsInPayload()
+    {
+        var deleted = SeedVariant("gid://shopify/ProductVariant/200", displayName: "Frozen Name", sku: "SKU-A", barcode: "BAR-A", variantId: 200, isDeleted: true);
+        await _dbContext.SaveChangesAsync();
+
+        _shopifyProductService.GetProducts().Returns(
+        [
+            new ShopifyProductVariant("gid://shopify/Product/100", "gid://shopify/ProductVariant/200", "New Name", "SKU-A", "NEW-BAR")
+        ]);
+
+        var result = await CreateSut().ImportProductsFromShopify();
+
+        result.IsSuccess.ShouldBeTrue();
+        var row = await _dbContext.Set<ShopifyProductVariantEntity>()
+            .SingleAsync(v => v.ShopifyProductVariantId == deleted.ShopifyProductVariantId);
+        row.IsDeleted.ShouldBeTrue();
+        row.DisplayName.ShouldBe("Frozen Name");
+        result.Updated.ShouldBe(0);
+    }
+
     [Fact]
     public async Task DeduplicateProducts_ShouldReturnSuccessWithEmptyArray_WhenNoDuplicatesExist()
     {
@@ -846,7 +916,8 @@ public class ProductsServiceTests : IDisposable
         string barcode = "BAR",
         long variantId = 200,
         long productId = 100,
-        bool isActive = true)
+        bool isActive = true,
+        bool isDeleted = false)
     {
         var entity = new ShopifyProductVariantEntity
         {
@@ -858,7 +929,8 @@ public class ProductsServiceTests : IDisposable
             DisplayName = displayName,
             Sku = sku,
             Barcode = barcode,
-            IsActive = isActive
+            IsActive = isActive,
+            IsDeleted = isDeleted
         };
 
         _dbContext.Set<ShopifyProductVariantEntity>().Add(entity);

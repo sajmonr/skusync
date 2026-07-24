@@ -80,4 +80,10 @@ internal static class VariantLogMessages
     /// because Shopify sent a fresh <c>products/update</c> webhook for it.</summary>
     public static string Reactivated() =>
         "Variant reactivated after a Shopify products/update webhook.";
+
+    /// <summary>Returns a message indicating that the variant was marked as deleted because it
+    /// is no longer present in Shopify (absent from an authoritative products/update payload).
+    /// This is terminal — the row is preserved for history but never revived.</summary>
+    public static string DeletedFromShopify() =>
+        "Variant marked as deleted; it is no longer present in Shopify.";
 }
