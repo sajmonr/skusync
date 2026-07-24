@@ -62,6 +62,73 @@ public class ProductUpdateWebhookTests(AppServerTestHost factory) : IAsyncLifeti
     }
 
     [Fact]
+    public async Task ProductsUpdateWebhook_MarksDefaultVariantDeleted_WhenReplacedByRealVariant()
+    {
+        // arrange — the product originally had only its standalone default variant, which we
+        // stored locally. Shopify then created a real variant and dropped the default. The
+        // products/update payload carries the real variant (46450996871329) but not the default
+        // one we seed here (46450996800000), so the handler must mark the default as deleted.
+        const long productId = 8521775284385;
+        const long defaultVariantId = 46450996800000;
+        Guid defaultVariantGuid;
+
+        using (var seedScope = factory.Services.CreateScope())
+        {
+            var seedDb = seedScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var defaultVariant = new ShopifyProductVariantEntity
+            {
+                GlobalProductId = "gid://shopify/Product/8521775284385",
+                ProductId = productId,
+                GlobalVariantId = "gid://shopify/ProductVariant/46450996800000",
+                VariantId = defaultVariantId,
+                DisplayName = "Testprod1",
+                Sku = "OLD-DEFAULT-SKU",
+                Barcode = ""
+            };
+            defaultVariant.LogEvents.Add(new ShopifyProductVariantLogEventEntity
+            {
+                Message = "Product variant was created."
+            });
+            seedDb.ShopifyProductVariants.Add(defaultVariant);
+            await seedDb.SaveChangesAsync();
+            defaultVariantGuid = defaultVariant.ShopifyProductVariantId;
+        }
+
+        var envelope = await FixtureLoader.LoadAsync<SqsShopEventProductMessage>(
+            "Shopify/Webhooks/products-update-single-variant.json");
+
+        factory.ShopifyGraphQl
+            .ExecuteAsync<UpdateVariantsGraphResponse>(
+                Arg.Any<string>(),
+                Arg.Any<IDictionary<string, object?>>())
+            .Returns(new UpdateVariantsGraphResponse(null));
+
+        // act
+        await factory.DispatchWebhookAsync(envelope);
+
+        // assert
+        using var scope = factory.Services.CreateScope();
+        await using var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        // The default variant is preserved (not physically removed) and marked terminally deleted.
+        var deleted = await db.ShopifyProductVariants.SingleAsync(v => v.VariantId == defaultVariantId);
+        deleted.IsDeleted.ShouldBeTrue();
+        deleted.DeletedOn.ShouldBeGreaterThan(DateTime.MinValue);
+
+        // The real variant from the payload is tracked and live.
+        var real = await db.ShopifyProductVariants.SingleAsync(v => v.VariantId == 46450996871329);
+        real.IsDeleted.ShouldBeFalse();
+
+        // Audit log is preserved: the original creation event survives alongside the new deletion event.
+        var logMessages = await db.ShopifyProductVariantLogEvents
+            .Where(e => e.ShopifyProductVariantId == defaultVariantGuid)
+            .Select(e => e.Message)
+            .ToListAsync();
+        logMessages.ShouldContain(m => m.Contains("created"));
+        logMessages.ShouldContain(m => m.Contains("deleted"));
+    }
+
+    [Fact]
     public async Task ProductsUpdateWebhook_PushesOurSkuAndBarcodeBackToShopify_WhenShopifyDriftedFromLocalValues()
     {
         // arrange — we are the source of truth for SKU/barcode. The fixture has sku=null and

@@ -62,6 +62,23 @@ public class ShopifyProductVariantEntity
     /// </summary>
     public bool IsActive { get; set; } = true;
 
+    /// <summary>
+    /// Gets or sets a value indicating whether the underlying Shopify variant no longer exists —
+    /// it was absent from an authoritative <c>products/update</c> payload (e.g. Shopify removed a
+    /// product's standalone default variant when real variants were created). This is
+    /// <b>terminal</b>: once set to <c>true</c> the row is never revived. A Shopify variant that
+    /// "returns" does so under a new variant id and is created as a fresh row. Deleted rows are
+    /// preserved (never physically removed) so their history and audit log survive, and are
+    /// excluded from all sync work and the active item-sync list.
+    /// </summary>
+    public bool IsDeleted { get; set; }
+
+    /// <summary>
+    /// Gets or sets the UTC timestamp at which <see cref="IsDeleted"/> was flipped to
+    /// <c>true</c>. Defaults to <see cref="DateTime.MinValue"/> for rows that are not deleted.
+    /// </summary>
+    public DateTime DeletedOn { get; set; } = DateTime.MinValue;
+
     /// <summary>Gets or sets the UTC timestamp at which this record was first created.</summary>
     public DateTime CreatedOnUtc { get; set; } = DateTime.UtcNow;
 

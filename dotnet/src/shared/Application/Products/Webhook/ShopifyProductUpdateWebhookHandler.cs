@@ -94,6 +94,18 @@ public class ShopifyProductUpdateWebhookHandler(
             }
             else
             {
+                // A variant marked deleted is gone from Shopify for good; a matching id here can
+                // only be a stale redelivery. Deletion is terminal, so leave the row frozen —
+                // never resurrect or mutate it. A genuinely returning variant arrives under a new
+                // id and is created fresh above.
+                if (entity.IsDeleted)
+                {
+                    logger.LogWarning(
+                        "products/update for product {ProductId} referenced variant {VariantId}, which is marked deleted. Ignoring — a returning variant is tracked as a new row.",
+                        product.Id, variant.Id);
+                    continue;
+                }
+
                 // A products/update for a variant we'd previously deactivated means it's live in
                 // Shopify again — revive it so it re-enters the drift sweep.
                 ReactivateIfDormant(entity);
@@ -111,6 +123,8 @@ public class ShopifyProductUpdateWebhookHandler(
             }
         }
 
+        MarkVariantsRemovedFromShopify(product, existingVariants);
+
         var droppedInserts = await dbContext.SaveChangesToleratingVariantConflicts(logger);
 
         // Enqueue only after a successful save so no phantom events enter the queue, and skip any
@@ -120,6 +134,49 @@ public class ShopifyProductUpdateWebhookHandler(
         await messageBus.PublishBatch(createdEntities
             .Where(e => !droppedInserts.Contains(e))
             .Select(e => new ProductVariantCreatedEvent(e.ShopifyProductVariantId)));
+    }
+
+    /// <summary>
+    /// Marks any locally-tracked variant of this product that is absent from the incoming
+    /// payload as deleted. A <c>products/update</c> payload carries the product's full current
+    /// variant set, so a stored variant missing from it has been removed in Shopify — the classic
+    /// case being a standalone default variant that Shopify drops when real variants are created.
+    /// The row is kept (never physically deleted) so its history survives; the flag is terminal.
+    /// </summary>
+    private void MarkVariantsRemovedFromShopify(
+        SqsShopEventProduct product,
+        IReadOnlyList<ShopifyProductVariantEntity> existingVariants)
+    {
+        // An empty variant list is never a legitimate product state in Shopify; treat it as a
+        // malformed payload and skip removal detection rather than deleting every stored variant.
+        if (product.Variants.Count == 0)
+        {
+            return;
+        }
+
+        var payloadVariantIds = product.Variants.Select(variant => variant.Id).ToHashSet();
+
+        foreach (var entity in existingVariants)
+        {
+            if (entity.IsDeleted || payloadVariantIds.Contains(entity.VariantId))
+            {
+                continue;
+            }
+
+            entity.IsDeleted = true;
+            entity.DeletedOn = DateTime.UtcNow;
+            entity.UpdatedOnUtc = DateTime.UtcNow;
+
+            dbContext.ShopifyProductVariantLogEvents.Add(new ShopifyProductVariantLogEventEntity
+            {
+                ShopifyProductVariantId = entity.ShopifyProductVariantId,
+                Message = VariantLogMessages.DeletedFromShopify()
+            });
+
+            logger.LogInformation(
+                "Marking variant {VariantId} (GlobalVariantId {GlobalVariantId}) of product {ProductId} as deleted; it is absent from the products/update payload.",
+                entity.VariantId, entity.GlobalVariantId, product.Id);
+        }
     }
 
     private void ReactivateIfDormant(ShopifyProductVariantEntity entity)

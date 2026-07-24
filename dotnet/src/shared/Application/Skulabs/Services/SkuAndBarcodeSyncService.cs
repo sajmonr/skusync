@@ -49,6 +49,7 @@ public class SkuAndBarcodeSyncService(
             .Include(item => item.ShopifyProductVariant)
             .Where(item => item.ShopifyProductVariant != null
                            && item.ShopifyProductVariant.IsActive
+                           && !item.ShopifyProductVariant.IsDeleted
                            && (item.ShopifyProductVariant.Sku != item.Sku
                                || item.ShopifyProductVariant.Barcode != item.Barcode
                                || item.ShopifyProductVariant.PendingShopifySync))
@@ -89,7 +90,9 @@ public class SkuAndBarcodeSyncService(
             return SkuAndBarcodeSyncResult.Empty;
         }
 
-        if (item.ShopifyProductVariant is null || !item.ShopifyProductVariant.IsActive)
+        if (item.ShopifyProductVariant is null
+            || !item.ShopifyProductVariant.IsActive
+            || item.ShopifyProductVariant.IsDeleted)
         {
             logger.LogWarning(
                 "SkuLabs item {SkulabsItemId} has no active linked Shopify variant. Nothing to compare.",

@@ -6,9 +6,14 @@ namespace Integration.Shopify.Products;
 public interface IShopifyProductService
 {
     /// <summary>
-    /// Retrieves a collection of Shopify product variants.
+    /// Retrieves every Shopify product variant in the store, paginating the full variant set.
+    /// An empty array is authoritative — it means the store genuinely has no variants. Failures
+    /// are propagated as exceptions (never swallowed into an empty result) so callers can tell a
+    /// failed fetch apart from an empty store; this distinction matters because the full sync uses
+    /// absence from this set to mark local variants as deleted.
     /// </summary>
-    /// <returns>An array of <see cref="ShopifyProductVariant"/> representing the product variants available in the Shopify store.</returns>
+    /// <returns>An array of <see cref="ShopifyProductVariant"/> representing every variant in the Shopify store.</returns>
+    /// <exception cref="Exception">Propagated from the underlying Shopify GraphQL call when the fetch fails.</exception>
     Task<ShopifyProductVariant[]> GetProducts();
 
     /// <summary>

@@ -16,31 +16,31 @@ public class ShopifyProductServiceTests
     [Fact]
     public async Task GetProducts_ShouldMapProductsAndVariants_FromSinglePage()
     {
-        _graphQlService.ExecuteAsync<GetAllProductsGraphResponse>(Arg.Any<string>(), Arg.Any<IDictionary<string, object?>?>())
+        _graphQlService.ExecuteAsync<GetAllProductVariantsGraphResponse>(Arg.Any<string>(), Arg.Any<IDictionary<string, object?>?>())
             .Returns(CreateResponse(
                 hasNextPage: false,
                 endCursor: null,
-                CreateProduct(
-                    id: "gid://shopify/Product/100",
+                CreateVariant(
+                    id: "gid://shopify/ProductVariant/200",
+                    productId: "gid://shopify/Product/100",
                     productTitle: "Basic Tee",
-                    CreateVariant(
-                        id: "gid://shopify/ProductVariant/200",
-                        title: "Default Title",
-                        sku: "SKU-1",
-                        barcode: "BAR-1"),
-                    CreateVariant(
-                        id: "gid://shopify/ProductVariant/201",
-                        title: "Large",
-                        sku: null,
-                        barcode: null)),
-                CreateProduct(
+                    title: "Default Title",
+                    sku: "SKU-1",
+                    barcode: "BAR-1"),
+                CreateVariant(
+                    id: "gid://shopify/ProductVariant/201",
+                    productId: "gid://shopify/Product/100",
+                    productTitle: "Basic Tee",
+                    title: "Large",
+                    sku: null,
+                    barcode: null),
+                CreateVariant(
                     id: null,
+                    productId: null,
                     productTitle: null,
-                    CreateVariant(
-                        id: null,
-                        title: null,
-                        sku: null,
-                        barcode: null))));
+                    title: null,
+                    sku: null,
+                    barcode: null)));
 
         var sut = new ShopifyProductService(_graphQlService, _logger);
 
@@ -65,7 +65,7 @@ public class ShopifyProductServiceTests
         result[2].Sku.ShouldBe(string.Empty);
         result[2].Barcode.ShouldBe(string.Empty);
 
-        await _graphQlService.Received(1).ExecuteAsync<GetAllProductsGraphResponse>(
+        await _graphQlService.Received(1).ExecuteAsync<GetAllProductVariantsGraphResponse>(
             Arg.Any<string>(),
             Arg.Is<IDictionary<string, object?>?>(variables =>
                 variables != null &&
@@ -76,42 +76,40 @@ public class ShopifyProductServiceTests
     [Fact]
     public async Task GetProducts_ShouldRequestNextPageUsingEndCursor_AndCombineResults()
     {
-        _graphQlService.ExecuteAsync<GetAllProductsGraphResponse>(Arg.Any<string>(), Arg.Any<IDictionary<string, object?>?>())
+        _graphQlService.ExecuteAsync<GetAllProductVariantsGraphResponse>(Arg.Any<string>(), Arg.Any<IDictionary<string, object?>?>())
             .Returns(
                 CreateResponse(
                     hasNextPage: true,
                     endCursor: "cursor-1",
-                    CreateProduct(
-                        id: "gid://shopify/Product/1",
+                    CreateVariant(
+                        id: "gid://shopify/ProductVariant/11",
+                        productId: "gid://shopify/Product/1",
                         productTitle: "First product",
-                        CreateVariant(
-                            id: "gid://shopify/ProductVariant/11",
-                            title: "Default Title",
-                            sku: "FIRST",
-                            barcode: "111"))),
+                        title: "Default Title",
+                        sku: "FIRST",
+                        barcode: "111")),
                 CreateResponse(
                     hasNextPage: false,
                     endCursor: "cursor-2",
-                    CreateProduct(
-                        id: "gid://shopify/Product/2",
+                    CreateVariant(
+                        id: "gid://shopify/ProductVariant/22",
+                        productId: "gid://shopify/Product/2",
                         productTitle: "Second product",
-                        CreateVariant(
-                            id: "gid://shopify/ProductVariant/22",
-                            title: "Blue",
-                            sku: "SECOND",
-                            barcode: "222"))));
+                        title: "Blue",
+                        sku: "SECOND",
+                        barcode: "222")));
 
         var sut = new ShopifyProductService(_graphQlService, _logger);
 
         var result = await sut.GetProducts();
 
         result.Select(x => x.VariantId).ShouldBe([11, 22]);
-        await _graphQlService.Received(1).ExecuteAsync<GetAllProductsGraphResponse>(
+        await _graphQlService.Received(1).ExecuteAsync<GetAllProductVariantsGraphResponse>(
             Arg.Any<string>(),
             Arg.Is<IDictionary<string, object?>?>(variables =>
                 variables != null &&
                 variables["after"] == null));
-        await _graphQlService.Received(1).ExecuteAsync<GetAllProductsGraphResponse>(
+        await _graphQlService.Received(1).ExecuteAsync<GetAllProductVariantsGraphResponse>(
             Arg.Any<string>(),
             Arg.Is<IDictionary<string, object?>?>(variables =>
                 variables != null &&
@@ -119,22 +117,18 @@ public class ShopifyProductServiceTests
     }
 
     [Fact]
-    public async Task GetProducts_ShouldLogErrorAndReturnEmpty_WhenGraphQlCallFails()
+    public async Task GetProducts_ShouldPropagateException_WhenGraphQlCallFails()
     {
+        // The fetch must NOT swallow failures into an empty result: the full sync relies on an
+        // empty set meaning "no variants in Shopify" so it can safely mark absent variants deleted.
         var exception = new InvalidOperationException("boom");
-        _graphQlService.ExecuteAsync<GetAllProductsGraphResponse>(Arg.Any<string>(), Arg.Any<IDictionary<string, object?>?>())
-            .Returns<Task<GetAllProductsGraphResponse>>(_ => throw exception);
+        _graphQlService.ExecuteAsync<GetAllProductVariantsGraphResponse>(Arg.Any<string>(), Arg.Any<IDictionary<string, object?>?>())
+            .Returns<Task<GetAllProductVariantsGraphResponse>>(_ => throw exception);
 
         var sut = new ShopifyProductService(_graphQlService, _logger);
 
-        var result = await sut.GetProducts();
-
-        result.ShouldBeEmpty();
-        var errorLogs = _logger.Entries.Where(entry => entry.LogLevel == LogLevel.Error).ToArray();
-
-        errorLogs.Length.ShouldBe(1);
-        errorLogs[0].Message.ShouldBe("Failed to fetch products from Shopify.");
-        errorLogs[0].Exception.ShouldBeSameAs(exception);
+        var thrown = await Should.ThrowAsync<InvalidOperationException>(() => sut.GetProducts());
+        thrown.ShouldBeSameAs(exception);
     }
 
     [Fact]
@@ -257,39 +251,32 @@ public class ShopifyProductServiceTests
                 (string?)variables["productId"] == "gid://shopify/Product/100"));
     }
 
-    private static GetAllProductsGraphResponse CreateResponse(bool hasNextPage, string? endCursor, params Product[] products)
+    private static GetAllProductVariantsGraphResponse CreateResponse(bool hasNextPage, string? endCursor, params ProductVariant[] variants)
     {
-        return new GetAllProductsGraphResponse
+        return new GetAllProductVariantsGraphResponse
         {
-            Products = new ProductConnection
+            ProductVariants = new ProductVariantConnection
             {
-                nodes = products,
+                nodes = variants,
                 pageInfo = new PageInfo(null, endCursor, false, hasNextPage)
             }
         };
     }
 
-    private static Product CreateProduct(string? id, string? productTitle, params ProductVariant[] variants)
-    {
-        return new Product
-        {
-            id = id,
-            title = productTitle,
-            variants = new ProductVariantConnection
-            {
-                nodes = variants
-            }
-        };
-    }
-
-    private static ProductVariant CreateVariant(string? id, string? title, string? sku, string? barcode)
+    private static ProductVariant CreateVariant(
+        string? id, string? productId, string? productTitle, string? title, string? sku, string? barcode)
     {
         return new ProductVariant
         {
             id = id,
             title = title,
             sku = sku,
-            barcode = barcode
+            barcode = barcode,
+            product = new Product
+            {
+                id = productId,
+                title = productTitle
+            }
         };
     }
 

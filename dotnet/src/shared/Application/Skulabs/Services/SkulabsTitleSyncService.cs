@@ -41,6 +41,7 @@ public class SkulabsTitleSyncService(
             .Include(item => item.ShopifyProductVariant)
             .Where(item => item.ShopifyProductVariant != null
                            && item.ShopifyProductVariant.IsActive
+                           && !item.ShopifyProductVariant.IsDeleted
                            && (item.ShopifyProductVariant.DisplayName != item.Title
                                || item.PendingSkulabsSync))
             .ToListAsync(cancellationToken);
@@ -73,9 +74,11 @@ public class SkulabsTitleSyncService(
             return SkulabsTitleSyncResult.Empty;
         }
 
-        // A variant deactivated after repeated failed Shopify pushes is excluded from sync;
-        // the null check is defensive for an unlinked row.
-        if (item.ShopifyProductVariant is null || !item.ShopifyProductVariant.IsActive)
+        // A variant deactivated after repeated failed Shopify pushes, or deleted from Shopify, is
+        // excluded from sync; the null check is defensive for an unlinked row.
+        if (item.ShopifyProductVariant is null
+            || !item.ShopifyProductVariant.IsActive
+            || item.ShopifyProductVariant.IsDeleted)
         {
             logger.LogDebug(
                 "Variant {VariantId} is inactive or unlinked; skipping SkuLabs title push for linked item {SkulabsItemId}.",
@@ -102,7 +105,9 @@ public class SkulabsTitleSyncService(
             return SkulabsTitleSyncResult.Empty;
         }
 
-        if (item.ShopifyProductVariant is null || !item.ShopifyProductVariant.IsActive)
+        if (item.ShopifyProductVariant is null
+            || !item.ShopifyProductVariant.IsActive
+            || item.ShopifyProductVariant.IsDeleted)
         {
             logger.LogWarning(
                 "SkuLabs item {SkulabsItemId} has no active linked Shopify variant. Nothing to compare.",

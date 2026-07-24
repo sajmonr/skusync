@@ -76,7 +76,7 @@ public class GetItemSyncItemsTests
 
         var result = await dbContext.ShopifyProductVariants
             .AsNoTracking()
-            .Where(entity => entity.IsActive)
+            .Where(entity => entity.IsActive && !entity.IsDeleted)
             .OrderBy(entity => entity.DisplayName)
             .ThenBy(entity => entity.ShopifyProductVariantId)
             .ToPagedResponseAsync(
@@ -86,6 +86,31 @@ public class GetItemSyncItemsTests
 
         result.TotalCount.ShouldBe(1);
         result.Items.ShouldHaveSingleItem().DisplayName.ShouldBe(activeVariant.DisplayName);
+    }
+
+    [Fact]
+    public async Task Query_ShouldExcludeDeletedVariants()
+    {
+        await using var dbContext = CreateDbContext();
+        var liveVariant = CreateVariant("Live item");
+        var deletedVariant = CreateVariant("Deleted item");
+        deletedVariant.IsDeleted = true;
+        deletedVariant.DeletedOn = DateTime.UtcNow;
+        dbContext.ShopifyProductVariants.AddRange(liveVariant, deletedVariant);
+        await dbContext.SaveChangesAsync();
+
+        var result = await dbContext.ShopifyProductVariants
+            .AsNoTracking()
+            .Where(entity => entity.IsActive && !entity.IsDeleted)
+            .OrderBy(entity => entity.DisplayName)
+            .ThenBy(entity => entity.ShopifyProductVariantId)
+            .ToPagedResponseAsync(
+                new GetItemSyncItemsRequest(),
+                ItemSyncGridMapper.Instance,
+                ItemSyncListItem.Projection);
+
+        result.TotalCount.ShouldBe(1);
+        result.Items.ShouldHaveSingleItem().DisplayName.ShouldBe(liveVariant.DisplayName);
     }
 
     [Theory]
