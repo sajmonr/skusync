@@ -45,7 +45,7 @@ public class AppServerCompositionTests(AppServerTestHost factory)
     {
         factory.RegisteredServices
             .Count(descriptor => descriptor.ServiceType == typeof(IShopifyWebhookHandler))
-            .ShouldBe(2);
+            .ShouldBe(3);
     }
 
     private IEnumerable<string> HostedServiceImplementationNames() =>
