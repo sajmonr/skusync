@@ -38,7 +38,7 @@ public class DependencyInjectionTests
     }
 
     [Fact]
-    public void AddShopifyWebhookHandlers_ShouldRegisterBothHandlersWithoutHostedServices()
+    public void AddShopifyWebhookHandlers_ShouldRegisterAllHandlersWithoutHostedServices()
     {
         var builder = CreateBuilder();
 
@@ -46,7 +46,7 @@ public class DependencyInjectionTests
 
         builder
             .Services.Count(descriptor => descriptor.ServiceType == typeof(IShopifyWebhookHandler))
-            .ShouldBe(2);
+            .ShouldBe(3);
         builder.Services.ShouldNotContain(descriptor =>
             descriptor.ServiceType == typeof(IHostedService)
         );

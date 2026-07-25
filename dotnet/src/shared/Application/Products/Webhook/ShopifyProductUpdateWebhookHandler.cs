@@ -27,7 +27,7 @@ public class ShopifyProductUpdateWebhookHandler(
     : ShopifyWebhookBase, IShopifyWebhookHandler
 {
     /// <inheritdoc/>
-    public string TopicName => "products/update";
+    public string TopicName => ShopifyWebhookTopic.ProductsUpdate;
 
     /// <summary>
     /// Reconciles the incoming product payload with local database state, then synchronises
