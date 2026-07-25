@@ -12,6 +12,9 @@
 #   - 4200  → Angular dashboard (test the app end to end in a browser)
 #   - 5433  → PostgreSQL (inspect the database with psql / a GUI; non-standard port)
 #
+# RabbitMQ is reached only on the compose network (amqp://rabbitmq:5672) and is not published
+# to the host, so it never clashes with the dev stack's broker on 5674.
+#
 # The web API and app server are NOT exposed. The browser reaches the API through the
 # dashboard's own origin: nginx in the dashboard container reverse-proxies /api/ to the
 # web-api service (see docker/dashboard.nginx.conf), so there is no CORS and no need to
@@ -48,6 +51,23 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+    restart: unless-stopped
+
+  rabbitmq:
+    # -management image bundles the web management UI; not published here since the e2e stack
+    # only needs the broker for app-server ↔ app-server event delivery.
+    image: rabbitmq:4-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+    # No published ports: reached only on the compose network at amqp://rabbitmq:5672.
+    expose:
+      - "5672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     restart: unless-stopped
 
   web-api:
@@ -88,6 +108,10 @@ services:
       <<: *db-connection
       # AppServer is a Generic Host worker → it reads DOTNET_ENVIRONMENT (not ASPNETCORE_*).
       DOTNET_ENVIRONMENT: Development
+      # AppServer owns event processing, so it consumes from RabbitMQ. Point it at the compose
+      # `rabbitmq` service (container-internal port 5672), overriding the localhost:5674 value in
+      # appsettings.Development.json (env vars outrank appsettings and user secrets).
+      ConnectionStrings__RabbitMq: "amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672"
     volumes:
       # Map the project's .NET user secrets (read-only). This is where Shopify / SkuLabs / AWS
       # credentials come from — the required options validated on startup are satisfied by the
@@ -96,6 +120,8 @@ services:
       - ${HOME}/.microsoft/usersecrets/b937c043-246e-43de-a447-f5bbd6941c7c:/home/app/.microsoft/usersecrets/b937c043-246e-43de-a447-f5bbd6941c7c:ro
     depends_on:
       postgres:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     restart: unless-stopped
 

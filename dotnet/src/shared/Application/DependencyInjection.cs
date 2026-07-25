@@ -1,6 +1,6 @@
-﻿using System.Reflection;
-using Application.Jobs;
+﻿using Application.Jobs;
 using Application.Jobs.Maintenance;
+using Application.Messaging;
 using Application.Products.Maintenance;
 using Application.Products.Services;
 using Application.Products.Webhook;
@@ -9,13 +9,13 @@ using Application.Skulabs.Maintenance;
 using Application.Skulabs.Services;
 using Application.Skus;
 using Integration.Aws.Sqs;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.FeatureManagement;
 using Quartz;
 using SharedKernel.Options;
 using SlimMessageBus.Host;
-using SlimMessageBus.Host.Memory;
 
 namespace Application;
 
@@ -25,8 +25,11 @@ public static class DependencyInjection
         where T : IHostApplicationBuilder
     {
         /// <summary>
-        /// Registers Application-layer services and their supporting configuration with the
-        /// dependency injection container. This method does not start hosted processing.
+        /// Registers Application-layer services, their supporting configuration, and the ability to
+        /// <em>produce</em> application events onto the RabbitMQ bus. Every host that needs the
+        /// Application layer can therefore publish events; consuming them is a separate concern
+        /// (see <see cref="AddEventProcessing"/>). Requires the <c>ConnectionStrings:RabbitMq</c>
+        /// AMQP connection string, since producing needs a broker connection.
         /// </summary>
         /// <returns>The builder instance for further chaining.</returns>
         public T AddApplication()
@@ -41,6 +44,18 @@ public static class DependencyInjection
             builder.Services.AddTransient<ISkuGenerator, SkuGenerator>();
             builder.Services.AddTransient<ISkuAndBarcodeSyncService, SkuAndBarcodeSyncService>();
             builder.Services.AddTransient<ISkulabsTitleSyncService, SkulabsTitleSyncService>();
+
+            var connectionString = builder.Configuration.GetConnectionString(
+                ApplicationEventBus.ConnectionStringName);
+            if (string.IsNullOrWhiteSpace(connectionString))
+            {
+                throw new InvalidOperationException(
+                    $"A '{ApplicationEventBus.ConnectionStringName}' connection string is required to publish " +
+                    "application events. Set ConnectionStrings:RabbitMq (e.g. via an environment variable).");
+            }
+
+            builder.Services.AddSlimMessageBus(
+                busBuilder => ApplicationEventBus.ConfigureProducers(busBuilder, connectionString));
 
             return builder;
         }
@@ -69,21 +84,15 @@ public static class DependencyInjection
         }
 
         /// <summary>
-        /// Registers the message bus and discovers Application-layer event consumers.
-        /// Only hosts responsible for processing application events should call this method.
+        /// Registers the Application-layer event consumers and binds their RabbitMQ work queues to
+        /// the matching exchanges. Only hosts responsible for processing application events
+        /// (currently AppServer) should call this method, and only after <see cref="AddApplication"/>,
+        /// which establishes the bus provider and serializer.
         /// </summary>
         /// <returns>The builder instance for further chaining.</returns>
         public T AddEventProcessing()
         {
-            builder.Services.AddSlimMessageBus(busBuilder =>
-            {
-                busBuilder
-                    .WithProviderMemory(config =>
-                    {
-                        config.EnableBlockingPublish = false;
-                    })
-                    .AutoDeclareFrom(Assembly.GetExecutingAssembly());
-            });
+            builder.Services.AddSlimMessageBus(ApplicationEventBus.ConfigureConsumers);
 
             return builder;
         }

@@ -50,10 +50,10 @@ public class ProductUpdateWebhookTests(AppServerTestHost factory) : IAsyncLifeti
         variant.Sku.ShouldBe("BW-Tes");
         variant.Barcode.ShouldBe(expectedBarcode);
 
-        // assert — ProductVariantCreatedConsumer fired and called the Shopify GraphQL mutation
+        // assert — ShopifyVariantWritebackConsumer fired and called the Shopify GraphQL mutation
         await AsyncWait.UntilAsync(
             () => factory.ShopifyGraphQl.ReceivedCalls().Any(),
-            because: "ProductVariantCreatedConsumer should have run and called IShopifyGraphQlService.");
+            because: "ShopifyVariantWritebackConsumer should have run and called IShopifyGraphQlService.");
 
         await factory.ShopifyGraphQl.Received(1).ExecuteAsync<UpdateVariantsGraphResponse>(
             Arg.Is<string>(q => q.Contains("productVariantsBulkUpdate")),
@@ -177,12 +177,12 @@ public class ProductUpdateWebhookTests(AppServerTestHost factory) : IAsyncLifeti
         variant.Sku.ShouldBe(ourSku);
         variant.Barcode.ShouldBe(ourBarcode);
 
-        // assert — ProductVariantUpdatedConsumer fired and the GraphQL call carries OUR
+        // assert — ShopifyVariantWritebackConsumer fired and the GraphQL call carries OUR
         // SKU and barcode. The "variants" entry is an IEnumerable of anonymous types built
         // by ShopifyProductService.UpdateVariants, so we serialize to JSON to verify content.
         await AsyncWait.UntilAsync(
             () => factory.ShopifyGraphQl.ReceivedCalls().Any(),
-            because: "ProductVariantUpdatedConsumer should have run and pushed our SKU/barcode back to Shopify.");
+            because: "ShopifyVariantWritebackConsumer should have run and pushed our SKU/barcode back to Shopify.");
 
         var capturedVariables = factory.ShopifyGraphQl.ReceivedCalls()
             .Select(c => c.GetArguments()[1] as IDictionary<string, object?>)

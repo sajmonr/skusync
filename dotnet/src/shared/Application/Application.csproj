@@ -13,7 +13,8 @@
       <PackageReference Include="Quartz" />
       <PackageReference Include="Quartz.Extensions.Hosting" />
       <PackageReference Include="Quartz.Extensions.DependencyInjection" />
-      <PackageReference Include="SlimMessageBus.Host.Memory" />
+      <PackageReference Include="SlimMessageBus.Host.RabbitMQ" />
+      <PackageReference Include="SlimMessageBus.Host.Serialization.SystemTextJson" />
     </ItemGroup>
 
     <ItemGroup>

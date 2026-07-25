@@ -11,15 +11,16 @@ using Microsoft.Extensions.Logging;
 using NSubstitute;
 using NSubstitute.ClearExtensions;
 using Testcontainers.PostgreSql;
+using Testcontainers.RabbitMq;
 using WireMock.Server;
 
 namespace Tests.E2E.Infrastructure;
 
 /// <summary>
 /// Boots the real AppServer Generic Host — the owner of all background processing (SQS webhook
-/// consumption, Shopify webhook handlers, in-memory event consumers, scheduled jobs) — against
-/// a Testcontainers Postgres + WireMock + a substituted Shopify GraphQL client. Shared across
-/// the E2E collection so the container + WireMock cost is paid once.
+/// consumption, Shopify webhook handlers, RabbitMQ event consumers, scheduled jobs) — against
+/// Testcontainers Postgres + RabbitMQ + WireMock + a substituted Shopify GraphQL client. Shared
+/// across the E2E collection so the container + WireMock cost is paid once.
 /// </summary>
 /// <remarks>
 /// AppServer is a Generic Host worker with no HTTP surface, so this fixture composes the host
@@ -36,6 +37,9 @@ namespace Tests.E2E.Infrastructure;
 public class AppServerTestHost : IAsyncLifetime
 {
     private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:18.3")
+        .Build();
+
+    private readonly RabbitMqContainer _rabbitMq = new RabbitMqBuilder("rabbitmq:4-management-alpine")
         .Build();
 
     private IHost _host = null!;
@@ -73,6 +77,7 @@ public class AppServerTestHost : IAsyncLifetime
     async Task IAsyncLifetime.InitializeAsync()
     {
         await _postgres.StartAsync();
+        await _rabbitMq.StartAsync();
         WireMock = WireMockServer.Start();
 
         // Configuration reaches the host through environment variables:
@@ -81,6 +86,7 @@ public class AppServerTestHost : IAsyncLifetime
         // colons in .NET config keys.
         var skulabsBase = WireMock.Url!;
         SetEnv("ConnectionStrings__SkuSync", _postgres.GetConnectionString());
+        SetEnv("ConnectionStrings__RabbitMq", _rabbitMq.GetConnectionString());
         SetEnv("Shopify__ShopUrl", "https://e2e-test.myshopify.com");
         SetEnv("Shopify__ApiKey", "test-shopify-token");
         SetEnv("Skulabs__Api__BaseUrl", skulabsBase);
@@ -127,7 +133,7 @@ public class AppServerTestHost : IAsyncLifetime
         // Disable background services we don't want in tests, each toggled independently:
         //   - AWS SQS poller (would connect to real AWS)
         //   - Quartz scheduler (would fire cron jobs)
-        // Webhook handlers and consumers are invoked directly or via the in-memory bus.
+        // Webhook handlers are invoked directly; event consumers run off the RabbitMQ bus.
         var needles = new List<string>();
         if (!EnableSqsPolling)
         {
@@ -146,7 +152,7 @@ public class AppServerTestHost : IAsyncLifetime
         _host = builder.Build();
 
         // Run migrations against the container before starting hosted services, mirroring
-        // Program.cs so the in-memory bus and any remaining workloads see a current schema.
+        // Program.cs so the RabbitMQ consumers and any remaining workloads see a current schema.
         await _host.ApplyDatabaseMigrations();
         await _host.StartAsync();
     }
@@ -160,6 +166,7 @@ public class AppServerTestHost : IAsyncLifetime
         _host.Dispose();
         WireMock.Stop();
         WireMock.Dispose();
+        await _rabbitMq.DisposeAsync();
         await _postgres.DisposeAsync();
     }
 

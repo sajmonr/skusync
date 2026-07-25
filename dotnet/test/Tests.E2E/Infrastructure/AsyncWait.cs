@@ -2,8 +2,8 @@ namespace Tests.E2E.Infrastructure;
 
 /// <summary>
 /// Polls a predicate until it returns true or a timeout elapses. Used to wait for
-/// asynchronous side effects (e.g. SlimMessageBus consumers running with
-/// EnableBlockingPublish=false) without making tests rely on Thread.Sleep.
+/// asynchronous side effects (e.g. RabbitMQ consumers processing a published event on a
+/// background thread) without making tests rely on Thread.Sleep.
 /// </summary>
 internal static class AsyncWait
 {

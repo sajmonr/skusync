@@ -11,14 +11,14 @@ using Shouldly;
 
 namespace Tests.Application.Products.Events;
 
-public class ProductVariantUpdatedConsumerTests : IDisposable
+public class ShopifyVariantWritebackConsumerTests : IDisposable
 {
     private readonly ApplicationDbContext _dbContext;
     private readonly IShopifyProductService _shopifyProductService = Substitute.For<IShopifyProductService>();
     private readonly IFeatureManager _featureManager = Substitute.For<IFeatureManager>();
-    private readonly TestLogger<ProductVariantUpdatedConsumer> _logger = new();
+    private readonly TestLogger<ShopifyVariantWritebackConsumer> _logger = new();
 
-    public ProductVariantUpdatedConsumerTests()
+    public ShopifyVariantWritebackConsumerTests()
     {
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
@@ -29,7 +29,31 @@ public class ProductVariantUpdatedConsumerTests : IDisposable
     public void Dispose() => _dbContext.Dispose();
 
     [Fact]
-    public async Task OnHandle_ShouldUpdateShopifyVariant_WhenFeatureFlagEnabled()
+    public async Task OnHandle_ShouldUpdateShopifyVariant_WhenVariantCreatedAndFeatureFlagEnabled()
+    {
+        var entity = SeedVariant(
+            globalProductId: "gid://shopify/Product/100",
+            globalVariantId: "gid://shopify/ProductVariant/200",
+            sku: "SKU-200",
+            barcode: "BAR-200");
+        await _dbContext.SaveChangesAsync();
+        _featureManager.IsEnabledAsync(FeatureFlags.ShopifyWriteBack).Returns(true);
+
+        await CreateSut().OnHandle(
+            new ProductVariantCreatedEvent(entity.ShopifyProductVariantId),
+            CancellationToken.None);
+
+        await _shopifyProductService.Received(1).UpdateVariants(
+            "gid://shopify/Product/100",
+            Arg.Is<IEnumerable<ShopifyUpdateProductVariant>>(variants =>
+                variants.Count() == 1 &&
+                variants.Single().GlobalVariantId == "gid://shopify/ProductVariant/200" &&
+                variants.Single().Sku == "SKU-200" &&
+                variants.Single().Barcode == "BAR-200"));
+    }
+
+    [Fact]
+    public async Task OnHandle_ShouldUpdateShopifyVariant_WhenVariantUpdatedAndFeatureFlagEnabled()
     {
         var entity = SeedVariant(
             globalProductId: "gid://shopify/Product/100",
@@ -64,7 +88,7 @@ public class ProductVariantUpdatedConsumerTests : IDisposable
         _featureManager.IsEnabledAsync(FeatureFlags.ShopifyWriteBack).Returns(false);
 
         await CreateSut().OnHandle(
-            new ProductVariantUpdatedEvent(entity.ShopifyProductVariantId),
+            new ProductVariantCreatedEvent(entity.ShopifyProductVariantId),
             CancellationToken.None);
 
         await _shopifyProductService.DidNotReceive().UpdateVariants(
@@ -90,7 +114,7 @@ public class ProductVariantUpdatedConsumerTests : IDisposable
             e.Message.Contains("not found in the database")).ShouldBeTrue();
     }
 
-    private ProductVariantUpdatedConsumer CreateSut() =>
+    private ShopifyVariantWritebackConsumer CreateSut() =>
         new(_dbContext, _shopifyProductService, _featureManager, _logger);
 
     private ShopifyProductVariantEntity SeedVariant(string globalProductId, string globalVariantId,
