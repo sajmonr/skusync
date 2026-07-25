@@ -1,3 +1,20 @@
+<p-toast />
+
+<header class="sync-toolbar">
+  <button pButton type="button" [disabled]="sync.syncing()" (click)="syncNow()">
+    {{ sync.syncing() ? 'Syncing…' : 'Sync now' }}
+  </button>
+  <button
+    pButton
+    type="button"
+    severity="secondary"
+    [disabled]="store.loading() || sync.syncing()"
+    (click)="retry()"
+  >
+    Refresh
+  </button>
+</header>
+
 <app-item-sync-table
   [items]="store.items()"
   [totalCount]="store.totalCount()"
