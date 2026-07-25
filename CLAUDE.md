@@ -24,13 +24,16 @@ dotnet test SkuSync.slnx
 
 ### Run locally
 
-Run your own PostgreSQL (expected at `localhost:5433` by default), then launch the apps from the repo root with [process-compose](https://github.com/F1bonacc1/process-compose):
+Start the development dependencies (PostgreSQL on `localhost:5434`, RabbitMQ on `localhost:5674` / management UI `15674`) with the lightweight `compose.yaml`, then launch the apps from the repo root with [process-compose](https://github.com/F1bonacc1/process-compose):
 
 ```bash
+docker compose up -d              # Postgres + RabbitMQ, restart unless-stopped — leave running
 process-compose --no-server up
 ```
 
-Starts the `web-api` HTTP host (http://localhost:5257) and the Angular dashboard (http://localhost:4200), configured in `process-compose.yaml`. The database connection string is set there; adjust it to match your DB. Each host's Shopify / SkuLabs / AWS config comes from its .NET user secrets, which `dotnet run` loads automatically in Development. Background processing (`app.server`) is not launched by process-compose.
+Starts the `web-api` HTTP host (http://localhost:5257) and the Angular dashboard (http://localhost:4200), configured in `process-compose.yaml`. The dev connection strings in `appsettings.Development.json` already point at the `compose.yaml` services. Each host's Shopify / SkuLabs / AWS config comes from its .NET user secrets, which `dotnet run` loads automatically in Development. Background processing (`app.server`) is not launched by process-compose.
+
+For a full end-to-end run — every service **plus** the application containers in a fresh environment — use `compose.e2e.yaml` instead: `docker compose -f compose.e2e.yaml up --build`. It publishes Postgres on `5433` so it can run alongside the dev stack.
 
 ### Architecture
 
