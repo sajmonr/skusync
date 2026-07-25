@@ -71,7 +71,8 @@ public class ShopifyProductCreateWebhookHandler(
                 variant.Id, variant.Title, product.Id);
 
             var generatedSku = await skuGenerator.Generate(
-                product.Title, variant.Title, reservedSkus);
+                product.Title, variant.Title, reservedSkus,
+                fallbackSegment: variant.Id.ToString());
             reservedSkus.Add(generatedSku);
 
             logger.LogInformation(

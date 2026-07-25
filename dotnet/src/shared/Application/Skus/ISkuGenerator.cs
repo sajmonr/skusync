@@ -25,9 +25,15 @@ public interface ISkuGenerator
     /// the next variant so that two new variants of the same product never receive the
     /// same SKU.
     /// </param>
+    /// <param name="fallbackSegment">
+    /// A stable, alphanumeric identifier for the variant, used when the product title has
+    /// no alphanumeric characters. Callers should supply the Shopify variant ID.
+    /// </param>
     Task<string> Generate(
         string productTitle,
         string? variantTitle,
         ISet<string>? reservedInBatch = null,
-        CancellationToken cancellationToken = default);
+        string? fallbackSegment = null,
+        CancellationToken cancellationToken = default
+    );
 }

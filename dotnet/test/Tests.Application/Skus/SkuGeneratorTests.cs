@@ -228,22 +228,27 @@ public class SkuGeneratorTests : IDisposable
     // -------------------------------------------------------------------------
 
     [Fact]
-    public async Task Generate_Throws_WhenProductTitleIsEmpty()
+    public async Task Generate_UsesVariantIdFallback_WhenProductTitleIsEmpty()
     {
         var sut = CreateSut();
-        await Should.ThrowAsync<InvalidOperationException>(
-            () => sut.Generate("", "Small / Black"));
+        var sku = await sut.Generate("", "Small / Black", fallbackSegment: "123456789");
+        sku.ShouldBe("BW-123456789-SM-BL");
     }
 
     [Fact]
-    public async Task Generate_Throws_WhenProductTitleHasNoAlphanumericChars()
+    public async Task Generate_UsesVariantIdFallback_WhenProductTitleHasNoAlphanumericChars()
     {
-        // Punctuation-only / whitespace title strips down to nothing → no product abbrev
-        // → generator can't build a meaningful SKU and must surface the configuration error.
         var sut = CreateSut();
-        var exception = await Should.ThrowAsync<InvalidOperationException>(
-            () => sut.Generate("--- !!! ---", "Small / Black"));
-        exception.Message.ShouldContain("empty abbreviation");
+        var sku = await sut.Generate("--- !!! ---", "Small / Black", fallbackSegment: "123");
+        sku.ShouldBe("BW-123-SM-BL");
+    }
+
+    [Fact]
+    public async Task Generate_UsesSafeFallback_WhenProductAndFallbackSegmentsAreEmpty()
+    {
+        var sut = CreateSut();
+        var sku = await sut.Generate("🎁", "Default Title");
+        sku.ShouldBe("BW-Variant");
     }
 
     // -------------------------------------------------------------------------

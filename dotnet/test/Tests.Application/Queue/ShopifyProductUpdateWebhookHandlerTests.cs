@@ -7,6 +7,8 @@ using Infrastructure.Database.Entities;
 using Integration.Aws.Sqs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Microsoft.FeatureManagement;
 using NSubstitute;
 using Shouldly;
@@ -35,7 +37,7 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
 
         _skuGenerator.Generate(
                 Arg.Any<string>(), Arg.Any<string?>(),
-                Arg.Any<ISet<string>?>(), Arg.Any<CancellationToken>())
+                Arg.Any<ISet<string>?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(_ => Task.FromResult($"GEN-{Guid.NewGuid():N}"[..12]));
     }
 
@@ -359,11 +361,38 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
     }
 
     // -------------------------------------------------------------------------
+    // Unabbreviatable product titles (regression: issue #38 poison message)
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task Handle_ShouldNotThrow_AndAssignFallbackSku_WhenNewVariantTitleIsUnabbreviatable()
+    {
+        // An emoji-only title strips to an empty abbreviation. Before #38 the SKU generator
+        // threw when creating the new variant, and the exception propagated to the SQS handler,
+        // turning this webhook into a poison message that retried forever. It must now degrade to
+        // a variant-id-derived SKU. Uses the real generator so the throw path is exercised.
+        var product = CreateProduct(100, productTitle: "🎁",
+            CreateVariant(200, variantTitle: "Small / Black", sku: "", barcode: "BAR-A"));
+
+        await CreateSutWithRealGenerator().Handle(product);
+
+        var entity = await _dbContext.ShopifyProductVariants.SingleAsync();
+        entity.Sku.ShouldBe("BW-200-SM-BL");
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 
     private ShopifyProductUpdateWebhookHandler CreateSut() =>
         new(_dbContext, _logger, _messageBus, _featureManager, _skuGenerator);
+
+    private ShopifyProductUpdateWebhookHandler CreateSutWithRealGenerator()
+    {
+        var skuGenerator = new SkuGenerator(
+            _dbContext, Options.Create(new SkuGeneratorOptions()), NullLogger<SkuGenerator>.Instance);
+        return new(_dbContext, _logger, _messageBus, _featureManager, skuGenerator);
+    }
 
     private async Task AssertNoEventsPublished()
     {

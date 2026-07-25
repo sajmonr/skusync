@@ -195,4 +195,40 @@ public class ProductUpdateWebhookTests(AppServerTestHost factory) : IAsyncLifeti
         serializedVariants.ShouldContain(ourBarcode);
         serializedVariants.ShouldContain("gid://shopify/ProductVariant/46450996871329");
     }
+
+    [Fact]
+    public async Task ProductsUpdateWebhook_AssignsFallbackSku_AndDoesNotPoison_WhenNewVariantTitleIsUnabbreviatable()
+    {
+        // Regression for #38: an emoji-only title strips to an empty abbreviation. When the update
+        // handler creates the previously-unknown variant, the SKU generator used to throw, the
+        // handler propagated it, and SqsShopEventProductHandler returned a non-success status —
+        // turning this webhook into a poison message SQS retried forever. It must now degrade to a
+        // variant-id-derived SKU and complete successfully.
+        var envelope = await FixtureLoader.LoadAsync<SqsShopEventProductMessage>(
+            "Shopify/Webhooks/products-update-single-variant.json");
+        var poisoned = envelope with
+        {
+            Detail = envelope.Detail with
+            {
+                Payload = envelope.Detail.Payload with { Title = "🎁" }
+            }
+        };
+        var variantId = poisoned.Detail.Payload.Variants[0].Id;
+
+        factory.ShopifyGraphQl
+            .ExecuteAsync<UpdateVariantsGraphResponse>(
+                Arg.Any<string>(),
+                Arg.Any<IDictionary<string, object?>>())
+            .Returns(new UpdateVariantsGraphResponse(null));
+
+        // act — a throw here would mean the handler returned non-success (the poison symptom).
+        await Should.NotThrowAsync(() => factory.DispatchWebhookAsync(poisoned));
+
+        // assert — variant persisted with the variant-id fallback SKU (product title contributed
+        // nothing; the "Default Title" variant omits the variant segment).
+        using var scope = factory.Services.CreateScope();
+        await using var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var variant = await db.ShopifyProductVariants.SingleAsync(v => v.VariantId == variantId);
+        variant.Sku.ShouldBe($"BW-{variantId}");
+    }
 }

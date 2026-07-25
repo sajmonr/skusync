@@ -112,6 +112,12 @@ internal static class SkuAbbreviator
         return result;
     }
 
+    /// <summary>
+    /// Returns an alphanumeric segment suitable for use as a SKU fallback.
+    /// </summary>
+    public static string SanitizeSegment(string? value) =>
+        string.IsNullOrEmpty(value) ? string.Empty : StripNonAlphanumeric(value);
+
     private static string StripNonAlphanumeric(string input)
     {
         var builder = new StringBuilder(input.Length);
