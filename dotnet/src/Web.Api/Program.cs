@@ -1,3 +1,4 @@
+using Application;
 using FastEndpoints;
 using Infrastructure;
 using Infrastructure.Database;
@@ -22,10 +23,12 @@ builder.Services.AddCors(options => options.AddPolicy("dashboard", policy => pol
 // Add Serilog
 builder.Host.UseSerilog((context, loggerConfig) => loggerConfig.ReadFrom.Configuration(context.Configuration));
 
-// Web.Api serves HTTP only. All background processing — SQS webhook consumption, Shopify
-// webhook handlers, in-memory event consumers, and scheduled jobs — is owned by AppServer,
-// so this host registers none of it and requires no SQS/queue configuration to start.
+// Web.Api serves HTTP and can *produce* application events, but owns no background processing:
+// SQS webhook consumption, Shopify webhook handlers, RabbitMQ event *consumers*, and scheduled
+// jobs all belong to AppServer. AddApplication registers the event producers (and requires the
+// RabbitMq connection string); event consumption (AddEventProcessing) is deliberately not called.
 builder.AddInfrastructure()
+    .AddApplication()
     .AddPresentation();
 
 var dashboardAuthenticationOptions = builder.GetRequiredConfigValue<DashboardAuthenticationOptions>(

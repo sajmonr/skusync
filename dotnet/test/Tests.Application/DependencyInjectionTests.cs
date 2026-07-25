@@ -1,5 +1,6 @@
 using global::Application;
 using Application.Jobs.Maintenance;
+using Application.Products.Events;
 using Application.Products.Services;
 using Integration.Aws.Sqs;
 using Microsoft.Extensions.Configuration;
@@ -13,28 +14,42 @@ namespace Tests.Application;
 
 public class DependencyInjectionTests
 {
+    private const string RabbitMqConnectionString = "amqp://guest:guest@localhost:5672";
+
     [Fact]
-    public void AddApplication_ShouldRegisterCoreServicesWithoutProcessingInfrastructure()
+    public void AddApplication_ShouldRegisterCoreServicesAndEventProduction()
     {
-        var builder = CreateBuilder();
+        var builder = CreateBuilder(
+            new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:RabbitMq"] = RabbitMqConnectionString,
+            }
+        );
 
         builder.AddApplication();
 
         builder.Services.ShouldContain(descriptor =>
             descriptor.ServiceType == typeof(IProductsService)
         );
+        // Producing events is part of the Application layer, so the bus is registered here.
+        builder.Services.ShouldContain(descriptor =>
+            descriptor.ServiceType == typeof(IMessageBus)
+        );
+        // Consumers and other processing infrastructure are not — those are separate concerns.
         builder.Services.ShouldNotContain(descriptor =>
             descriptor.ServiceType == typeof(IShopifyWebhookHandler)
         );
         builder.Services.ShouldNotContain(descriptor =>
-            descriptor.ServiceType == typeof(IMessageBus)
-        );
-        builder.Services.ShouldNotContain(descriptor =>
             descriptor.ServiceType == typeof(IMaintenanceTask)
         );
-        builder.Services.ShouldNotContain(descriptor =>
-            descriptor.ServiceType == typeof(IHostedService)
-        );
+    }
+
+    [Fact]
+    public void AddApplication_ShouldThrow_WhenRabbitMqConnectionStringIsMissing()
+    {
+        var builder = CreateBuilder();
+
+        Should.Throw<InvalidOperationException>(() => builder.AddApplication());
     }
 
     [Fact]
@@ -53,13 +68,22 @@ public class DependencyInjectionTests
     }
 
     [Fact]
-    public void AddInMemoryEventProcessing_ShouldRegisterMessageBus()
+    public void AddEventProcessing_ShouldRegisterEventConsumers()
     {
-        var builder = CreateBuilder();
+        var builder = CreateBuilder(
+            new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:RabbitMq"] = RabbitMqConnectionString,
+            }
+        );
 
+        builder.AddApplication();
         builder.AddEventProcessing();
 
         builder.Services.ShouldContain(descriptor => descriptor.ServiceType == typeof(IMessageBus));
+        builder.Services.ShouldContain(descriptor =>
+            descriptor.ServiceType == typeof(ShopifyVariantWritebackConsumer)
+        );
     }
 
     [Fact]

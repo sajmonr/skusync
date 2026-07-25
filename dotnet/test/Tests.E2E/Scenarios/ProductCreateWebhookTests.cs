@@ -46,10 +46,10 @@ public class ProductCreateWebhookTests(AppServerTestHost factory) : IAsyncLifeti
         variant.Sku.ShouldBe("BW-Tes");
         variant.Barcode.ShouldBe(expectedBarcode);
 
-        // assert — ProductVariantCreatedConsumer fired and called the Shopify GraphQL mutation
+        // assert — ShopifyVariantWritebackConsumer fired and called the Shopify GraphQL mutation
         await AsyncWait.UntilAsync(
             () => factory.ShopifyGraphQl.ReceivedCalls().Any(),
-            because: "ProductVariantCreatedConsumer should have run and called IShopifyGraphQlService.");
+            because: "ShopifyVariantWritebackConsumer should have run and called IShopifyGraphQlService.");
 
         await factory.ShopifyGraphQl.Received(1).ExecuteAsync<UpdateVariantsGraphResponse>(
             Arg.Is<string>(q => q.Contains("productVariantsBulkUpdate")),

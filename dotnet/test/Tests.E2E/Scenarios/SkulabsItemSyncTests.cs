@@ -139,7 +139,7 @@ public class SkulabsItemSyncTests(AppServerTestHost factory) : IAsyncLifetime
         // Quartz's AddJob<T> doesn't register the job class itself in the DI container,
         // so we resolve its dependencies and construct it directly. This still exercises
         // the real sync service, real SkuLabs HTTP client (hitting WireMock), real DbContext
-        // and real in-memory message bus end-to-end.
+        // and real RabbitMQ message bus end-to-end.
         using var scope = factory.Services.CreateScope();
         var syncService = scope.ServiceProvider.GetRequiredService<ISkulabsItemSyncService>();
         var messageBus = scope.ServiceProvider.GetRequiredService<IMessageBus>();

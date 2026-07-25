@@ -34,7 +34,7 @@ public class AppServerCompositionTests(AppServerTestHost factory)
     }
 
     [Fact]
-    public void AppServer_RegistersInMemoryEventBus()
+    public void AppServer_RegistersRabbitMqEventBus()
     {
         factory.RegisteredServices.ShouldContain(descriptor =>
             descriptor.ServiceType == typeof(IMessageBus));
