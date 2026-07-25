@@ -60,6 +60,10 @@ public static class DependencyInjection
                 IShopifyWebhookHandler,
                 ShopifyProductCreateWebhookHandler
             >();
+            builder.Services.AddTransient<
+                IShopifyWebhookHandler,
+                ShopifyProductDeleteWebhookHandler
+            >();
 
             return builder;
         }

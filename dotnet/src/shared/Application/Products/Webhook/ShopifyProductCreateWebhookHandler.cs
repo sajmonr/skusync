@@ -26,7 +26,7 @@ public class ShopifyProductCreateWebhookHandler(
 {
 
     /// <inheritdoc/>
-    public string TopicName => "products/create";
+    public string TopicName => ShopifyWebhookTopic.ProductsCreate;
 
     /// <summary>
     /// Persists all variants of the newly created product and pushes the generated SKU

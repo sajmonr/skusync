@@ -1,0 +1,26 @@
+{
+  "version": "0",
+  "id": "b27f0782-2a9d-e6f8-e3a2-3d4afc4dfd9d",
+  "detail-type": "shopifyWebhook",
+  "source": "aws.partner/shopify.com/66645229569/shopify-order-creation",
+  "account": "776952074202",
+  "time": "2026-05-21T22:45:12Z",
+  "region": "us-east-1",
+  "resources": [],
+  "detail": {
+    "payload": {
+      "id": 8521775284385
+    },
+    "metadata": {
+      "Content-Type": "application/json",
+      "X-Shopify-Topic": "products/delete",
+      "X-Shopify-Shop-Domain": "ivyandlavyboutique.myshopify.com",
+      "X-Shopify-Product-Id": "8521775284385",
+      "X-Shopify-Hmac-SHA256": "hLFW5Xzd1BWneV1LSOsIPOS4gv53CgOCJTM+0pyVIcg=",
+      "X-Shopify-Webhook-Id": "7390b3f6-c812-6406-bdcd-f981ddeb086f",
+      "X-Shopify-API-Version": "2025-07",
+      "X-Shopify-Event-Id": "d590e9cf-a2d3-5341-935f-52f8ed2f7d7d",
+      "X-Shopify-Triggered-At": "2026-05-21T22:45:12.322319977Z"
+    }
+  }
+}

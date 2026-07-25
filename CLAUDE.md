@@ -161,6 +161,9 @@ npm run lint
 - Don't reference current tasks, PRs, or callers in comments — those belong in the PR description and rot quickly.
 
 ## Git
+- **Issue tracking is GitHub only** — this project uses GitHub issues and GitHub Projects exclusively. Never use, suggest, or offer to create Shortcut tickets (Shortcut belongs to a different project). File follow-ups and dependencies as GitHub issues via `gh issue create`.
+- Feature work on a branch off `develop`, in a worktree under `.claude/worktrees/<name>`. PRs target `develop`. Don't push to `main` directly.
+- When running inside a worktree (cwd under `.claude/worktrees/`), every file edit must use a path under that worktree — either relative, or an absolute path that begins with the worktree root. Never edit `/Users/<you>/repos/.../skusync/dotnet/...` directly; that's the main checkout (usually `develop`) and changes there bypass the feature branch. A `PreToolUse` hook in [.claude/settings.json](.claude/settings.json) enforces this.
 - Feature work on a branch off `main`, in a worktree under `.claude/worktrees/<name>`. PRs target `main`. Don't push to `main` directly.
 - When running inside a worktree (cwd under `.claude/worktrees/`), every file edit must use a path under that worktree — either relative, or an absolute path that begins with the worktree root. Never edit `/Users/<you>/repos/.../skusync/dotnet/...` directly; that's the main checkout and changes there bypass the feature branch. A `PreToolUse` hook in [.claude/settings.json](.claude/settings.json) enforces this.
 - Commit subjects: imperative, short (≤72 chars). Body explains the why and any non-obvious impact.
