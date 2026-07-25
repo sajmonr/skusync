@@ -56,4 +56,40 @@ public class ProductCreateWebhookTests(AppServerTestHost factory) : IAsyncLifeti
             Arg.Is<IDictionary<string, object?>>(vars =>
                 (string)vars["productId"]! == payload.AdminGraphqlApiId));
     }
+
+    [Fact]
+    public async Task ProductsCreateWebhook_AssignsFallbackSku_AndDoesNotPoison_WhenProductTitleIsUnabbreviatable()
+    {
+        // Regression for #38: an emoji-only title strips to an empty abbreviation. The SKU
+        // generator used to throw, the webhook handler propagated it, and SqsShopEventProductHandler
+        // returned a non-success status — turning this webhook into a poison message SQS retried
+        // forever. It must now degrade to a variant-id-derived SKU and complete successfully.
+        var envelope = await FixtureLoader.LoadAsync<SqsShopEventProductMessage>(
+            "Shopify/Webhooks/products-create-single-variant.json");
+        var poisoned = envelope with
+        {
+            Detail = envelope.Detail with
+            {
+                Payload = envelope.Detail.Payload with { Title = "🎁" }
+            }
+        };
+        var variantId = poisoned.Detail.Payload.Variants[0].Id;
+
+        factory.ShopifyGraphQl
+            .ExecuteAsync<UpdateVariantsGraphResponse>(
+                Arg.Any<string>(),
+                Arg.Any<IDictionary<string, object?>>())
+            .Returns(new UpdateVariantsGraphResponse(null));
+
+        // act — a throw here would mean the handler returned non-success (the poison symptom).
+        await Should.NotThrowAsync(() => factory.DispatchWebhookAsync(poisoned));
+
+        // assert — variant persisted with the variant-id fallback SKU (product title contributed
+        // nothing; the "Default Title" variant omits the variant segment).
+        using var scope = factory.Services.CreateScope();
+        await using var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var variant = await dbContext.ShopifyProductVariants
+            .SingleAsync(v => v.VariantId == variantId);
+        variant.Sku.ShouldBe($"BW-{variantId}");
+    }
 }

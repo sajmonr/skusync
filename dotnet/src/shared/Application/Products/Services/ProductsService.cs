@@ -285,7 +285,8 @@ public class ProductsService(
         }
 
         var sku = await skuGenerator.Generate(
-            shopifyVariant.ProductTitle, shopifyVariant.VariantTitle, reservedSkus);
+            shopifyVariant.ProductTitle, shopifyVariant.VariantTitle, reservedSkus,
+            fallbackSegment: shopifyVariant.VariantId.ToString());
         reservedSkus.Add(sku);
         logger.LogInformation(
             "Shopify variant {GlobalVariantId} had no SKU; assigning generated SKU '{Sku}'.",
@@ -460,7 +461,8 @@ public class ProductsService(
             else
             {
                 newSku = await skuGenerator.Generate(
-                    shopifyVariant.ProductTitle, shopifyVariant.VariantTitle, reservedSkus);
+                    shopifyVariant.ProductTitle, shopifyVariant.VariantTitle, reservedSkus,
+                    fallbackSegment: shopifyVariant.VariantId.ToString());
                 reservedSkus.Add(newSku);
             }
 

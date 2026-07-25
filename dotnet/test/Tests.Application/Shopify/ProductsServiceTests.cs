@@ -6,6 +6,8 @@ using Infrastructure.Database.Entities;
 using Integration.Shopify.Products;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Shouldly;
@@ -186,7 +188,7 @@ public class ProductsServiceTests : IDisposable
     {
         _skuGenerator.Generate(
                 "T-Shirt", "Large",
-                Arg.Any<ISet<string>?>(), Arg.Any<CancellationToken>())
+                Arg.Any<ISet<string>?>(), "200", Arg.Any<CancellationToken>())
             .Returns(Task.FromResult("BW-TSh-LG"));
 
         _shopifyProductService.GetProducts().Returns(
@@ -227,7 +229,7 @@ public class ProductsServiceTests : IDisposable
 
         _skuGenerator.Generate(
                 "T-Shirt", "Large",
-                Arg.Any<ISet<string>?>(), Arg.Any<CancellationToken>())
+                Arg.Any<ISet<string>?>(), "200", Arg.Any<CancellationToken>())
             .Returns(Task.FromResult("BW-TSh-LG"));
 
         _shopifyProductService.GetProducts().Returns(
@@ -258,7 +260,7 @@ public class ProductsServiceTests : IDisposable
     {
         _skuGenerator.Generate(
                 Arg.Any<string>(), Arg.Any<string?>(),
-                Arg.Any<ISet<string>?>(), Arg.Any<CancellationToken>())
+                Arg.Any<ISet<string>?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("generator unhappy"));
 
         _shopifyProductService.GetProducts().Returns(
@@ -288,6 +290,52 @@ public class ProductsServiceTests : IDisposable
 
         // The exception is logged at Error level.
         _logger.Entries.ShouldContain(e => e.LogLevel == LogLevel.Error);
+    }
+
+    [Fact]
+    public async Task ImportProducts_ShouldImportBadAndGoodProducts_WhenOneTitleIsUnabbreviatable()
+    {
+        // Regression for #38: an emoji-only title strips to an empty abbreviation. The SKU
+        // generator used to throw, and the catch in ImportProductsFromShopify failed the whole
+        // batch — one bad product aborted every other product in the import. It must now fall
+        // back to a variant-id-derived SKU so the bad product imports alongside the good ones.
+        // Uses the real generator so the throw path is exercised.
+        _shopifyProductService.GetProducts().Returns(
+        [
+            new ShopifyProductVariant(
+                "gid://shopify/Product/100",
+                "gid://shopify/ProductVariant/200",
+                "🎁 - Small / Black",
+                Sku: "",
+                Barcode: "BAR-1")
+            {
+                ProductTitle = "🎁",
+                VariantTitle = "Small / Black",
+            },
+            new ShopifyProductVariant(
+                "gid://shopify/Product/101",
+                "gid://shopify/ProductVariant/201",
+                "Basic Tee - Large",
+                Sku: "SKU-OK",
+                Barcode: "BAR-2")
+            {
+                ProductTitle = "Basic Tee",
+                VariantTitle = "Large",
+            }
+        ]);
+
+        var result = await CreateSutWithRealGenerator().ImportProductsFromShopify();
+
+        result.IsSuccess.ShouldBeTrue();
+        result.Created.ShouldBe(2);
+
+        var unabbreviatable = await _dbContext.Set<ShopifyProductVariantEntity>()
+            .SingleAsync(v => v.GlobalVariantId == "gid://shopify/ProductVariant/200");
+        unabbreviatable.Sku.ShouldBe("BW-200-SM-BL");
+
+        var good = await _dbContext.Set<ShopifyProductVariantEntity>()
+            .SingleAsync(v => v.GlobalVariantId == "gid://shopify/ProductVariant/201");
+        good.Sku.ShouldBe("SKU-OK");
     }
 
     [Fact]
@@ -938,6 +986,13 @@ public class ProductsServiceTests : IDisposable
     }
 
     private ProductsService CreateSut() => new(_shopifyProductService, _dbContext, _logger, _messageBus, _skuGenerator);
+
+    private ProductsService CreateSutWithRealGenerator()
+    {
+        var skuGenerator = new SkuGenerator(
+            _dbContext, Options.Create(new SkuGeneratorOptions()), NullLogger<SkuGenerator>.Instance);
+        return new(_shopifyProductService, _dbContext, _logger, _messageBus, skuGenerator);
+    }
 
     private sealed class TestLogger<T> : ILogger<T>
     {
