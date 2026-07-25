@@ -8,6 +8,7 @@ using Application.Skulabs.Jobs;
 using Application.Skulabs.Maintenance;
 using Application.Skulabs.Services;
 using Application.Skus;
+using Integration;
 using Integration.Aws.Sqs;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -34,6 +35,7 @@ public static class DependencyInjection
         /// <returns>The builder instance for further chaining.</returns>
         public T AddApplication()
         {
+            builder.AddIntegration();
             builder.Services.AddFeatureManagement();
             builder.AddOptionsFromConfiguration<SkuGeneratorOptions>(
                 SkuGeneratorOptions.SectionKey
@@ -46,16 +48,19 @@ public static class DependencyInjection
             builder.Services.AddTransient<ISkulabsTitleSyncService, SkulabsTitleSyncService>();
 
             var connectionString = builder.Configuration.GetConnectionString(
-                ApplicationEventBus.ConnectionStringName);
+                ApplicationEventBus.ConnectionStringName
+            );
             if (string.IsNullOrWhiteSpace(connectionString))
             {
                 throw new InvalidOperationException(
-                    $"A '{ApplicationEventBus.ConnectionStringName}' connection string is required to publish " +
-                    "application events. Set ConnectionStrings:RabbitMq (e.g. via an environment variable).");
+                    $"A '{ApplicationEventBus.ConnectionStringName}' connection string is required to publish "
+                        + "application events. Set ConnectionStrings:RabbitMq (e.g. via an environment variable)."
+                );
             }
 
-            builder.Services.AddSlimMessageBus(
-                busBuilder => ApplicationEventBus.ConfigureProducers(busBuilder, connectionString));
+            builder.Services.AddSlimMessageBus(busBuilder =>
+                ApplicationEventBus.ConfigureProducers(busBuilder, connectionString)
+            );
 
             return builder;
         }

@@ -1,7 +1,6 @@
 using Application;
 using Infrastructure;
 using Integration;
-using Microsoft.Extensions.Hosting;
 
 namespace AppServer;
 
@@ -19,7 +18,7 @@ public static class DependencyInjection
         /// <returns>The builder instance for further chaining.</returns>
         public T AddAppServer()
         {
-            builder.AddIntegration()
+            builder
                 .AddSqsWebhookConsumer()
                 .AddInfrastructure()
                 .AddApplication()
