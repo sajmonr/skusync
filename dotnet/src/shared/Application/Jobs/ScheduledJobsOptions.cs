@@ -3,67 +3,38 @@ using System.ComponentModel.DataAnnotations;
 namespace Application.Jobs;
 
 /// <summary>
-/// Root options class for all scheduled job configuration, bound to the <c>ScheduledJobs</c>
-/// configuration section. Add a new <see cref="JobScheduleOptions"/> property here for each
-/// additional job introduced to the application.
+/// Schedule configuration for the Hangfire recurring maintenance jobs, bound to the
+/// <c>ScheduledJobs</c> section. Each job is independent and staggered by cron so the ordered
+/// sweep — Shopify product sync, then SKU/barcode, then SkuLabs title — runs without overlapping,
+/// and a failing job never blocks the others.
 /// </summary>
 public class ScheduledJobsOptions
 {
     /// <summary>The configuration section key used to bind this options class.</summary>
     public const string SectionKey = "ScheduledJobs";
 
-    /// <summary>
-    /// Gets the schedule configuration for the SkuLabs item synchronization job.
-    /// </summary>
     [Required]
-    public JobScheduleOptions SkulabsItemSync { get; init; } = JobScheduleOptions.Disabled;
+    public RecurringJobOptions ShopifyProductSync { get; init; } = new();
 
-    /// <summary>
-    /// Gets the schedule configuration for the nightly product-maintenance job, which runs
-    /// every registered <c>IMaintenanceTask</c> (Shopify product sync, SKU/barcode drift
-    /// reconciliation, ...) in sequence within a single scheduled slot.
-    /// </summary>
     [Required]
-    public JobScheduleOptions ProductMaintenance { get; init; } = JobScheduleOptions.Disabled;
+    public RecurringJobOptions SkuAndBarcodeSync { get; init; } = new();
+
+    [Required]
+    public RecurringJobOptions SkulabsTitleSync { get; init; } = new();
+
+    [Required]
+    public RecurringJobOptions SkulabsItemSync { get; init; } = new();
 }
 
 /// <summary>
-/// Defines the scheduling behaviour for a single Quartz.NET job. Each job reads its own
-/// instance of this class from a named subsection of <c>ScheduledJobs</c>.
+/// Scheduling for a single Hangfire recurring job. <see cref="Cron"/> is a standard 5-field cron
+/// expression (Cronos syntax). A disabled job is removed from the schedule rather than registered.
 /// </summary>
-public class JobScheduleOptions
+public class RecurringJobOptions
 {
-    /// <summary>
-    /// Gets the Quartz cron expression that controls when the job fires.
-    /// Defaults to <c>0 0 * * * ?</c> (top of every hour).
-    /// </summary>
-    public string CronExpression { get; init; } = "0 0 * * * ?";
+    /// <summary>Standard (Cronos) 5-field cron expression. Defaults to daily at midnight.</summary>
+    public string Cron { get; init; } = "0 0 * * *";
 
-    /// <summary>
-    /// Gets a value indicating whether the job should fire immediately when the
-    /// application starts, in addition to its regular cron schedule.
-    /// </summary>
-    public bool RunOnStart { get; init; }
-
-    /// <summary>
-    /// Gets the maximum random delay (in milliseconds) applied to the startup trigger when
-    /// <see cref="RunOnStart"/> is <c>true</c>. The actual delay is sampled uniformly
-    /// from <c>[0, StartupJitterMs]</c> at scheduler-build time, so multiple jobs that
-    /// share <c>RunOnStart</c> don't all hammer downstream services at boot.
-    /// Has no effect on the cron trigger or when <see cref="RunOnStart"/> is <c>false</c>.
-    /// Defaults to <c>0</c> (no jitter — preserves prior behaviour).
-    /// </summary>
-    public int StartupJitterMs { get; init; }
-
-    /// <summary>
-    /// Gets a value indicating whether this job is enabled. When <c>false</c> the job is
-    /// not registered with the Quartz scheduler at all and will never execute.
-    /// </summary>
+    /// <summary>When <c>false</c>, the recurring job is removed from the schedule and never fires.</summary>
     public bool Enabled { get; init; } = true;
-
-    /// <summary>
-    /// Provides a pre-configured instance of <see cref="JobScheduleOptions"/> with the job
-    /// explicitly disabled by setting the <see cref="Enabled"/> property to <c>false</c>.
-    /// </summary>
-    public static JobScheduleOptions Disabled => new() { Enabled = false };
 }

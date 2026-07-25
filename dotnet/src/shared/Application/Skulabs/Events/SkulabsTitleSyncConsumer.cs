@@ -28,7 +28,7 @@ public class SkulabsTitleSyncConsumer(
         catch (Exception exception)
         {
             // Swallow per-variant failures so a single bad item doesn't poison the consumer.
-            // The periodic SkulabsTitleSyncTask will retry.
+            // The periodic SkuLabs title sweep will retry.
             logger.LogError(
                 exception,
                 "SkuLabs title sync failed for created variant {VariantId}. The periodic title sync will retry.",

@@ -1,11 +1,8 @@
 ﻿using Application.Jobs;
-using Application.Jobs.Maintenance;
 using Application.Messaging;
-using Application.Products.Maintenance;
+using Hangfire;
 using Application.Products.Services;
 using Application.Products.Webhook;
-using Application.Skulabs.Jobs;
-using Application.Skulabs.Maintenance;
 using Application.Skulabs.Services;
 using Application.Skus;
 using Integration;
@@ -14,7 +11,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.FeatureManagement;
-using Quartz;
 using SharedKernel.Options;
 using SlimMessageBus.Host;
 
@@ -62,6 +58,44 @@ public static class DependencyInjection
                 ApplicationEventBus.ConfigureProducers(busBuilder, connectionString)
             );
 
+            // Hangfire client: every host that has the Application layer can enqueue background
+            // jobs (Web.Api enqueues; AppServer both enqueues and processes). Processing is a
+            // separate opt-in — see AddHangfireProcessing.
+            var hangfireConnection = builder.Configuration.GetConnectionString(
+                HangfireConfiguration.ConnectionStringName
+            );
+            if (string.IsNullOrWhiteSpace(hangfireConnection))
+            {
+                throw new InvalidOperationException(
+                    $"A '{HangfireConfiguration.ConnectionStringName}' connection string is required for "
+                        + "Hangfire background-job storage."
+                );
+            }
+
+            builder.Services.AddHangfire(config =>
+                HangfireConfiguration.Configure(config, hangfireConnection)
+            );
+
+            return builder;
+        }
+
+        /// <summary>
+        /// Registers the Hangfire background-job <em>server</em> that dequeues and executes jobs from
+        /// shared storage. Only hosts responsible for processing jobs (currently AppServer) should
+        /// call this, and only after <see cref="AddApplication"/>, which establishes the Hangfire
+        /// client and storage.
+        /// </summary>
+        /// <returns>The builder instance for further chaining.</returns>
+        public T AddHangfireProcessing()
+        {
+            builder.Services.AddHangfireServer();
+
+            builder.Services.AddTransient<RecurringJobs>();
+            builder.AddOptionsFromConfiguration<ScheduledJobsOptions>(
+                ScheduledJobsOptions.SectionKey
+            );
+            builder.Services.AddHostedService<RecurringJobRegistrar>();
+
             return builder;
         }
 
@@ -98,45 +132,6 @@ public static class DependencyInjection
         public T AddEventProcessing()
         {
             builder.Services.AddSlimMessageBus(ApplicationEventBus.ConfigureConsumers);
-
-            return builder;
-        }
-
-        /// <summary>
-        /// Registers maintenance tasks, Quartz jobs, and the hosted Quartz scheduler. Only hosts
-        /// responsible for scheduled background processing should call this method.
-        /// </summary>
-        /// <returns>The builder instance for further chaining.</returns>
-        public T AddScheduledJobs()
-        {
-            builder.Services.AddTransient<IMaintenanceTask, ShopifyProductSyncTask>();
-            builder.Services.AddTransient<IMaintenanceTask, SkuAndBarcodeSyncTask>();
-            builder.Services.AddTransient<IMaintenanceTask, SkulabsTitleSyncTask>();
-
-            builder.AddOptionsFromConfiguration<ScheduledJobsOptions>(
-                ScheduledJobsOptions.SectionKey
-            );
-            var scheduledJobsOptions = builder.GetRequiredConfigValue<ScheduledJobsOptions>(
-                ScheduledJobsOptions.SectionKey
-            );
-
-            builder.Services.AddQuartz(quartz =>
-            {
-                quartz.AddScheduledJob<SkulabsItemSyncJob>(
-                    SkulabsItemSyncJob.Key,
-                    scheduledJobsOptions.SkulabsItemSync
-                );
-
-                quartz.AddScheduledJob<ProductMaintenanceJob>(
-                    ProductMaintenanceJob.Key,
-                    scheduledJobsOptions.ProductMaintenance
-                );
-            });
-
-            builder.Services.AddQuartzHostedService(options =>
-            {
-                options.WaitForJobsToComplete = true;
-            });
 
             return builder;
         }

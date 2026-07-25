@@ -27,10 +27,12 @@ public class AppServerCompositionTests(AppServerTestHost factory)
     }
 
     [Fact]
-    public void AppServer_RegistersQuartzHostedService()
+    public void AppServer_RegistersRecurringJobRegistrarHostedService()
     {
+        // Proves the Hangfire processing composition (AddHangfireProcessing) is wired in; the
+        // Hangfire server itself is registered via a factory, so we assert on our own registrar.
         HostedServiceImplementationNames()
-            .ShouldContain(name => name.Contains("Quartz", StringComparison.OrdinalIgnoreCase));
+            .ShouldContain(name => name.Contains("RecurringJobRegistrar", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

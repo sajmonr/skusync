@@ -16,6 +16,21 @@ public class ProductsService(
     IMessageBus messageBus,
     ISkuGenerator skuGenerator) : IProductsService
 {
+    public async Task Sync(CancellationToken cancellationToken = default)
+    {
+        var import = await ImportProductsFromShopify();
+        if (!import.IsSuccess)
+        {
+            throw new InvalidOperationException($"Shopify product import failed: {import.Error}");
+        }
+
+        var deduplication = await DeduplicateProducts();
+        if (!deduplication.IsSuccess)
+        {
+            throw new InvalidOperationException($"Product deduplication failed: {deduplication.Error}");
+        }
+    }
+
     public async Task<ProductImportResult> ImportProductsFromShopify()
     {
         logger.LogDebug("Starting Shopify product synchronization.");

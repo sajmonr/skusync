@@ -1,15 +1,9 @@
-using Application.Skulabs.Jobs;
-using Application.Skulabs.Services;
+using Application.Jobs;
 using Infrastructure.Database;
 using Infrastructure.Database.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using Microsoft.FeatureManagement;
-using NSubstitute;
-using Quartz;
 using Shouldly;
-using SlimMessageBus;
 using Tests.E2E.Infrastructure;
 using WireMock.RequestBuilders;
 using WireMock.ResponseBuilders;
@@ -136,25 +130,12 @@ public class SkulabsItemSyncTests(AppServerTestHost factory) : IAsyncLifetime
 
     private async Task RunSyncJobAsync()
     {
-        // Quartz's AddJob<T> doesn't register the job class itself in the DI container,
-        // so we resolve its dependencies and construct it directly. This still exercises
-        // the real sync service, real SkuLabs HTTP client (hitting WireMock), real DbContext
-        // and real RabbitMQ message bus end-to-end.
+        // Invoke the recurring-job entry point directly (rather than waiting for the Hangfire
+        // schedule) so the test exercises the real sync service, real SkuLabs HTTP client
+        // (hitting WireMock), real DbContext and real RabbitMQ message bus end-to-end.
         using var scope = factory.Services.CreateScope();
-        var syncService = scope.ServiceProvider.GetRequiredService<ISkulabsItemSyncService>();
-        var messageBus = scope.ServiceProvider.GetRequiredService<IMessageBus>();
-        var featureManager = scope.ServiceProvider.GetRequiredService<IFeatureManager>();
-        var logger = scope.ServiceProvider.GetRequiredService<ILogger<SkulabsItemSyncJob>>();
-        var job = new SkulabsItemSyncJob(syncService, messageBus, featureManager, logger);
-
-        var context = Substitute.For<IJobExecutionContext>();
-        var trigger = Substitute.For<ITrigger>();
-        trigger.Key.Returns(new TriggerKey("e2e-trigger"));
-        context.Trigger.Returns(trigger);
-        context.CancellationToken.Returns(CancellationToken.None);
-        context.FireTimeUtc.Returns(DateTimeOffset.UtcNow);
-
-        await job.Execute(context);
+        var recurringJobs = scope.ServiceProvider.GetRequiredService<RecurringJobs>();
+        await recurringJobs.SyncSkulabsItems(CancellationToken.None);
     }
 
     private async Task StubSkulabsGetAllAsync(string fixtureRelativePath)
