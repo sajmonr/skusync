@@ -38,16 +38,21 @@ docker compose up -d
 Then launch the apps with [process-compose](https://github.com/F1bonacc1/process-compose):
 
 ```bash
-process-compose --no-server up
+process-compose -f process-compose.yaml --no-server up
 ```
 
-This starts the `web-api` HTTP host (<http://localhost:5257>) and the Angular
-dashboard (<http://localhost:4200>). The `--no-server` flag prevents Process Compose
-from binding its HTTP server to port `8080`. The database connection string is set
+This starts the `web-api` HTTP host (<http://localhost:5257>), the `app-server`
+background worker, and the Angular dashboard (<http://localhost:4200>). The `--no-server` flag prevents Process Compose
+from binding its HTTP server to port `8080`. The `-f process-compose.yaml` is
+required because Process Compose also treats `compose.yaml` as one of its default
+config file names — with both present in the repo root it would otherwise load the
+Docker Compose file and fail to start any app processes. The database connection string is set
 in [`process-compose.yaml`](process-compose.yaml); each host's Shopify / SkuLabs / AWS
 configuration is read from its .NET user secrets, which `dotnet run` loads
 automatically in Development, so no secret environment variables need to be set.
-Background processing (`app.server`) is not started here.
+`app-server` owns background processing — RabbitMQ event consumers, Shopify webhook
+handlers, the SQS poller, and Quartz jobs — so a manual product sync's SKU/barcode
+write-back is handled end-to-end.
 
 ### Dashboard authentication
 
