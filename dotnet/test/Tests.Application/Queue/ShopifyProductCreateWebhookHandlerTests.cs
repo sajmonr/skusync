@@ -7,6 +7,8 @@ using Infrastructure.Database.Entities;
 using Integration.Aws.Sqs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Microsoft.FeatureManagement;
 using NSubstitute;
 using Shouldly;
@@ -38,7 +40,7 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
         // directly should override this per-test.
         _skuGenerator.Generate(
                 Arg.Any<string>(), Arg.Any<string?>(),
-                Arg.Any<ISet<string>?>(), Arg.Any<CancellationToken>())
+                Arg.Any<ISet<string>?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(_ => Task.FromResult($"GEN-{Guid.NewGuid():N}"[..12]));
     }
 
@@ -81,7 +83,7 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
     {
         _skuGenerator.Generate(
                 "T-Shirt", "Large",
-                Arg.Any<ISet<string>?>(), Arg.Any<CancellationToken>())
+                Arg.Any<ISet<string>?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult("BW-TSh-LG"));
 
         var product = CreateProduct("gid://shopify/Product/100", 100,
@@ -106,6 +108,7 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
             "T-Shirt",
             "Small / Black",
             Arg.Any<ISet<string>?>(),
+            "200",
             Arg.Any<CancellationToken>());
     }
 
@@ -119,7 +122,7 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
         _skuGenerator.Generate(
                 Arg.Any<string>(), Arg.Any<string?>(),
                 Arg.Do<ISet<string>?>(s => snapshots.Add(s?.ToArray() ?? [])),
-                Arg.Any<CancellationToken>())
+                Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(_ => Task.FromResult($"BW-{Guid.NewGuid():N}"[..10]));
 
         var product = CreateProduct("gid://shopify/Product/100", 100,
@@ -266,11 +269,38 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
     }
 
     // -------------------------------------------------------------------------
+    // Unabbreviatable product titles (regression: issue #38 poison message)
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task Handle_ShouldNotThrow_AndAssignFallbackSku_WhenProductTitleIsUnabbreviatable()
+    {
+        // An emoji-only title strips to an empty abbreviation. Before #38 the SKU generator
+        // threw here, and the exception propagated to the SQS handler, turning this webhook
+        // into a poison message that retried forever. It must now degrade to a variant-id-derived
+        // SKU and persist the variant. Uses the real generator so the throw path is exercised.
+        var product = CreateProductWithTitle("gid://shopify/Product/100", 100, "🎁",
+            CreateNoSkuVariant("gid://shopify/ProductVariant/200", 200, "Small / Black"));
+
+        await CreateSutWithRealGenerator().Handle(product);
+
+        var entity = await _dbContext.ShopifyProductVariants.SingleAsync();
+        entity.Sku.ShouldBe("BW-200-SM-BL");
+    }
+
+    // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 
     private ShopifyProductCreateWebhookHandler CreateSut() =>
         new(_dbContext, _logger, _messageBus, _featureManager, _skuGenerator);
+
+    private ShopifyProductCreateWebhookHandler CreateSutWithRealGenerator()
+    {
+        var skuGenerator = new SkuGenerator(
+            _dbContext, Options.Create(new SkuGeneratorOptions()), NullLogger<SkuGenerator>.Instance);
+        return new(_dbContext, _logger, _messageBus, _featureManager, skuGenerator);
+    }
 
     private void SeedVariant(long productId, long variantId)
     {
@@ -290,8 +320,15 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
         string adminGraphqlApiId, long id, params SqsShopEventVariant[] variants) =>
         new(adminGraphqlApiId, id, "T-Shirt", variants);
 
+    private static SqsShopEventProduct CreateProductWithTitle(
+        string adminGraphqlApiId, long id, string title, params SqsShopEventVariant[] variants) =>
+        new(adminGraphqlApiId, id, title, variants);
+
     private static SqsShopEventVariant CreateVariant(string adminGraphqlApiId, long id, string variantTitle) =>
         new(adminGraphqlApiId, Barcode: id.ToString(), id, ProductId: 100, Sku: id.ToString(), variantTitle);
+
+    private static SqsShopEventVariant CreateNoSkuVariant(string adminGraphqlApiId, long id, string variantTitle) =>
+        new(adminGraphqlApiId, Barcode: id.ToString(), id, ProductId: 100, Sku: "", variantTitle);
 
     private sealed class TestLogger<T> : ILogger<T>
     {

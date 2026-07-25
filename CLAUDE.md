@@ -164,8 +164,10 @@ npm run lint
 - **Issue tracking is GitHub only** — this project uses GitHub issues and GitHub Projects exclusively. Never use, suggest, or offer to create Shortcut tickets (Shortcut belongs to a different project). File follow-ups and dependencies as GitHub issues via `gh issue create`.
 - Feature work on a branch off `develop`, in a worktree under `.claude/worktrees/<name>`. PRs target `develop`. Don't push to `main` directly.
 - When running inside a worktree (cwd under `.claude/worktrees/`), every file edit must use a path under that worktree — either relative, or an absolute path that begins with the worktree root. Never edit `/Users/<you>/repos/.../skusync/dotnet/...` directly; that's the main checkout (usually `develop`) and changes there bypass the feature branch. A `PreToolUse` hook in [.claude/settings.json](.claude/settings.json) enforces this.
+- Feature work on a branch off `main`, in a worktree under `.claude/worktrees/<name>`. PRs target `main`. Don't push to `main` directly.
+- When running inside a worktree (cwd under `.claude/worktrees/`), every file edit must use a path under that worktree — either relative, or an absolute path that begins with the worktree root. Never edit `/Users/<you>/repos/.../skusync/dotnet/...` directly; that's the main checkout and changes there bypass the feature branch. A `PreToolUse` hook in [.claude/settings.json](.claude/settings.json) enforces this.
 - Commit subjects: imperative, short (≤72 chars). Body explains the why and any non-obvious impact.
-- Don't `--no-verify`. Don't force-push `main` or `develop`.
+- Don't `--no-verify`. Don't force-push `main`.
 - Never commit `appsettings.*` files with real secrets.
 - Don't commit IDE artefacts (`.idea/**` workspace state, `.vs/`, etc.) — leave them out of stages.
 - Pull requests follow `.github/pull_request_template.md`. Fill in the Summary and Test plan; drop the Notes section if you have nothing to add.
