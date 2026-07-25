@@ -35,7 +35,7 @@
     <div class="empty-message" role="alert">
       <strong>Could not load item sync data</strong>
       <span>{{ errorMessage }}</span>
-      <button pButton type="button" severity="secondary" label="Retry" (click)="retryRequest.emit()"></button>
+      <button pButton type="button" severity="secondary" (click)="retryRequest.emit()">Retry</button>
     </div>
   } @else {
   <p-table

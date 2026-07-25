@@ -27,11 +27,13 @@ dotnet test SkuSync.slnx
 Start the development dependencies (PostgreSQL on `localhost:5434`, RabbitMQ on `localhost:5674` / management UI `15674`) with the lightweight `compose.yaml`, then launch the apps from the repo root with [process-compose](https://github.com/F1bonacc1/process-compose):
 
 ```bash
-docker compose up -d              # Postgres + RabbitMQ, restart unless-stopped — leave running
-process-compose --no-server up
+docker compose up -d                               # Postgres + RabbitMQ, restart unless-stopped — leave running
+process-compose -f process-compose.yaml --no-server up
 ```
 
-Starts the `web-api` HTTP host (http://localhost:5257) and the Angular dashboard (http://localhost:4200), configured in `process-compose.yaml`. The dev connection strings in `appsettings.Development.json` already point at the `compose.yaml` services. Each host's Shopify / SkuLabs / AWS config comes from its .NET user secrets, which `dotnet run` loads automatically in Development. Background processing (`app.server`) is not launched by process-compose.
+The `-f process-compose.yaml` is required: process-compose also treats `compose.yaml` as one of its
+default config names, and with both files in the repo root it would otherwise load the Docker Compose
+file and start an empty project. Starts the `web-api` HTTP host (http://localhost:5257) and the Angular dashboard (http://localhost:4200), configured in `process-compose.yaml`. The dev connection strings in `appsettings.Development.json` already point at the `compose.yaml` services. Each host's Shopify / SkuLabs / AWS config comes from its .NET user secrets, which `dotnet run` loads automatically in Development. It also starts the `app-server` background worker (RabbitMQ event consumers, Shopify webhook handlers, SQS poller, Quartz jobs) — so a manual product sync's SKU/barcode write-back is processed end-to-end.
 
 For a full end-to-end run — every service **plus** the application containers in a fresh environment — use `compose.e2e.yaml` instead: `docker compose -f compose.e2e.yaml up --build`. It publishes Postgres on `5433` so it can run alongside the dev stack.
 
