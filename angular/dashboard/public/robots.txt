@@ -1,0 +1,3 @@
+# SkuSync Admin is a private internal dashboard — keep it out of search engines.
+User-agent: *
+Disallow: /
