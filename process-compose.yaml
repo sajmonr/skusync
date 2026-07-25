@@ -3,8 +3,9 @@
 #   process-compose --no-server up   # start both processes without the Process Compose HTTP server
 #   Ctrl+C                           # stop them
 #
-# PostgreSQL is NOT started here — run your own database and point web-api at it via the
-# ConnectionStrings__SkuSync entry below. Each host's Shopify / SkuLabs / AWS configuration still
+# PostgreSQL and RabbitMQ are NOT started here — bring them up with `docker compose up -d`
+# (compose.yaml: Postgres on localhost:5434, RabbitMQ on localhost:5674). The dev connection
+# strings in appsettings.Development.json already point at them. Each host's Shopify / SkuLabs / AWS configuration still
 # comes from its .NET user secrets, which `dotnet run` loads automatically in the Development
 # environment. Background processing (SQS, Shopify webhooks, Quartz jobs) lives in AppServer and is
 # intentionally not launched here.

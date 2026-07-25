@@ -1,26 +1,29 @@
-# compose.yaml — full local stack for end-to-end testing.
+# compose.yaml — lightweight development dependencies.
 #
-#   docker compose up --build            # build images and start everything
-#   docker compose down                  # stop; add -v to also drop the DB volume
+# Runs only the backing services the app needs while you develop it locally: PostgreSQL
+# and RabbitMQ. The application itself (web-api, app-server, dashboard) is NOT started
+# here — you run those on the host with `dotnet run` / process-compose, pointing them at
+# the containers below.
 #
-# Only two ports are published to the host:
-#   - 4200  → Angular dashboard (test the app end to end in a browser)
-#   - 5433  → PostgreSQL (inspect the database with psql / a GUI; non-standard port)
+#   docker compose up -d                 # start the dev dependencies in the background
+#   docker compose down                  # stop; add -v to also drop the data volumes
 #
-# The web API and app server are NOT exposed. The browser reaches the API through the
-# dashboard's own origin: nginx in the dashboard container reverse-proxies /api/ to the
-# web-api service (see docker/dashboard.nginx.conf), so there is no CORS and no need to
-# publish the API port.
+# These containers `restart: unless-stopped`, so they come back after a reboot and stay up
+# until you explicitly `docker compose down` them — the intent is to leave them running all
+# the time while you work.
 #
-# Secrets/config below fall back to safe placeholders so the stack boots with no setup.
-# Copy .env.example to .env and fill real values to exercise live Shopify / SkuLabs / SQS.
+# For a full end-to-end run of everything (services + the application, in a fresh
+# environment), use compose.e2e.yaml instead:
+#
+#   docker compose -f compose.e2e.yaml up --build
+#
+# Host ports are deliberately non-standard so they never clash with a locally installed
+# Postgres/RabbitMQ, and so this stack and compose.e2e.yaml can be up at the same time:
+#   - 5434  → PostgreSQL   (e2e uses 5433; a system Postgres would use 5432)
+#   - 5674  → RabbitMQ AMQP (standard is 5672)
+#   - 15674 → RabbitMQ management UI at http://localhost:15674 (standard is 15672)
 
-name: skusync-local
-
-# Shared DB connection string, injected into both .NET hosts. Points at the compose `postgres`
-# service (container-internal port 5432), overriding the blank/localhost values in appsettings.
-x-db-connection: &db-connection
-  ConnectionStrings__SkuSync: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-skusync};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-password}"
+name: skusync-dev
 
 services:
   postgres:
@@ -32,8 +35,9 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
       POSTGRES_DB: ${POSTGRES_DB:-skusync}
     ports:
-      # Non-standard host port so it never clashes with a local Postgres on 5432.
-      - "5433:5432"
+      # Non-standard host port so it never clashes with a local Postgres on 5432 or the
+      # compose.e2e.yaml Postgres on 5433.
+      - "5434:5432"
     volumes:
       # PostgreSQL 18+ images store data in a version-specific subdirectory and expect the
       # mount at /var/lib/postgresql (not /var/lib/postgresql/data as in <=17).
@@ -45,76 +49,25 @@ services:
       retries: 20
     restart: unless-stopped
 
-  web-api:
-    build:
-      context: ./dotnet
-      dockerfile: src/Web.Api/Dockerfile
+  rabbitmq:
+    # -management image bundles the web management UI on 15672.
+    image: rabbitmq:4-management-alpine
     environment:
-      <<: *db-connection
-      ASPNETCORE_ENVIRONMENT: Development
-      ASPNETCORE_HTTP_PORTS: "8080"
-      # Development + bypass lets the dashboard hit the API without the cookie login flow,
-      # which otherwise needs HTTPS and a configured password.
-      DashboardAuthentication__BypassOnDevelopment: "true"
-    volumes:
-      # Map the project's .NET user secrets (read-only). Loaded because the host runs under
-      # Development and the assembly carries the UserSecretsId. The compose env vars above still
-      # win over any matching secret (env vars outrank user secrets in the config order).
-      - ${HOME}/.microsoft/usersecrets/1d2e6729-fede-42f1-95e8-0e127120bec0:/home/app/.microsoft/usersecrets/1d2e6729-fede-42f1-95e8-0e127120bec0:ro
-    # No published ports: the API is reached only via the dashboard's /api reverse proxy.
-    expose:
-      - "8080"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/_health/live || exit 1"]
-      interval: 10s
-      timeout: 3s
-      retries: 12
-      start_period: 40s
-    restart: unless-stopped
-
-  app-server:
-    build:
-      context: ./dotnet
-      dockerfile: src/AppServer/Dockerfile
-    environment:
-      <<: *db-connection
-      # AppServer is a Generic Host worker → it reads DOTNET_ENVIRONMENT (not ASPNETCORE_*).
-      DOTNET_ENVIRONMENT: Development
-    volumes:
-      # Map the project's .NET user secrets (read-only). This is where Shopify / SkuLabs / AWS
-      # credentials come from — the required options validated on startup are satisfied by the
-      # developer's secret store, not the compose file. The ConnectionStrings__SkuSync env var
-      # above still points at the compose DB (env vars outrank user secrets).
-      - ${HOME}/.microsoft/usersecrets/b937c043-246e-43de-a447-f5bbd6941c7c:/home/app/.microsoft/usersecrets/b937c043-246e-43de-a447-f5bbd6941c7c:ro
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: unless-stopped
-
-  dashboard:
-    build:
-      context: ./angular/dashboard
-      dockerfile: Dockerfile
-      args:
-        # Run the dashboard in the dev environment, like the .NET services.
-        BUILD_CONFIGURATION: development
-        # Baked into the SPA bundle: the browser calls this same-origin path, which the
-        # container's nginx proxies to the web-api service. Leaving it empty (the Dockerfile
-        # default) would keep the committed API URL.
-        API_BASE_URL: /api
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
     ports:
-      - "4200:80"
+      # Non-standard host ports so they never clash with a locally installed RabbitMQ.
+      - "5674:5672"    # AMQP
+      - "15674:15672"  # management UI
     volumes:
-      # Compose-only nginx config (adds the /api reverse proxy); the committed prod nginx.conf
-      # baked into the image is left untouched.
-      - ./docker/dashboard.nginx.conf:/etc/nginx/conf.d/default.conf:ro
-    depends_on:
-      web-api:
-        condition: service_healthy
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     restart: unless-stopped
 
 volumes:
   postgres-data:
+  rabbitmq-data:

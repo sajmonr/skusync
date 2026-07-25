@@ -26,9 +26,16 @@ dotnet test    SkuSync.slnx
 
 ### Run locally
 
-Bring up your own PostgreSQL (the app expects it on `localhost:5433` by default — see
-[`process-compose.yaml`](process-compose.yaml)), then launch the apps with
-[process-compose](https://github.com/F1bonacc1/process-compose):
+Bring up the development dependencies (PostgreSQL + RabbitMQ) with the lightweight
+[`compose.yaml`](compose.yaml) — these publish on host ports `5434` (Postgres) and
+`5674`/`15674` (RabbitMQ AMQP / management UI), matching the connection strings in
+`appsettings.Development.json`. Leave them running while you work:
+
+```bash
+docker compose up -d
+```
+
+Then launch the apps with [process-compose](https://github.com/F1bonacc1/process-compose):
 
 ```bash
 process-compose --no-server up
