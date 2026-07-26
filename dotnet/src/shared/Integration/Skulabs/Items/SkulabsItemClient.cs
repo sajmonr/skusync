@@ -53,12 +53,12 @@ public class SkulabsItemClient : ISkulabsItemClient
     }
 
     /// <summary>
-    /// Fetches all SkuLabs inventory items that have at least one Shopify channel listing.
-    /// Only the <c>name</c>, <c>sku</c>, <c>upc</c>, and <c>listings</c> fields are
-    /// requested from the API to minimise payload size.
+    /// Fetches every SkuLabs inventory item with all of its channel listings intact. Only the
+    /// <c>name</c>, <c>sku</c>, <c>upc</c>, and <c>listings</c> fields are requested from the API to
+    /// minimise payload size. Deciding which items are syncable is left to the caller.
     /// </summary>
-    /// <returns>An array of <see cref="SkuLabsItem"/> records with Shopify identifiers populated.</returns>
-    public async Task<SkuLabsItem[]> GetAllItems()
+    /// <returns>A <see cref="SkulabsItemCollection"/> wrapping every item SkuLabs returned.</returns>
+    public async Task<SkulabsItemCollection> GetAllItems()
     {
         const string fields = """
             {"_id": 1, "name": 1, "sku": 1, "upc": 1, "listings": 1}
@@ -101,17 +101,28 @@ public class SkulabsItemClient : ISkulabsItemClient
                 $"SkuLabs item response deserialized to null. Body: {Truncate(body)}");
         }
 
-        var singleListingItems = FilterMultipleListings(content);
-        var finalItems = FilterNonNumericVariantIds(singleListingItems);
+        var items = content.Select(MapItem).ToArray();
 
-        _logger.LogInformation(
-            "SkuLabs returned {RawCount} item(s); {Usable} usable, {Filtered} filtered out.",
-            content.Length,
-            finalItems.Length,
-            content.Length - finalItems.Length
-        );
+        _logger.LogInformation("SkuLabs returned {RawCount} item(s).", items.Length);
 
-        return finalItems;
+        return new SkulabsItemCollection(items);
+    }
+
+    private static SkulabsApiItem MapItem(SkulabsItemResponse response)
+    {
+        var listings = response.Listings
+            .Select(listing => new SkulabsApiListing(
+                listing.ListingId,
+                listing.VariantId,
+                listing.ProductId))
+            .ToArray();
+
+        return new SkulabsApiItem(
+            response.ItemId,
+            response.Title,
+            response.Sku,
+            response.Upc,
+            listings);
     }
 
     /// <summary>
@@ -201,52 +212,4 @@ public class SkulabsItemClient : ISkulabsItemClient
 
     private static string Truncate(string value, int max = 2048) =>
         value.Length <= max ? value : value[..max] + "…";
-
-    private SkulabsItemResponse[] FilterMultipleListings(SkulabsItemResponse[] responses)
-    {
-        var singleListing = responses.Where(r => r.Listings.Length == 1).ToArray();
-        var multipleListings = responses.Length - singleListing.Length;
-
-        if (multipleListings > 0)
-        {
-            _logger.LogWarning(
-                "{Count} SkuLabs item(s) had multiple listings and were filtered out.",
-                multipleListings);
-        }
-
-        return singleListing;
-    }
-
-    private SkuLabsItem[] FilterNonNumericVariantIds(SkulabsItemResponse[] responses)
-    {
-        var items = new List<SkuLabsItem>(responses.Length);
-        var nonNumeric = 0;
-
-        foreach (var response in responses)
-        {
-            var listing = response.Listings[0];
-            if (!long.TryParse(listing.VariantId, out var variantId))
-            {
-                nonNumeric++;
-                continue;
-            }
-
-            items.Add(new SkuLabsItem(
-                response.ItemId,
-                listing.ListingId,
-                variantId,
-                response.Sku,
-                response.Upc,
-                response.Title));
-        }
-
-        if (nonNumeric > 0)
-        {
-            _logger.LogWarning(
-                "{Count} SkuLabs item(s) had a non-numeric Shopify variant ID and were filtered out.",
-                nonNumeric);
-        }
-
-        return items.ToArray();
-    }
 }

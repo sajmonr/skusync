@@ -1,4 +1,4 @@
-export type NavigationIcon = 'sync';
+export type NavigationIcon = 'sync' | 'alert';
 
 export interface NavigationItem {
   readonly label: string;
@@ -9,4 +9,5 @@ export interface NavigationItem {
 
 export const NAVIGATION_ITEMS: readonly NavigationItem[] = [
   { label: 'Item sync', route: '/', icon: 'sync', enabled: true },
+  { label: 'Ambiguous items', route: '/ambiguous-items', icon: 'alert', enabled: true },
 ];

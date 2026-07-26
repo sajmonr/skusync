@@ -26,6 +26,17 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     /// </summary>
     public DbSet<SkulabsItemEntity> SkulabsItems { get; init; }
 
+    /// <summary>
+    /// Gets the set of SkuLabs items quarantined because they could not be cleanly mapped to a
+    /// single Shopify variant. These take no part in the active sync.
+    /// </summary>
+    public DbSet<SkulabsAmbiguousItemEntity> SkulabsAmbiguousItems { get; init; }
+
+    /// <summary>
+    /// Gets the set of individual listings belonging to quarantined SkuLabs items.
+    /// </summary>
+    public DbSet<SkulabsAmbiguousItemListingEntity> SkulabsAmbiguousItemListings { get; init; }
+
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

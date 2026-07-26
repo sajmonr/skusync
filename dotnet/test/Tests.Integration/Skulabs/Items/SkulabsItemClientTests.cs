@@ -8,6 +8,7 @@ using Integration.Skulabs.Options;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NSubstitute;
+using SharedKernel;
 using Shouldly;
 
 namespace Tests.Integration.Skulabs.Items;
@@ -96,7 +97,7 @@ public class SkulabsItemClientTests
     }
 
     [Fact]
-    public async Task GetAllItems_ShouldMapResponse_AndFilterOutItemsWithoutListings()
+    public async Task GetAllItems_ShouldSplitItemsIntoSyncableAndAmbiguous_ByListingShape()
     {
         const string json = """
                             [
@@ -132,9 +133,15 @@ public class SkulabsItemClientTests
 
         var result = await sut.GetAllItems();
 
-        result.Length.ShouldBe(2);
-        result[0].ShouldBe(new SkuLabsItem("item-1", "listing-1", 1, "SKU-1", "UPC-1", "Item One"));
-        result[1].ShouldBe(new SkuLabsItem("item-3", "listing-3", 3, "SKU-3", "UPC-3", "Item Three"));
+        var syncable = result.GetSyncable();
+        syncable.Count.ShouldBe(2);
+        syncable[0].ShouldBe(new SkuLabsItem("item-1", "listing-1", 1, "SKU-1", "UPC-1", "Item One"));
+        syncable[1].ShouldBe(new SkuLabsItem("item-3", "listing-3", 3, "SKU-3", "UPC-3", "Item Three"));
+
+        var ambiguous = result.GetAmbiguous();
+        ambiguous.Count.ShouldBe(1);
+        ambiguous[0].SourceItemId.ShouldBe("item-2");
+        ambiguous[0].Reason.ShouldBe(SkulabsAmbiguityReason.NoListings);
     }
 
     [Fact]
@@ -210,7 +217,7 @@ public class SkulabsItemClientTests
     }
 
     [Fact]
-    public async Task GetAllItems_ShouldFilterOutItemsWithMultipleListings_AndLogSingleAggregateWarning()
+    public async Task GetAllItems_ShouldClassifyMultiListingItemsAsAmbiguous()
     {
         const string json = """
                             [
@@ -250,43 +257,18 @@ public class SkulabsItemClientTests
 
         var result = await sut.GetAllItems();
 
-        result.Length.ShouldBe(1);
-        result[0].ShouldBe(new SkuLabsItem("item-single", "l-s", 30, "SKU-S", "UPC-S", "Single"));
+        var syncable = result.GetSyncable();
+        syncable.Count.ShouldBe(1);
+        syncable[0].ShouldBe(new SkuLabsItem("item-single", "l-s", 30, "SKU-S", "UPC-S", "Single"));
 
-        var warnings = _logger.Entries
-            .Where(e => e.LogLevel == LogLevel.Warning && e.Message.Contains("multiple listings"))
-            .ToArray();
-        warnings.Length.ShouldBe(1);
-        warnings[0].Message.ShouldContain("2");
+        var ambiguous = result.GetAmbiguous();
+        ambiguous.Select(a => a.SourceItemId).ShouldBe(["item-multi-1", "item-multi-2"], ignoreOrder: true);
+        ambiguous.ShouldAllBe(a => a.Reason == SkulabsAmbiguityReason.MultipleListings);
+        ambiguous.Single(a => a.SourceItemId == "item-multi-1").Listings.Count.ShouldBe(2);
     }
 
     [Fact]
-    public async Task GetAllItems_ShouldNotEmitMultipleListingsWarning_WhenAllItemsHaveOneListing()
-    {
-        const string json = """
-                            [
-                              {
-                                "_id": "item-single",
-                                "name": "Single",
-                                "sku": "SKU-S",
-                                "upc": "UPC-S",
-                                "listings": [
-                                  { "variant_id": "1", "item_id": "prod-s", "_id": "l-s" }
-                                ]
-                              }
-                            ]
-                            """;
-        _handler.SetResponse(JsonResponse(json));
-        var sut = CreateSut();
-
-        await sut.GetAllItems();
-
-        _logger.Entries.ShouldNotContain(e =>
-            e.LogLevel == LogLevel.Warning && e.Message.Contains("multiple listings"));
-    }
-
-    [Fact]
-    public async Task GetAllItems_ShouldFilterOutItemsWithNonNumericVariantId_AndLogSingleAggregateWarning()
+    public async Task GetAllItems_ShouldClassifyNonNumericSingleListingAsAmbiguous()
     {
         const string json = """
                             [
@@ -324,40 +306,13 @@ public class SkulabsItemClientTests
 
         var result = await sut.GetAllItems();
 
-        result.Length.ShouldBe(1);
-        result[0].ShouldBe(new SkuLabsItem("item-good", "l-g", 42, "SKU-G", "UPC-G", "Good"));
+        var syncable = result.GetSyncable();
+        syncable.Count.ShouldBe(1);
+        syncable[0].ShouldBe(new SkuLabsItem("item-good", "l-g", 42, "SKU-G", "UPC-G", "Good"));
 
-        var warnings = _logger.Entries
-            .Where(e => e.LogLevel == LogLevel.Warning && e.Message.Contains("non-numeric"))
-            .ToArray();
-        warnings.Length.ShouldBe(1);
-        warnings[0].Message.ShouldContain("2");
-        warnings[0].Message.ShouldContain("ID");
-    }
-
-    [Fact]
-    public async Task GetAllItems_ShouldNotEmitNonNumericWarning_WhenAllVariantIdsAreNumeric()
-    {
-        const string json = """
-                            [
-                              {
-                                "_id": "item-good",
-                                "name": "Good",
-                                "sku": "SKU-G",
-                                "upc": "UPC-G",
-                                "listings": [
-                                  { "variant_id": "42", "item_id": "prod-g", "_id": "l-g" }
-                                ]
-                              }
-                            ]
-                            """;
-        _handler.SetResponse(JsonResponse(json));
-        var sut = CreateSut();
-
-        await sut.GetAllItems();
-
-        _logger.Entries.ShouldNotContain(e =>
-            e.LogLevel == LogLevel.Warning && e.Message.Contains("non-numeric"));
+        var ambiguous = result.GetAmbiguous();
+        ambiguous.Select(a => a.SourceItemId).ShouldBe(["item-bad-1", "item-bad-2"], ignoreOrder: true);
+        ambiguous.ShouldAllBe(a => a.Reason == SkulabsAmbiguityReason.ListingNotInShopify);
     }
 
     [Fact]

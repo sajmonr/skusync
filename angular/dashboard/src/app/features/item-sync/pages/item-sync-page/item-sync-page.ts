@@ -51,7 +51,7 @@ export class ItemSyncPage {
           this.messages.add({
             severity: 'success',
             summary: 'Sync complete',
-            detail: 'The product sync finished.',
+            detail: 'The sync finished.',
           });
         },
         error: (error: unknown) => {
@@ -61,7 +61,7 @@ export class ItemSyncPage {
             summary: 'Sync failed',
             detail: rateLimited
               ? 'A sync was started very recently — please wait a moment before trying again.'
-              : 'The product sync did not complete successfully.',
+              : 'The sync did not complete successfully.',
           });
         },
       });

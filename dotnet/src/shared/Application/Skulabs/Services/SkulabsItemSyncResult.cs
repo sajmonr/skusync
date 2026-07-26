@@ -9,7 +9,10 @@ public readonly record struct SkulabsItemSyncResult(
     IReadOnlyList<Guid> CreatedSkulabsItemIds,
     IReadOnlyList<Guid> UpdatedSkulabsItemIds,
     int UnmatchedCount,
-    int SkippedCount)
+    int SkippedCount,
+    int AmbiguousCreatedCount,
+    int AmbiguousUpdatedCount,
+    int AmbiguousRemovedCount)
 {
-    public static SkulabsItemSyncResult Empty => new([], [], 0, 0);
+    public static SkulabsItemSyncResult Empty => new([], [], 0, 0, 0, 0, 0);
 }

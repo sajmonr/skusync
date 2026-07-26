@@ -1,0 +1,22 @@
+[
+  {
+    "_id": "ambiguous-multi-item",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8407892623521",
+        "variant_id": "45696210862241",
+        "_id": "listing-a"
+      },
+      {
+        "store_id": "79926e93f8022ad7b01580af",
+        "item_id": "9999999999999",
+        "variant_id": "12345678901234",
+        "_id": "listing-b"
+      }
+    ],
+    "name": "Ambiguous Multi Listing Item",
+    "sku": "amb-sku",
+    "upc": "amb-upc"
+  }
+]

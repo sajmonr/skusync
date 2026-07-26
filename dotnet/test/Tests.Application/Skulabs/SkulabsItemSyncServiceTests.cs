@@ -5,6 +5,7 @@ using Integration.Skulabs.Items;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
+using SharedKernel;
 using Shouldly;
 
 namespace Tests.Application.Skulabs;
@@ -30,7 +31,7 @@ public class SkulabsItemSyncServiceTests : IDisposable
     [Fact]
     public async Task Sync_ShouldReturnEmpty_WhenNoItemsFromSkulabs()
     {
-        _skulabsClient.GetAllItems().Returns([]);
+        _skulabsClient.GetAllItems().Returns(Syncable());
         var sut = CreateSut();
 
         var result = await sut.Sync();
@@ -44,7 +45,7 @@ public class SkulabsItemSyncServiceTests : IDisposable
     [Fact]
     public async Task Sync_ShouldSkip_WhenNoMatchingVariantInDatabase()
     {
-        _skulabsClient.GetAllItems().Returns([NewSkulabsItem(variantId: 999)]);
+        _skulabsClient.GetAllItems().Returns(Syncable(NewSkulabsItem(variantId: 999)));
         var sut = CreateSut();
 
         var result = await sut.Sync();
@@ -60,10 +61,9 @@ public class SkulabsItemSyncServiceTests : IDisposable
         SeedVariant(variantId: 200L);
         await _dbContext.SaveChangesAsync();
 
-        _skulabsClient.GetAllItems().Returns([
+        _skulabsClient.GetAllItems().Returns(Syncable(
             NewSkulabsItem(variantId: 999),
-            NewSkulabsItem(itemId: "src-good", listingId: "lst-good", variantId: 200)
-        ]);
+            NewSkulabsItem(itemId: "src-good", listingId: "lst-good", variantId: 200)));
         var sut = CreateSut();
 
         var result = await sut.Sync();
@@ -81,9 +81,8 @@ public class SkulabsItemSyncServiceTests : IDisposable
         SeedVariant(variantId: 999L, sku: "shared-sku", barcode: "shared-barcode");
         await _dbContext.SaveChangesAsync();
 
-        _skulabsClient.GetAllItems().Returns([
-            new SkuLabsItem("src", "lst", 200, "shared-sku", "shared-barcode", "Title")
-        ]);
+        _skulabsClient.GetAllItems().Returns(Syncable(
+            new SkuLabsItem("src", "lst", 200, "shared-sku", "shared-barcode", "Title")));
         var sut = CreateSut();
 
         var result = await sut.Sync();
@@ -100,15 +99,14 @@ public class SkulabsItemSyncServiceTests : IDisposable
         var variant = SeedVariant(variantId: 45696210862241L);
         await _dbContext.SaveChangesAsync();
 
-        _skulabsClient.GetAllItems().Returns([
+        _skulabsClient.GetAllItems().Returns(Syncable(
             NewSkulabsItem(
                 itemId: "69b4543c6642ed434a5b1c4a",
                 listingId: "69b454b06642ed434a5bf571",
                 variantId: 45696210862241L,
                 sku: "1 bird",
                 barcode: "10862241",
-                title: "Yellow Vintage Nature Domino Necklace (Goose (1bird))")
-        ]);
+                title: "Yellow Vintage Nature Domino Necklace (Goose (1bird))")));
         var sut = CreateSut();
 
         var result = await sut.Sync();
@@ -132,9 +130,8 @@ public class SkulabsItemSyncServiceTests : IDisposable
         var variant = SeedVariant(variantId: 200L);
         await _dbContext.SaveChangesAsync();
 
-        _skulabsClient.GetAllItems().Returns([
-            NewSkulabsItem(itemId: "skulabs-1", variantId: 200)
-        ]);
+        _skulabsClient.GetAllItems().Returns(Syncable(
+            NewSkulabsItem(itemId: "skulabs-1", variantId: 200)));
 
         await CreateSut().Sync();
 
@@ -157,9 +154,8 @@ public class SkulabsItemSyncServiceTests : IDisposable
         await _dbContext.SaveChangesAsync();
         var originalId = existing.SkulabsItemId;
 
-        _skulabsClient.GetAllItems().Returns([
-            new SkuLabsItem("src-1", "lst-1", 200, "same-sku", "same-bar", "Same Title")
-        ]);
+        _skulabsClient.GetAllItems().Returns(Syncable(
+            new SkuLabsItem("src-1", "lst-1", 200, "same-sku", "same-bar", "Same Title")));
 
         var result = await CreateSut().Sync();
 
@@ -183,9 +179,8 @@ public class SkulabsItemSyncServiceTests : IDisposable
         await _dbContext.SaveChangesAsync();
         var originalId = existing.SkulabsItemId;
 
-        _skulabsClient.GetAllItems().Returns([
-            new SkuLabsItem("src-1", "lst-new", 200, "new-sku", "new-bar", "New Title")
-        ]);
+        _skulabsClient.GetAllItems().Returns(Syncable(
+            new SkuLabsItem("src-1", "lst-new", 200, "new-sku", "new-bar", "New Title")));
 
         var result = await CreateSut().Sync();
 
@@ -216,9 +211,8 @@ public class SkulabsItemSyncServiceTests : IDisposable
         await _dbContext.SaveChangesAsync();
         var preservedRowId = existing.SkulabsItemId;
 
-        _skulabsClient.GetAllItems().Returns([
-            new SkuLabsItem("S2", "L-new", 3, "new-sku", "new-bar", "New Title")
-        ]);
+        _skulabsClient.GetAllItems().Returns(Syncable(
+            new SkuLabsItem("S2", "L-new", 3, "new-sku", "new-bar", "New Title")));
 
         var result = await CreateSut().Sync();
 
@@ -256,9 +250,8 @@ public class SkulabsItemSyncServiceTests : IDisposable
             title: "Old", sku: "old-sku", barcode: "old-bar");
         await _dbContext.SaveChangesAsync();
 
-        _skulabsClient.GetAllItems().Returns([
-            new SkuLabsItem("S-new", "lst-new", 200, "new-sku", "new-bar", "New")
-        ]);
+        _skulabsClient.GetAllItems().Returns(Syncable(
+            new SkuLabsItem("S-new", "lst-new", 200, "new-sku", "new-bar", "New")));
 
         var result = await CreateSut().Sync();
 
@@ -300,10 +293,9 @@ public class SkulabsItemSyncServiceTests : IDisposable
             title: "B", sku: "skb", barcode: "bcb");
         await _dbContext.SaveChangesAsync();
 
-        _skulabsClient.GetAllItems().Returns([
+        _skulabsClient.GetAllItems().Returns(Syncable(
             new SkuLabsItem("SB", "lB2", 1, "skb2", "bcb2", "B2"),
-            new SkuLabsItem("SA", "lA2", 2, "ska2", "bca2", "A2")
-        ]);
+            new SkuLabsItem("SA", "lA2", 2, "ska2", "bca2", "A2")));
 
         var result = await CreateSut().Sync();
 
@@ -336,9 +328,8 @@ public class SkulabsItemSyncServiceTests : IDisposable
         var rowB = SeedSkulabsItem(v2.ShopifyProductVariantId, sourceItemId: "SB", sourceListingId: "lb");
         await _dbContext.SaveChangesAsync();
 
-        _skulabsClient.GetAllItems().Returns([
-            new SkuLabsItem("SB", "lb2", 1, "sku", "bar", "Title")
-        ]);
+        _skulabsClient.GetAllItems().Returns(Syncable(
+            new SkuLabsItem("SB", "lb2", 1, "sku", "bar", "Title")));
 
         var result = await CreateSut().Sync();
 
@@ -357,6 +348,137 @@ public class SkulabsItemSyncServiceTests : IDisposable
         ]);
         var v2Logs = await LogsForVariant(v2.ShopifyProductVariantId);
         v2Logs.Single().Message.ShouldBe("Unlinked from SkuLabs item 'SB'.");
+    }
+
+    // ---------- Ambiguous items ----------
+
+    [Fact]
+    public async Task Sync_ShouldQuarantineItem_WhenItHasMultipleListings()
+    {
+        var variantA = SeedVariant(variantId: 10L);
+        await _dbContext.SaveChangesAsync();
+
+        _skulabsClient.GetAllItems().Returns(Collection(
+            ApiItem("multi", Listing("lst-a", "10"), Listing("lst-b", "20"))));
+
+        var result = await CreateSut().Sync();
+
+        result.AmbiguousCreatedCount.ShouldBe(1);
+        (await _dbContext.SkulabsItems.CountAsync()).ShouldBe(0);
+
+        var ambiguous = await _dbContext.SkulabsAmbiguousItems.Include(a => a.Listings).SingleAsync();
+        ambiguous.SkulabsSourceItemId.ShouldBe("multi");
+        ambiguous.Reason.ShouldBe(SkulabsAmbiguityReason.MultipleListings);
+        ambiguous.ListingCount.ShouldBe(2);
+        ambiguous.Listings.Count.ShouldBe(2);
+
+        // The listing whose raw variant matches a known variant is resolved; the other is not.
+        ambiguous.Listings.Single(l => l.RawVariantId == "10").ShopifyProductVariantId
+            .ShouldBe(variantA.ShopifyProductVariantId);
+        ambiguous.Listings.Single(l => l.RawVariantId == "20").ShopifyProductVariantId
+            .ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Sync_ShouldQuarantineItem_WhenItHasNoListings()
+    {
+        _skulabsClient.GetAllItems().Returns(Collection(ApiItem("empty")));
+
+        var result = await CreateSut().Sync();
+
+        result.AmbiguousCreatedCount.ShouldBe(1);
+        var ambiguous = await _dbContext.SkulabsAmbiguousItems.Include(a => a.Listings).SingleAsync();
+        ambiguous.Reason.ShouldBe(SkulabsAmbiguityReason.NoListings);
+        ambiguous.Listings.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Sync_ShouldQuarantineItem_WhenSingleListingIsNotInShopify()
+    {
+        _skulabsClient.GetAllItems().Returns(Collection(
+            ApiItem("internal", Listing("lst", "not-a-number"))));
+
+        var result = await CreateSut().Sync();
+
+        result.AmbiguousCreatedCount.ShouldBe(1);
+        var ambiguous = await _dbContext.SkulabsAmbiguousItems.Include(a => a.Listings).SingleAsync();
+        ambiguous.Reason.ShouldBe(SkulabsAmbiguityReason.ListingNotInShopify);
+        ambiguous.Listings.Single().ShopifyProductVariantId.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Sync_ShouldNotQuarantine_WhenItemIsCleanlySyncable()
+    {
+        SeedVariant(variantId: 200L);
+        await _dbContext.SaveChangesAsync();
+
+        _skulabsClient.GetAllItems().Returns(Syncable(NewSkulabsItem(itemId: "clean", variantId: 200)));
+
+        var result = await CreateSut().Sync();
+
+        result.CreatedSkulabsItemIds.Count.ShouldBe(1);
+        (await _dbContext.SkulabsAmbiguousItems.CountAsync()).ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Sync_ShouldRemoveFromQuarantine_WhenItemBecomesSyncableAgain()
+    {
+        var variant = SeedVariant(variantId: 200L);
+        SeedAmbiguousItem(sourceItemId: "was-ambiguous", reason: SkulabsAmbiguityReason.MultipleListings);
+        await _dbContext.SaveChangesAsync();
+
+        _skulabsClient.GetAllItems().Returns(Syncable(
+            NewSkulabsItem(itemId: "was-ambiguous", listingId: "lst", variantId: 200)));
+
+        var result = await CreateSut().Sync();
+
+        result.AmbiguousRemovedCount.ShouldBe(1);
+        (await _dbContext.SkulabsAmbiguousItems.CountAsync()).ShouldBe(0);
+
+        // Now cleanly linked in the active table.
+        var stored = await _dbContext.SkulabsItems.SingleAsync();
+        stored.SkulabsSourceItemId.ShouldBe("was-ambiguous");
+        stored.ShopifyProductVariantId.ShouldBe(variant.ShopifyProductVariantId);
+    }
+
+    [Fact]
+    public async Task Sync_ShouldSeverActiveLink_WhenSyncedItemBecomesAmbiguous()
+    {
+        var variant = SeedVariant(variantId: 200L);
+        SeedSkulabsItem(variant.ShopifyProductVariantId, sourceItemId: "now-ambiguous", sourceListingId: "lst");
+        await _dbContext.SaveChangesAsync();
+
+        _skulabsClient.GetAllItems().Returns(Collection(
+            ApiItem("now-ambiguous", Listing("lst-a", "200"), Listing("lst-b", "300"))));
+
+        var result = await CreateSut().Sync();
+
+        result.AmbiguousCreatedCount.ShouldBe(1);
+
+        // Active link severed → an item is never both synced and quarantined.
+        (await _dbContext.SkulabsItems.CountAsync()).ShouldBe(0);
+        (await _dbContext.SkulabsAmbiguousItems.CountAsync()).ShouldBe(1);
+
+        var logs = await LogsForVariant(variant.ShopifyProductVariantId);
+        logs.Single().Message.ShouldBe("Unlinked from SkuLabs item 'now-ambiguous'.");
+    }
+
+    [Fact]
+    public async Task Sync_ShouldRefreshListings_WhenItemRemainsAmbiguous()
+    {
+        SeedAmbiguousItem(sourceItemId: "multi", reason: SkulabsAmbiguityReason.MultipleListings,
+            listingRawVariantIds: ["1", "2"]);
+        await _dbContext.SaveChangesAsync();
+
+        _skulabsClient.GetAllItems().Returns(Collection(
+            ApiItem("multi", Listing("lst-x", "3"), Listing("lst-y", "4"), Listing("lst-z", "5"))));
+
+        var result = await CreateSut().Sync();
+
+        result.AmbiguousUpdatedCount.ShouldBe(1);
+        var ambiguous = await _dbContext.SkulabsAmbiguousItems.Include(a => a.Listings).SingleAsync();
+        ambiguous.ListingCount.ShouldBe(3);
+        ambiguous.Listings.Select(l => l.RawVariantId).OrderBy(x => x).ShouldBe(["3", "4", "5"]);
     }
 
     // ---------- Helpers ----------
@@ -412,6 +534,37 @@ public class SkulabsItemSyncServiceTests : IDisposable
         return entity;
     }
 
+    private SkulabsAmbiguousItemEntity SeedAmbiguousItem(
+        string sourceItemId,
+        SkulabsAmbiguityReason reason,
+        string[]? listingRawVariantIds = null)
+    {
+        var entity = new SkulabsAmbiguousItemEntity
+        {
+            SkulabsAmbiguousItemId = Guid.NewGuid(),
+            SkulabsSourceItemId = sourceItemId,
+            Name = "Name",
+            Sku = "sku",
+            Upc = "upc",
+            Reason = reason,
+            ListingCount = listingRawVariantIds?.Length ?? 0
+        };
+
+        foreach (var raw in listingRawVariantIds ?? [])
+        {
+            entity.Listings.Add(new SkulabsAmbiguousItemListingEntity
+            {
+                SkulabsAmbiguousItemListingId = Guid.NewGuid(),
+                SkulabsSourceListingId = $"lst-{raw}",
+                RawVariantId = raw,
+                ShopifyProductId = "prod"
+            });
+        }
+
+        _dbContext.SkulabsAmbiguousItems.Add(entity);
+        return entity;
+    }
+
     private static SkuLabsItem NewSkulabsItem(
         string itemId = "src",
         string listingId = "lst",
@@ -419,6 +572,25 @@ public class SkulabsItemSyncServiceTests : IDisposable
         string sku = "sku",
         string barcode = "bar",
         string title = "Title") => new(itemId, listingId, variantId, sku, barcode, title);
+
+    /// <summary>Wraps cleanly syncable items (one numeric-variant listing each) into a collection.</summary>
+    private static SkulabsItemCollection Syncable(params SkuLabsItem[] items) =>
+        new(items
+            .Select(item => new SkulabsApiItem(
+                item.SkulabsItemId,
+                item.Title,
+                item.Sku,
+                item.Barcode,
+                [new SkulabsApiListing(item.SkulabsListingId, item.ShopifyVariantId.ToString(), "prod")]))
+            .ToArray());
+
+    private static SkulabsItemCollection Collection(params SkulabsApiItem[] items) => new(items);
+
+    private static SkulabsApiItem ApiItem(string itemId, params SkulabsApiListing[] listings) =>
+        new(itemId, "Name", "sku", "upc", listings);
+
+    private static SkulabsApiListing Listing(string listingId, string rawVariantId, string productId = "prod") =>
+        new(listingId, rawVariantId, productId);
 
     private sealed class TestLogger<T> : ILogger<T>
     {
