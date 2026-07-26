@@ -1,5 +1,6 @@
 using FastEndpoints;
 using Gridify;
+using Hosting;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Web.Api;

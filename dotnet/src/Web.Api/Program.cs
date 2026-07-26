@@ -1,5 +1,6 @@
 using Application;
 using FastEndpoints;
+using Hosting;
 using Infrastructure;
 using Infrastructure.Database;
 using Microsoft.AspNetCore.Authentication.Cookies;

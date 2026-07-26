@@ -34,6 +34,28 @@ internal static class ApplicationEventBus
     /// <summary>Named connection string (<c>ConnectionStrings:RabbitMq</c>) carrying the AMQP URI.</summary>
     public const string ConnectionStringName = "RabbitMq";
 
+    /// <summary>
+    /// Builds a RabbitMQ <see cref="ConnectionFactory"/> from the AMQP connection string with the
+    /// project's standard settings applied. Used both by the startup connectivity preflight and by
+    /// the health-check connection, so every connection this codebase opens is configured the same
+    /// way as the message bus itself.
+    /// </summary>
+    public static RabbitMQ.Client.ConnectionFactory CreateConnectionFactory(string connectionString)
+    {
+        var factory = new RabbitMQ.Client.ConnectionFactory { Uri = new Uri(connectionString) };
+        ConfigureConnectionFactory(factory);
+        return factory;
+    }
+
+    // Automatic recovery lets a consumer/producer reconnect after a transient broker blip instead
+    // of leaving a dead channel behind (the failure mode that motivated this health work). Topology
+    // recovery re-declares the exchanges, queues, and bindings on the recovered connection.
+    private static void ConfigureConnectionFactory(RabbitMQ.Client.ConnectionFactory factory)
+    {
+        factory.AutomaticRecoveryEnabled = true;
+        factory.TopologyRecoveryEnabled = true;
+    }
+
     // Single shared dead-letter exchange every work queue nacks poison messages onto.
     private const string DeadLetterExchange = "skusync.dead-letter";
 
@@ -53,6 +75,7 @@ internal static class ApplicationEventBus
         bus.WithProviderRabbitMQ(rabbit =>
         {
             rabbit.ConnectionString = connectionString;
+            ConfigureConnectionFactory(rabbit.ConnectionFactory);
             rabbit.UseExchangeDefaults(durable: true);
             rabbit.UseQueueDefaults(durable: true);
         });

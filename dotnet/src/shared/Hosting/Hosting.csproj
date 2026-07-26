@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
+    <!-- Web-facing hosting helpers (health endpoint mapping) shared by both HTTP-hosting
+         processes, Web.Api and AppServer. Needs the ASP.NET Core shared framework for
+         WebApplication/endpoint routing; the business layers deliberately do not reference it. -->
+    <ItemGroup>
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="AspNetCore.HealthChecks.UI.Client" />
+    </ItemGroup>
+
+</Project>

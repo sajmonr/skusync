@@ -1,6 +1,8 @@
 using Application;
+using Hosting;
 using Infrastructure;
 using Integration;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace AppServer;
 
@@ -26,6 +28,11 @@ public static class DependencyInjection
                 .AddWebhookProcessing()
                 .AddEventProcessing()
                 .AddHangfireProcessing();
+
+            // Liveness self-check. Postgres ('ready') and RabbitMQ ('ready') checks are registered
+            // transitively by AddInfrastructure and AddApplication; the endpoints that expose them
+            // are mapped in Program.cs via MapHealthCheckEndpoints.
+            builder.Services.AddHealthChecks().AddSelfCheck();
 
             return builder;
         }

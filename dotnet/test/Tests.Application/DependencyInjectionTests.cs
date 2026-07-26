@@ -5,7 +5,9 @@ using Application.Products.Services;
 using Integration.Aws.Sqs;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using Shouldly;
 using SlimMessageBus;
@@ -42,6 +44,29 @@ public class DependencyInjectionTests
         builder.Services.ShouldNotContain(descriptor =>
             descriptor.ServiceType == typeof(IShopifyWebhookHandler)
         );
+    }
+
+    [Fact]
+    public void AddApplication_ShouldRegisterRabbitMqReadinessHealthCheck()
+    {
+        var builder = CreateBuilder(
+            new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:RabbitMq"] = RabbitMqConnectionString,
+                ["ConnectionStrings:SkuSync"] = SkuSyncConnectionString,
+            }
+        );
+
+        builder.AddApplication();
+
+        using var provider = builder.Services.BuildServiceProvider();
+        var registration = provider
+            .GetRequiredService<IOptions<HealthCheckServiceOptions>>()
+            .Value.Registrations.SingleOrDefault(registration => registration.Name == "rabbitmq");
+        registration.ShouldNotBeNull();
+        // Broker health is a readiness concern, never liveness — a broker blip must not restart us.
+        registration.Tags.ShouldContain("ready");
+        registration.Tags.ShouldNotContain("live");
     }
 
     [Fact]

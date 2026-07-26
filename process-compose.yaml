@@ -43,12 +43,23 @@ processes:
   app-server:
     description: "AppServer background worker (RabbitMQ consumers, Shopify webhooks, SQS, Quartz)"
     working_dir: dotnet
-    # AppServer is a .NET Generic Host (no HTTP surface). Its launch profile sets
-    # DOTNET_ENVIRONMENT=Development — the variable a Generic Host reads — so `dotnet run` loads
-    # appsettings.Development.json (Postgres + RabbitMq connection strings); Shopify / SkuLabs / AWS
-    # values come from its .NET user secrets. No readiness_probe: with no port to poll, process
-    # start is the readiness signal.
+    # AppServer hosts a minimal HTTP surface for health only. Its launch profile sets
+    # DOTNET_ENVIRONMENT=Development — which WebApplicationBuilder still honours — so `dotnet run`
+    # loads appsettings.Development.json (Postgres + RabbitMq connection strings) and binds the
+    # health endpoints on http://localhost:5258; Shopify / SkuLabs / AWS values come from its .NET
+    # user secrets.
     command: dotnet run --project src/AppServer
+    readiness_probe:
+      # /_health/ready runs the Postgres + RabbitMQ checks, so "ready" means the worker can reach
+      # its dependencies.
+      http_get:
+        host: 127.0.0.1
+        port: 5258
+        path: /_health/ready
+      initial_delay_seconds: 10
+      period_seconds: 5
+      timeout_seconds: 3
+      failure_threshold: 30
     availability:
       restart: on_failure
       max_restarts: 5
