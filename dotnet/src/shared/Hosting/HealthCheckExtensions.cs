@@ -1,13 +1,16 @@
 using HealthChecks.UI.Client;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.DependencyInjection;
 
-namespace Web.Api;
+namespace Hosting;
 
 /// <summary>
-/// Extension methods that wire up the application's health-check endpoints. Lives outside
-/// <see cref="DependencyInjection"/> because endpoint mapping happens on
-/// <see cref="WebApplication"/>, not on <c>IHostApplicationBuilder</c>.
+/// Extension methods that wire up an HTTP host's health-check endpoints. Shared by both
+/// HTTP-hosting processes (Web.Api and AppServer) so their liveness/readiness surface is
+/// identical. Lives here rather than in a business layer because endpoint mapping happens on
+/// <see cref="WebApplication"/>, which requires the ASP.NET Core shared framework.
 /// </summary>
 public static class HealthCheckExtensions
 {
@@ -33,8 +36,8 @@ public static class HealthCheckExtensions
         ///     <c>self</c> check. Wire container restart probes here. Must stay narrow:
         ///     failures here trigger restarts.</description></item>
         ///   <item><description><c>/_health/ready</c> — ready to serve traffic. Runs every
-        ///     <c>ready</c>-tagged check (Postgres). Wire load-balancer / orchestrator
-        ///     readiness probes here.</description></item>
+        ///     <c>ready</c>-tagged check (Postgres, RabbitMQ). Wire load-balancer /
+        ///     orchestrator readiness probes here.</description></item>
         ///   <item><description><c>/_health</c> — everything. Useful for humans and
         ///     dashboards.</description></item>
         /// </list>

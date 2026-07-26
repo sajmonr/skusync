@@ -76,6 +76,20 @@ public static class DependencyInjection
                 HangfireConfiguration.Configure(config, hangfireConnection)
             );
 
+            // A dedicated RabbitMQ connection for the health check + startup preflight, kept
+            // separate from the message bus's own connection (SlimMessageBus doesn't expose it).
+            builder.Services.AddSingleton(new RabbitMqConnectionProvider(connectionString));
+
+            // Async factory overload so the connection is opened without blocking; the provider
+            // opens it once and reuses it. Tagged 'ready' (never 'live'): a broker outage must fail
+            // readiness, not liveness — liveness driving a restart loop on an external dependency is
+            // exactly what we avoid.
+            builder.Services.AddHealthChecks()
+                .AddRabbitMQ(
+                    sp => sp.GetRequiredService<RabbitMqConnectionProvider>().GetConnection(),
+                    name: "rabbitmq",
+                    tags: ["ready", "rabbitmq"]);
+
             return builder;
         }
 

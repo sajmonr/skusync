@@ -125,6 +125,15 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+    healthcheck:
+      # AppServer now hosts a minimal HTTP surface for health only. /_health/live runs just the
+      # 'self' check (aspnet base image defaults the port to 8080), so a DB/broker blip doesn't
+      # flap the container.
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/_health/live || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 40s
     restart: unless-stopped
 
   dashboard:

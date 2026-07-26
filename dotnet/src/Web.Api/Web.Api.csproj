@@ -31,6 +31,7 @@
     
     <ItemGroup>
       <ProjectReference Include="..\shared\Application\Application.csproj" />
+      <ProjectReference Include="..\shared\Hosting\Hosting.csproj" />
     </ItemGroup>
 
 </Project>

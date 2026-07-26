@@ -4,6 +4,7 @@
   <Project Path="src/shared/Application/Application.csproj" />
   <Project Path="src/shared/Infrastructure/Infrastructure.csproj" />
   <Project Path="src/shared/Integration/Integration.csproj" />
+  <Project Path="src/shared/Hosting/Hosting.csproj" />
   <Project Path="src/Web.Api/Web.Api.csproj" />
   <Project Path="src/shared/SharedKernel/SharedKernel.csproj" />
   <Project Path="test/Tests.Application/Tests.Application.csproj" />
