@@ -13,8 +13,6 @@ public static class AmbiguousItemsGridMapper
             .AddMap("sku", entity => entity.Sku)
             .AddMap("upc", entity => entity.Upc)
             .AddMap("listingCount", entity => entity.ListingCount)
-            .AddMap("reason", entity => entity.ReasonNavigation!.Name)
-            .AddMap("status", entity => entity.StatusNavigation!.Name)
             .AddMap("firstSeenUtc", entity => entity.FirstSeenUtc)
             .AddMap("lastSeenUtc", entity => entity.LastSeenUtc);
 }

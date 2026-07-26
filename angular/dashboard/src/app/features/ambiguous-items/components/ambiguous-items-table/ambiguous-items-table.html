@@ -17,18 +17,6 @@
         />
       </span>
     </div>
-
-    <div class="filter-actions">
-      <select
-        class="status-select"
-        aria-label="Filter by reason"
-        [formField]="filterForm.reason"
-      >
-        @for (option of reasonOptions; track option.value) {
-          <option [value]="option.value">{{ option.label }}</option>
-        }
-      </select>
-    </div>
   </div>
 
   @if (error(); as errorMessage) {
@@ -59,7 +47,6 @@
         <th>SkuLabs ID</th>
         <th>SKU</th>
         <th>Listings</th>
-        <th>Reason</th>
       </tr>
     </ng-template>
 
@@ -100,14 +87,11 @@
         <td>
           <span class="code-value">{{ item.listingCount }}</span>
         </td>
-        <td>
-          <span class="reason-badge" [class]="item.reason">{{ reasonLabel(item.reason) }}</span>
-        </td>
       </tr>
 
       @if (isExpanded(item.id)) {
         <tr class="detail-row">
-          <td colspan="6">
+          <td colspan="5">
             <section class="listings" [attr.aria-label]="item.name + ' listings'">
               <div class="listings-heading">
                 <div>SkuLabs variant</div>
@@ -119,12 +103,17 @@
                   <span class="code-value">{{ listing.rawVariantId || '—' }}</span>
                   <span class="code-value">{{ listing.skulabsProductId || '—' }}</span>
                   @if (listing.resolvedToShopifyVariant) {
-                    <a
-                      class="code-link"
-                      [href]="listing.shopifyUrl"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >{{ listing.resolvedDisplayName || listing.resolvedVariantId }}</a>
+                    <span class="resolved-variant">
+                      <a
+                        class="code-link"
+                        [href]="listing.shopifyUrl"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >{{ listing.resolvedDisplayName || listing.resolvedVariantId }}</a>
+                      @if (listing.resolvedVariantIsDeleted) {
+                        <span class="deleted-badge" title="This variant has been deleted in Shopify — remove this listing in SkuLabs">Deleted in Shopify</span>
+                      }
+                    </span>
                   } @else {
                     <span class="not-in-shopify">Not in Shopify</span>
                   }
@@ -142,7 +131,7 @@
 
     <ng-template #emptymessage>
       <tr>
-        <td colspan="6">
+        <td colspan="5">
           <div class="empty-message">
             <strong>No ambiguous items</strong>
             <span>Every SkuLabs item maps cleanly, or none match your filters.</span>

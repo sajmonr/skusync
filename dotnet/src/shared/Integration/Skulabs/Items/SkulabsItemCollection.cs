@@ -1,21 +1,33 @@
-using SharedKernel;
-
 namespace Integration.Skulabs.Items;
 
 /// <summary>
-/// The full set of items returned by <see cref="ISkulabsItemClient.GetAllItems"/>. Fetching returns
-/// <em>everything</em>; deciding what can be synced is the caller's concern, exposed here as
-/// <see cref="GetSyncable"/> and <see cref="GetAmbiguous"/>. An item is syncable only when it has
-/// exactly one listing whose variant id is a Shopify (numeric) variant; everything else is ambiguous.
+/// The set of items returned by <see cref="ISkulabsItemClient.GetAllItems"/>, with every non-Shopify
+/// listing stripped on construction — a listing counts only when its variant id is a Shopify (numeric)
+/// id; a null, empty or otherwise non-numeric id is an internal SkuLabs variant that can never match a
+/// Shopify variant. Deciding what to do with each item is the caller's concern, exposed as
+/// <see cref="GetSyncable"/>, <see cref="GetAmbiguous"/> and
+/// <see cref="GetSourceItemIdsWithoutShopifyListings"/>. An item is syncable when it has exactly one
+/// Shopify listing, ambiguous when it has more than one, and left alone when it has none.
 /// </summary>
-public sealed class SkulabsItemCollection(IReadOnlyList<SkulabsApiItem> items)
+public sealed class SkulabsItemCollection
 {
-    /// <summary>Every item SkuLabs returned, with all listings intact.</summary>
-    public IReadOnlyList<SkulabsApiItem> Items { get; } = items;
+    public SkulabsItemCollection(IReadOnlyList<SkulabsApiItem> items) =>
+        Items = items.Select(WithShopifyListingsOnly).ToArray();
+
+    /// <summary>Every item SkuLabs returned, with only its Shopify (numeric-variant) listings retained.</summary>
+    public IReadOnlyList<SkulabsApiItem> Items { get; }
+
+    private static SkulabsApiItem WithShopifyListingsOnly(SkulabsApiItem item) =>
+        item with
+        {
+            Listings = item.Listings
+                .Where(listing => long.TryParse(listing.RawVariantId, out _))
+                .ToArray()
+        };
 
     /// <summary>
-    /// The items that map cleanly to a single Shopify variant, projected to the flat shape the
-    /// active reconciler consumes.
+    /// The items that map to a single Shopify variant, projected to the flat shape the active
+    /// reconciler consumes.
     /// </summary>
     public IReadOnlyList<SkuLabsItem> GetSyncable()
     {
@@ -46,15 +58,17 @@ public sealed class SkulabsItemCollection(IReadOnlyList<SkulabsApiItem> items)
     }
 
     /// <summary>
-    /// The items that do not fit the strict single-Shopify-listing criterion, each tagged with the
-    /// reason it was quarantined and carrying all of its listings for later examination.
+    /// The items that map to more than one Shopify listing. The target variant is ambiguous, so these
+    /// are quarantined for review rather than synced. Each carries all of its Shopify listings —
+    /// including any pointing at a Shopify variant that has since been deleted — so a reviewer can see
+    /// exactly what to fix in SkuLabs.
     /// </summary>
     public IReadOnlyList<SkulabsAmbiguousItem> GetAmbiguous()
     {
         var ambiguous = new List<SkulabsAmbiguousItem>();
         foreach (var item in Items)
         {
-            if (!TryClassifyAmbiguity(item, out var reason))
+            if (item.Listings.Count <= 1)
             {
                 continue;
             }
@@ -64,7 +78,6 @@ public sealed class SkulabsItemCollection(IReadOnlyList<SkulabsApiItem> items)
                 item.Name,
                 item.Sku,
                 item.Upc,
-                reason,
                 item.Listings));
         }
 
@@ -72,28 +85,21 @@ public sealed class SkulabsItemCollection(IReadOnlyList<SkulabsApiItem> items)
     }
 
     /// <summary>
-    /// Determines whether <paramref name="item"/> is ambiguous and, if so, why. Returns
-    /// <c>false</c> for a cleanly syncable item (single numeric-variant listing).
+    /// The source ids of items that have no Shopify listing at all — someone created a SkuLabs-only
+    /// item that is not (or no longer) in Shopify. There is nothing to sync, so the reconciler leaves
+    /// them out of both tables and severs any link they may still carry from a previous run.
     /// </summary>
-    private static bool TryClassifyAmbiguity(SkulabsApiItem item, out SkulabsAmbiguityReason reason)
+    public IReadOnlyList<string> GetSourceItemIdsWithoutShopifyListings()
     {
-        switch (item.Listings.Count)
+        var sourceItemIds = new List<string>();
+        foreach (var item in Items)
         {
-            case 0:
-                reason = SkulabsAmbiguityReason.NoListings;
-                return true;
-            case > 1:
-                reason = SkulabsAmbiguityReason.MultipleListings;
-                return true;
-            default:
-                if (!long.TryParse(item.Listings[0].RawVariantId, out _))
-                {
-                    reason = SkulabsAmbiguityReason.ListingNotInShopify;
-                    return true;
-                }
-
-                reason = default;
-                return false;
+            if (item.Listings.Count == 0)
+            {
+                sourceItemIds.Add(item.SourceItemId);
+            }
         }
+
+        return sourceItemIds;
     }
 }

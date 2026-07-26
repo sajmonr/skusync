@@ -24,18 +24,6 @@ public class SkulabsAmbiguousItemConfiguration : IEntityTypeConfiguration<Skulab
         // One quarantine row per SkuLabs source item — the upsert key for the reconciler.
         builder.HasIndex(x => x.SkulabsSourceItemId).IsUnique();
 
-        builder.HasOne(x => x.ReasonNavigation)
-            .WithMany(reason => reason.AmbiguousItems)
-            .HasForeignKey(x => x.Reason)
-            .HasPrincipalKey(reason => reason.Id)
-            .OnDelete(DeleteBehavior.Restrict);
-
-        builder.HasOne(x => x.StatusNavigation)
-            .WithMany(status => status.AmbiguousItems)
-            .HasForeignKey(x => x.Status)
-            .HasPrincipalKey(status => status.Id)
-            .OnDelete(DeleteBehavior.Restrict);
-
         builder.HasMany(x => x.Listings)
             .WithOne(listing => listing.AmbiguousItem)
             .HasForeignKey(listing => listing.SkulabsAmbiguousItemId)

@@ -15,8 +15,8 @@ public class GetAmbiguousItemsEndpoint(ApplicationDbContext dbContext)
         {
             summary.Summary = "List ambiguous SkuLabs items";
             summary.Description =
-                "Returns paged SkuLabs items that could not be cleanly mapped to a single Shopify "
-                + "variant (multiple listings, none, or a non-Shopify listing), each with its listings.";
+                "Returns paged SkuLabs items that map to more than one Shopify listing and so cannot "
+                + "be cleanly synced to a single variant, each with its listings.";
         });
     }
 
@@ -27,7 +27,6 @@ public class GetAmbiguousItemsEndpoint(ApplicationDbContext dbContext)
         var query = dbContext.SkulabsAmbiguousItems.AsNoTracking();
 
         query = query.ApplyAmbiguousItemsSearch(request.Search);
-        query = query.ApplyAmbiguousItemsReasonFilter(request.Reason);
 
         var pagedResponse = await query
             .OrderByDescending(entity => entity.FirstSeenUtc)

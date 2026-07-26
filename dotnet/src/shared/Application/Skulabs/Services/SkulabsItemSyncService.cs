@@ -4,7 +4,6 @@ using Infrastructure.Database.Entities;
 using Integration.Skulabs.Items;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using SharedKernel;
 
 namespace Application.Skulabs.Services;
 
@@ -52,6 +51,9 @@ public class SkulabsItemSyncService(
         }
 
         await ReconcileAmbiguousItems(ambiguous, variantLookup, indexes, accumulator, cancellationToken);
+
+        SeverLinksForItemsWithoutShopifyListings(
+            collection.GetSourceItemIdsWithoutShopifyListings(), indexes, accumulator);
 
         logger.LogDebug(
             "Reconciliation done. About to persist — Created: {Created}, Re-linked: {Relinked}, Severed: {Severed}, "
@@ -315,6 +317,27 @@ public class SkulabsItemSyncService(
         }
     }
 
+    /// <summary>
+    /// Severs the active link for any item that no longer has a Shopify listing. Without this a row
+    /// that was synced before its last Shopify listing disappeared would keep a stale link and still
+    /// show as in-sync on the item-sync page. Any ambiguous quarantine row for the same item is
+    /// removed by <see cref="ReconcileAmbiguousItems"/>, which drops rows it no longer sees.
+    /// </summary>
+    private void SeverLinksForItemsWithoutShopifyListings(
+        IReadOnlyList<string> sourceItemIds,
+        SkulabsItemIndexes indexes,
+        ReconciliationAccumulator accumulator)
+    {
+        foreach (var sourceItemId in sourceItemIds)
+        {
+            var activeRow = indexes.TryGetByItemId(sourceItemId);
+            if (activeRow is not null)
+            {
+                SeverLink(activeRow, indexes, accumulator);
+            }
+        }
+    }
+
     private static SkulabsAmbiguousItemEntity CreateAmbiguousItem(
         SkulabsAmbiguousItem apiItem,
         IReadOnlyDictionary<long, Guid> variantLookup)
@@ -325,9 +348,7 @@ public class SkulabsItemSyncService(
             Name = apiItem.Name,
             Sku = apiItem.Sku,
             Upc = apiItem.Upc,
-            ListingCount = apiItem.Listings.Count,
-            Reason = apiItem.Reason,
-            Status = SkulabsAmbiguityStatus.Unresolved
+            ListingCount = apiItem.Listings.Count
         };
 
         foreach (var listing in apiItem.Listings)
@@ -352,7 +373,6 @@ public class SkulabsItemSyncService(
         entity.Sku = apiItem.Sku;
         entity.Upc = apiItem.Upc;
         entity.ListingCount = apiItem.Listings.Count;
-        entity.Reason = apiItem.Reason;
         entity.LastSeenUtc = DateTime.UtcNow;
 
         dbContext.SkulabsAmbiguousItemListings.RemoveRange(entity.Listings);

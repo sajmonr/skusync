@@ -5,7 +5,6 @@ using Integration.Skulabs.Items;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
-using SharedKernel;
 using Shouldly;
 
 namespace Tests.Application.Skulabs;
@@ -368,7 +367,6 @@ public class SkulabsItemSyncServiceTests : IDisposable
 
         var ambiguous = await _dbContext.SkulabsAmbiguousItems.Include(a => a.Listings).SingleAsync();
         ambiguous.SkulabsSourceItemId.ShouldBe("multi");
-        ambiguous.Reason.ShouldBe(SkulabsAmbiguityReason.MultipleListings);
         ambiguous.ListingCount.ShouldBe(2);
         ambiguous.Listings.Count.ShouldBe(2);
 
@@ -380,30 +378,78 @@ public class SkulabsItemSyncServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Sync_ShouldQuarantineItem_WhenItHasNoListings()
+    public async Task Sync_ShouldLeaveItemAlone_WhenItHasNoShopifyListings()
     {
         _skulabsClient.GetAllItems().Returns(Collection(ApiItem("empty")));
 
         var result = await CreateSut().Sync();
 
-        result.AmbiguousCreatedCount.ShouldBe(1);
-        var ambiguous = await _dbContext.SkulabsAmbiguousItems.Include(a => a.Listings).SingleAsync();
-        ambiguous.Reason.ShouldBe(SkulabsAmbiguityReason.NoListings);
-        ambiguous.Listings.ShouldBeEmpty();
+        result.AmbiguousCreatedCount.ShouldBe(0);
+        (await _dbContext.SkulabsAmbiguousItems.CountAsync()).ShouldBe(0);
+        (await _dbContext.SkulabsItems.CountAsync()).ShouldBe(0);
     }
 
     [Fact]
-    public async Task Sync_ShouldQuarantineItem_WhenSingleListingIsNotInShopify()
+    public async Task Sync_ShouldSeverActiveLink_WhenItemLosesItsLastShopifyListing()
     {
+        var variant = SeedVariant(variantId: 200L);
+        SeedSkulabsItem(variant.ShopifyProductVariantId, sourceItemId: "gone", sourceListingId: "lst");
+        await _dbContext.SaveChangesAsync();
+
+        // SkuLabs still returns the item, but its only listing is now internal (non-numeric variant),
+        // so after filtering it has no Shopify listing at all.
         _skulabsClient.GetAllItems().Returns(Collection(
-            ApiItem("internal", Listing("lst", "not-a-number"))));
+            ApiItem("gone", Listing("lst", "not-a-number"))));
+
+        await CreateSut().Sync();
+
+        (await _dbContext.SkulabsItems.CountAsync()).ShouldBe(0);
+        (await _dbContext.SkulabsAmbiguousItems.CountAsync()).ShouldBe(0);
+
+        var logs = await LogsForVariant(variant.ShopifyProductVariantId);
+        logs.Single().Message.ShouldBe("Unlinked from SkuLabs item 'gone'.");
+    }
+
+    [Fact]
+    public async Task Sync_ShouldStillResolveDeletedVariant_OnAmbiguousItemListing()
+    {
+        // A deleted Shopify variant is treated as "gone" for syncing, but a multi-listing item that
+        // still references it must stay ambiguous and surface the deleted variant so it can be fixed
+        // in SkuLabs. The variant lookup deliberately includes deleted variants for this reason.
+        var liveVariant = SeedVariant(variantId: 10L);
+        var deletedVariant = SeedVariant(variantId: 20L);
+        deletedVariant.IsDeleted = true;
+        await _dbContext.SaveChangesAsync();
+
+        _skulabsClient.GetAllItems().Returns(Collection(
+            ApiItem("multi", Listing("lst-a", "10"), Listing("lst-b", "20"))));
 
         var result = await CreateSut().Sync();
 
         result.AmbiguousCreatedCount.ShouldBe(1);
         var ambiguous = await _dbContext.SkulabsAmbiguousItems.Include(a => a.Listings).SingleAsync();
-        ambiguous.Reason.ShouldBe(SkulabsAmbiguityReason.ListingNotInShopify);
-        ambiguous.Listings.Single().ShopifyProductVariantId.ShouldBeNull();
+        ambiguous.Listings.Single(l => l.RawVariantId == "10").ShopifyProductVariantId
+            .ShouldBe(liveVariant.ShopifyProductVariantId);
+        ambiguous.Listings.Single(l => l.RawVariantId == "20").ShopifyProductVariantId
+            .ShouldBe(deletedVariant.ShopifyProductVariantId);
+    }
+
+    [Fact]
+    public async Task Sync_ShouldLinkToDeletedVariant_WhenSingleListingResolvesToOne()
+    {
+        var deletedVariant = SeedVariant(variantId: 200L);
+        deletedVariant.IsDeleted = true;
+        await _dbContext.SaveChangesAsync();
+
+        _skulabsClient.GetAllItems().Returns(Syncable(NewSkulabsItem(itemId: "single", variantId: 200)));
+
+        var result = await CreateSut().Sync();
+
+        // Mapped once and then invisible on the item-sync page via that endpoint's IsDeleted filter.
+        result.CreatedSkulabsItemIds.Count.ShouldBe(1);
+        (await _dbContext.SkulabsAmbiguousItems.CountAsync()).ShouldBe(0);
+        var stored = await _dbContext.SkulabsItems.SingleAsync();
+        stored.ShopifyProductVariantId.ShouldBe(deletedVariant.ShopifyProductVariantId);
     }
 
     [Fact]
@@ -424,7 +470,7 @@ public class SkulabsItemSyncServiceTests : IDisposable
     public async Task Sync_ShouldRemoveFromQuarantine_WhenItemBecomesSyncableAgain()
     {
         var variant = SeedVariant(variantId: 200L);
-        SeedAmbiguousItem(sourceItemId: "was-ambiguous", reason: SkulabsAmbiguityReason.MultipleListings);
+        SeedAmbiguousItem(sourceItemId: "was-ambiguous");
         await _dbContext.SaveChangesAsync();
 
         _skulabsClient.GetAllItems().Returns(Syncable(
@@ -466,8 +512,7 @@ public class SkulabsItemSyncServiceTests : IDisposable
     [Fact]
     public async Task Sync_ShouldRefreshListings_WhenItemRemainsAmbiguous()
     {
-        SeedAmbiguousItem(sourceItemId: "multi", reason: SkulabsAmbiguityReason.MultipleListings,
-            listingRawVariantIds: ["1", "2"]);
+        SeedAmbiguousItem(sourceItemId: "multi", listingRawVariantIds: ["1", "2"]);
         await _dbContext.SaveChangesAsync();
 
         _skulabsClient.GetAllItems().Returns(Collection(
@@ -536,7 +581,6 @@ public class SkulabsItemSyncServiceTests : IDisposable
 
     private SkulabsAmbiguousItemEntity SeedAmbiguousItem(
         string sourceItemId,
-        SkulabsAmbiguityReason reason,
         string[]? listingRawVariantIds = null)
     {
         var entity = new SkulabsAmbiguousItemEntity
@@ -546,7 +590,6 @@ public class SkulabsItemSyncServiceTests : IDisposable
             Name = "Name",
             Sku = "sku",
             Upc = "upc",
-            Reason = reason,
             ListingCount = listingRawVariantIds?.Length ?? 0
         };
 

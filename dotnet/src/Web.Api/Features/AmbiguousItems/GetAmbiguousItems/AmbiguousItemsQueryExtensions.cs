@@ -24,11 +24,4 @@ public static class AmbiguousItemsQueryExtensions
                 listing.RawVariantId.ToLower().Contains(normalizedSearch) ||
                 listing.ShopifyProductId.ToLower().Contains(normalizedSearch)));
     }
-
-    public static IQueryable<SkulabsAmbiguousItemEntity> ApplyAmbiguousItemsReasonFilter(
-        this IQueryable<SkulabsAmbiguousItemEntity> query,
-        string? reason) =>
-        string.IsNullOrWhiteSpace(reason)
-            ? query
-            : query.Where(entity => entity.ReasonNavigation!.Name == reason);
 }

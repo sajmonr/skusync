@@ -20,8 +20,7 @@
   border-bottom: 1px solid var(--app-border);
 }
 
-.search-field,
-.filter-actions {
+.search-field {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -59,16 +58,6 @@
 .search-input input {
   width: min(22rem, 40vw);
   padding-left: 2.25rem;
-}
-
-.status-select {
-  min-width: 11rem;
-  min-height: 2.5rem;
-  padding: 0 2rem 0 0.75rem;
-  border: 1px solid var(--app-border);
-  border-radius: var(--p-border-radius-md);
-  background: var(--app-surface);
-  color: var(--app-text);
 }
 
 :host ::ng-deep .p-datatable-thead > tr > th {
@@ -160,29 +149,6 @@
   text-decoration-color: currentColor;
 }
 
-.reason-badge {
-  display: inline-flex;
-  padding: 0.28rem 0.5rem;
-  border-radius: 999px;
-  font-size: 0.68rem;
-  font-weight: 650;
-}
-
-.reason-badge.MultipleListings {
-  background: var(--p-red-50);
-  color: var(--p-red-700);
-}
-
-.reason-badge.ListingNotInShopify {
-  background: var(--p-amber-50);
-  color: var(--p-amber-800);
-}
-
-.reason-badge.NoListings {
-  background: var(--p-surface-100);
-  color: var(--p-surface-700);
-}
-
 .detail-row > td {
   padding: 0 !important;
   white-space: normal !important;
@@ -236,6 +202,33 @@
   font-style: italic;
 }
 
+.listing-line .resolved-variant {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.5rem;
+  overflow: visible;
+  white-space: normal;
+}
+
+.resolved-variant > a {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.deleted-badge {
+  flex: none;
+  display: inline-flex;
+  padding: 0.15rem 0.4rem;
+  border-radius: 999px;
+  background: var(--p-red-50);
+  color: var(--p-red-700);
+  font-size: 0.62rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -271,10 +264,8 @@
   }
 
   .search-field,
-  .filter-actions,
   .search-input,
-  .search-input input,
-  .status-select {
+  .search-input input {
     width: 100%;
   }
 
