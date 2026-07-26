@@ -316,6 +316,38 @@ public class SkulabsItemClientTests
     }
 
     [Fact]
+    public async Task GetAllItems_ShouldCoalesceNullListingFieldsToEmpty_ForNonShopifyListings()
+    {
+        // SkuLabs sends variant_id/item_id as JSON null on non-Shopify listings. Left as null these
+        // reach the NOT NULL RawVariantId column and blow up the ambiguous-quarantine insert.
+        const string json = """
+                            [
+                              {
+                                "_id": "item-null",
+                                "name": "Null Listing",
+                                "sku": "SKU-N",
+                                "upc": "UPC-N",
+                                "listings": [
+                                  { "variant_id": null, "item_id": "LINE_SKU_11-LPK", "_id": "l-null" }
+                                ]
+                              }
+                            ]
+                            """;
+        _handler.SetResponse(JsonResponse(json));
+        var sut = CreateSut();
+
+        var result = await sut.GetAllItems();
+
+        var ambiguous = result.GetAmbiguous();
+        ambiguous.Count.ShouldBe(1);
+        ambiguous[0].Reason.ShouldBe(SkulabsAmbiguityReason.ListingNotInShopify);
+        var listing = ambiguous[0].Listings.ShouldHaveSingleItem();
+        listing.RawVariantId.ShouldBe("");
+        listing.ShopifyProductId.ShouldBe("LINE_SKU_11-LPK");
+        listing.ListingId.ShouldBe("l-null");
+    }
+
+    [Fact]
     public async Task GetAllItems_ShouldThrow_WhenResponseStatusIsNotSuccess()
     {
         _handler.SetResponse(new HttpResponseMessage(HttpStatusCode.InternalServerError));
