@@ -23,7 +23,7 @@ public class RecurringJobRegistrar(
         Apply("shopify-product-sync", schedule.ShopifyProductSync, () =>
             recurringJobManager.AddOrUpdate<IProductsService>(
                 "shopify-product-sync",
-                service => service.Sync(CancellationToken.None),
+                service => service.SyncProducts(CancellationToken.None),
                 schedule.ShopifyProductSync.Cron));
 
         Apply("sku-barcode-sync", schedule.SkuAndBarcodeSync, () =>

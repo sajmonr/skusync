@@ -75,6 +75,7 @@ builder.Services.AddAuthorization(options =>
         .Build();
 });
 builder.Services.AddDashboardLoginRateLimiting();
+builder.Services.AddProductSyncRateLimiting();
 
 var app = builder.Build();
 

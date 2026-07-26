@@ -12,7 +12,7 @@ public interface IProductsService
     /// as failed rather than silently succeeding.
     /// </summary>
     /// <param name="cancellationToken">Supplied by the job runner; cancels a run in progress.</param>
-    Task Sync(CancellationToken cancellationToken = default);
+    Task SyncProducts(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Imports products from Shopify into the local database. This operation ensures synchronization

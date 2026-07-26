@@ -16,7 +16,7 @@ public class ProductsService(
     IMessageBus messageBus,
     ISkuGenerator skuGenerator) : IProductsService
 {
-    public async Task Sync(CancellationToken cancellationToken = default)
+    public async Task SyncProducts(CancellationToken cancellationToken = default)
     {
         var import = await ImportProductsFromShopify();
         if (!import.IsSuccess)

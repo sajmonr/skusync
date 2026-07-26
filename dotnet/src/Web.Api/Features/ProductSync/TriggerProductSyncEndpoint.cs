@@ -19,12 +19,14 @@ public class TriggerProductSyncEndpoint(IBackgroundJobClient jobClient, JobStora
     public override void Configure()
     {
         Post("product-sync");
+        Options(endpoint => endpoint.RequireRateLimiting(ProductSyncRateLimitingExtensions.PolicyName));
         Summary(summary =>
         {
             summary.Summary = "Trigger a product sync";
             summary.Description =
                 "Enqueues a background product sync (import + deduplication) and returns its job id. "
-                + "Returns the existing job when one is already queued or running.";
+                + "Returns the existing job when one is already queued or running. Rate limited to one "
+                + "request per 30 seconds per client.";
         });
     }
 
@@ -37,7 +39,7 @@ public class TriggerProductSyncEndpoint(IBackgroundJobClient jobClient, JobStora
             return;
         }
 
-        var jobId = jobClient.Enqueue<IProductsService>(service => service.Sync(CancellationToken.None));
+        var jobId = jobClient.Enqueue<IProductsService>(service => service.SyncProducts(CancellationToken.None));
         await Send.OkAsync(new TriggerProductSyncResponse(jobId, AlreadyRunning: false), cancellationToken);
     }
 
@@ -71,7 +73,7 @@ public class TriggerProductSyncEndpoint(IBackgroundJobClient jobClient, JobStora
     }
 
     private static bool IsProductSync(Job? job) =>
-        job?.Type == typeof(IProductsService) && job.Method.Name == nameof(IProductsService.Sync);
+        job?.Type == typeof(IProductsService) && job.Method.Name == nameof(IProductsService.SyncProducts);
 }
 
 /// <param name="JobId">The background job's id — poll <c>GET /jobs/{id}</c> for its state.</param>
