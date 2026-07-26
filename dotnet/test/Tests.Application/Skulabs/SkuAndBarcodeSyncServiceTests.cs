@@ -233,6 +233,106 @@ public class SkuAndBarcodeSyncServiceTests : IDisposable
         bStored.Sku.ShouldBe("b-new");
     }
 
+    // ---------- Empty SkuLabs SKU is not authoritative ----------
+
+    [Fact]
+    public async Task SyncAll_ShouldNotTreatBlankSkulabsSku_AsDrift()
+    {
+        // SkuLabs has no SKU on record; the variant SKU is good and the barcode matches.
+        // Nothing to correct — the blank SKU must not flag drift.
+        var variant = SeedVariant(sku: "good-sku", barcode: "matching-bar");
+        SeedSkulabsItem(variant.ShopifyProductVariantId, sku: "", barcode: "matching-bar");
+        await _dbContext.SaveChangesAsync();
+
+        var result = await CreateSut().SyncAll();
+
+        result.ShouldBe(SkuAndBarcodeSyncResult.Empty);
+        await _shopifyProductService.DidNotReceive()
+            .UpdateVariants(Arg.Any<string>(), Arg.Any<IEnumerable<ShopifyUpdateProductVariant>>());
+        (await _dbContext.ShopifyProductVariantLogEvents.CountAsync()).ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task SyncAll_ShouldNotOverwriteVariantSku_WhenSkulabsSkuIsBlank()
+    {
+        // Barcode drifts (so the row is a legitimate candidate) but the SkuLabs SKU is blank.
+        // The barcode should be corrected while the good variant SKU is preserved everywhere —
+        // local row, Shopify push, and the log.
+        var variant = SeedVariant(sku: "good-sku", barcode: "old-bar");
+        SeedSkulabsItem(variant.ShopifyProductVariantId, sku: "", barcode: "new-bar");
+        await _dbContext.SaveChangesAsync();
+
+        var result = await CreateSut().SyncAll();
+
+        result.Drifted.ShouldBe(1);
+        result.Corrected.ShouldBe(1);
+
+        await _shopifyProductService.Received(1).UpdateVariants(
+            variant.GlobalProductId,
+            Arg.Is<IEnumerable<ShopifyUpdateProductVariant>>(updates =>
+                updates.Count() == 1
+                && updates.First().Sku == "good-sku"
+                && updates.First().Barcode == "new-bar"));
+
+        var stored = await _dbContext.ShopifyProductVariants.SingleAsync();
+        stored.Sku.ShouldBe("good-sku");
+        stored.Barcode.ShouldBe("new-bar");
+
+        var logs = await LogsForVariant(variant.ShopifyProductVariantId);
+        logs.Select(l => l.Message).ShouldBe([
+            "Barcode corrected to match SkuLabs: 'old-bar' → 'new-bar'."
+        ]);
+    }
+
+    [Fact]
+    public async Task SyncAll_ShouldNotTreatBlankSkulabsBarcode_AsDrift()
+    {
+        // SkuLabs has no barcode on record; the variant barcode is good and the SKU matches.
+        // Nothing to correct — the blank barcode must not flag drift.
+        var variant = SeedVariant(sku: "matching-sku", barcode: "good-bar");
+        SeedSkulabsItem(variant.ShopifyProductVariantId, sku: "matching-sku", barcode: "");
+        await _dbContext.SaveChangesAsync();
+
+        var result = await CreateSut().SyncAll();
+
+        result.ShouldBe(SkuAndBarcodeSyncResult.Empty);
+        await _shopifyProductService.DidNotReceive()
+            .UpdateVariants(Arg.Any<string>(), Arg.Any<IEnumerable<ShopifyUpdateProductVariant>>());
+        (await _dbContext.ShopifyProductVariantLogEvents.CountAsync()).ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task SyncAll_ShouldNotOverwriteVariantBarcode_WhenSkulabsBarcodeIsBlank()
+    {
+        // SKU drifts (so the row is a legitimate candidate) but the SkuLabs barcode is blank.
+        // The SKU should be corrected while the good variant barcode is preserved everywhere —
+        // local row, Shopify push, and the log.
+        var variant = SeedVariant(sku: "old-sku", barcode: "good-bar");
+        SeedSkulabsItem(variant.ShopifyProductVariantId, sku: "new-sku", barcode: "");
+        await _dbContext.SaveChangesAsync();
+
+        var result = await CreateSut().SyncAll();
+
+        result.Drifted.ShouldBe(1);
+        result.Corrected.ShouldBe(1);
+
+        await _shopifyProductService.Received(1).UpdateVariants(
+            variant.GlobalProductId,
+            Arg.Is<IEnumerable<ShopifyUpdateProductVariant>>(updates =>
+                updates.Count() == 1
+                && updates.First().Sku == "new-sku"
+                && updates.First().Barcode == "good-bar"));
+
+        var stored = await _dbContext.ShopifyProductVariants.SingleAsync();
+        stored.Sku.ShouldBe("new-sku");
+        stored.Barcode.ShouldBe("good-bar");
+
+        var logs = await LogsForVariant(variant.ShopifyProductVariantId);
+        logs.Select(l => l.Message).ShouldBe([
+            "SKU corrected to match SkuLabs: 'old-sku' → 'new-sku'."
+        ]);
+    }
+
     // ---------- Feature flag scoping (gates Shopify, not local correction) ----------
 
     [Fact]

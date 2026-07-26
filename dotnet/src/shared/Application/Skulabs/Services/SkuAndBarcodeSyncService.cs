@@ -45,13 +45,16 @@ public class SkuAndBarcodeSyncService(
         // "Drifted" = DB variant ≠ SkuLabs item. "Pending" = a previous correction couldn't be
         // pushed to Shopify (flag was off, or Shopify hasn't been reconciled yet). Both states
         // need a Shopify write; pending-only rows are already locally consistent with SkuLabs.
+        // A blank SkuLabs SKU or barcode is not authoritative — SkuLabs simply has no value on
+        // record for the item — so it must never count as drift (and later overwrite a good
+        // variant value with "").
         var candidates = await dbContext.SkulabsItems
             .Include(item => item.ShopifyProductVariant)
             .Where(item => item.ShopifyProductVariant != null
                            && item.ShopifyProductVariant.IsActive
                            && !item.ShopifyProductVariant.IsDeleted
-                           && (item.ShopifyProductVariant.Sku != item.Sku
-                               || item.ShopifyProductVariant.Barcode != item.Barcode
+                           && ((item.Sku != "" && item.ShopifyProductVariant.Sku != item.Sku)
+                               || (item.Barcode != "" && item.ShopifyProductVariant.Barcode != item.Barcode)
                                || item.ShopifyProductVariant.PendingShopifySync))
             .ToListAsync(cancellationToken);
 
@@ -163,8 +166,10 @@ public class SkuAndBarcodeSyncService(
                     var updateBatch = items
                         .Select(item => new ShopifyUpdateProductVariant(
                             item.ShopifyProductVariant!.GlobalVariantId,
-                            item.Sku,
-                            item.Barcode))
+                            // Keep the variant's existing value when SkuLabs has none, so a blank
+                            // SkuLabs SKU/barcode never erases a good value on Shopify.
+                            string.IsNullOrEmpty(item.Sku) ? item.ShopifyProductVariant!.Sku : item.Sku,
+                            string.IsNullOrEmpty(item.Barcode) ? item.ShopifyProductVariant!.Barcode : item.Barcode))
                         .ToArray();
 
                     logger.LogDebug(
@@ -234,14 +239,14 @@ public class SkuAndBarcodeSyncService(
     {
         var variant = item.ShopifyProductVariant!;
 
-        if (!string.Equals(variant.Sku, item.Sku, StringComparison.Ordinal))
+        if (HasSkuDrift(item))
         {
             var oldSku = variant.Sku;
             variant.Sku = item.Sku;
             AddVariantLog(variant.ShopifyProductVariantId, VariantLogMessages.SkuCorrectedFromSkulabs(oldSku, item.Sku));
         }
 
-        if (!string.Equals(variant.Barcode, item.Barcode, StringComparison.Ordinal))
+        if (HasBarcodeDrift(item))
         {
             var oldBarcode = variant.Barcode;
             variant.Barcode = item.Barcode;
@@ -289,20 +294,37 @@ public class SkuAndBarcodeSyncService(
     }
 
     private static bool IsDrifted(SkulabsItemEntity item) =>
-        !string.Equals(item.ShopifyProductVariant!.Sku, item.Sku, StringComparison.Ordinal)
-        || !string.Equals(item.ShopifyProductVariant!.Barcode, item.Barcode, StringComparison.Ordinal);
+        HasSkuDrift(item) || HasBarcodeDrift(item);
+
+    /// <summary>
+    /// True when SkuLabs holds an authoritative SKU that differs from the variant's. A blank
+    /// SkuLabs SKU is never authoritative — SkuLabs simply has no SKU on record — so it is not
+    /// treated as drift and is never copied onto the variant, which would erase a good value.
+    /// </summary>
+    private static bool HasSkuDrift(SkulabsItemEntity item) =>
+        !string.IsNullOrEmpty(item.Sku)
+        && !string.Equals(item.ShopifyProductVariant!.Sku, item.Sku, StringComparison.Ordinal);
+
+    /// <summary>
+    /// True when SkuLabs holds an authoritative barcode that differs from the variant's. A blank
+    /// SkuLabs barcode is never authoritative — SkuLabs simply has no barcode on record — so it
+    /// is not treated as drift and is never copied onto the variant, which would erase a good value.
+    /// </summary>
+    private static bool HasBarcodeDrift(SkulabsItemEntity item) =>
+        !string.IsNullOrEmpty(item.Barcode)
+        && !string.Equals(item.ShopifyProductVariant!.Barcode, item.Barcode, StringComparison.Ordinal);
 
     private static string DescribeCorrectionReason(SkulabsItemEntity item, bool pending)
     {
         var variant = item.ShopifyProductVariant!;
         var reasons = new List<string>();
 
-        if (!string.Equals(variant.Sku, item.Sku, StringComparison.Ordinal))
+        if (HasSkuDrift(item))
         {
             reasons.Add($"SKU '{variant.Sku}' → '{item.Sku}'");
         }
 
-        if (!string.Equals(variant.Barcode, item.Barcode, StringComparison.Ordinal))
+        if (HasBarcodeDrift(item))
         {
             reasons.Add($"barcode '{variant.Barcode}' → '{item.Barcode}'");
         }
