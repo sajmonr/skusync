@@ -105,6 +105,7 @@ public static class DependencyInjection
             builder.Services.AddHangfireServer();
 
             builder.Services.AddTransient<RecurringJobs>();
+            builder.Services.AddTransient<FullSyncOrchestrator>();
             builder.AddOptionsFromConfiguration<ScheduledJobsOptions>(
                 ScheduledJobsOptions.SectionKey
             );

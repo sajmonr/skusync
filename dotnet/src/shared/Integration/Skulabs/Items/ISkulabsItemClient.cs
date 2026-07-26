@@ -6,9 +6,10 @@ namespace Integration.Skulabs.Items;
 public interface ISkulabsItemClient
 {
     /// <summary>
-    /// Fetches all SkuLabs inventory items that have exactly one Shopify channel listing.
+    /// Fetches every SkuLabs inventory item with all of its channel listings intact. Nothing is
+    /// dropped or flattened; the caller classifies items via <see cref="SkulabsItemCollection"/>.
     /// </summary>
-    Task<SkuLabsItem[]> GetAllItems();
+    Task<SkulabsItemCollection> GetAllItems();
 
     /// <summary>
     /// Updates one or more SkuLabs items in a single call via <c>PUT /item/bulk_upsert</c>.

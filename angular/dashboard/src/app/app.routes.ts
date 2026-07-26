@@ -16,6 +16,14 @@ export const routes: Routes = [
         loadChildren: () =>
           import('./features/item-sync/item-sync.routes').then((route) => route.ITEM_SYNC_ROUTES),
       },
+      {
+        path: 'ambiguous-items',
+        data: { pageTitle: 'Ambiguous items' },
+        loadChildren: () =>
+          import('./features/ambiguous-items/ambiguous-items.routes').then(
+            (route) => route.AMBIGUOUS_ITEMS_ROUTES,
+          ),
+      },
     ],
   },
   { path: 'login', component: LoginPage, data: { pageTitle: 'Sign in' } },

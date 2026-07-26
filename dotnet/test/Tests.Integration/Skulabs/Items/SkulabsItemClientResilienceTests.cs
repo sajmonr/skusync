@@ -31,7 +31,7 @@ public class SkulabsItemClientResilienceTests
 
         var result = await client.GetAllItems();
 
-        result.ShouldBeEmpty();
+        result.Items.ShouldBeEmpty();
         transport.RequestCount.ShouldBe(3, "two 429s should trigger two retries before the success");
     }
 
@@ -47,7 +47,7 @@ public class SkulabsItemClientResilienceTests
 
         var result = await client.GetAllItems();
 
-        result.ShouldBeEmpty();
+        result.Items.ShouldBeEmpty();
         transport.RequestCount.ShouldBe(2);
     }
 
@@ -86,7 +86,7 @@ public class SkulabsItemClientResilienceTests
         var result = await client.GetAllItems();
         stopwatch.Stop();
 
-        result.ShouldBeEmpty();
+        result.Items.ShouldBeEmpty();
         transport.RequestCount.ShouldBe(2);
         stopwatch.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(5),
             "MaxDelay should clamp the 1-hour Retry-After down to the 50ms test cap");

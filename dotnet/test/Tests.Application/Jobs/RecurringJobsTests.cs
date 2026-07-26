@@ -45,7 +45,7 @@ public class RecurringJobsTests
         var created = new[] { Guid.NewGuid(), Guid.NewGuid() };
         var updated = new[] { Guid.NewGuid() };
         _skulabsItemSyncService.Sync(Arg.Any<CancellationToken>()).Returns(
-            new SkulabsItemSyncResult(created, updated, 0, 0));
+            new SkulabsItemSyncResult(created, updated, 0, 0, 0, 0, 0));
 
         await CreateSut().SyncSkulabsItems();
 

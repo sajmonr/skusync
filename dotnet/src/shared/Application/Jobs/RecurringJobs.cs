@@ -1,5 +1,6 @@
 using Application.Products.Events;
 using Application.Skulabs.Services;
+using Hangfire;
 using Microsoft.Extensions.Logging;
 using Microsoft.FeatureManagement;
 using SlimMessageBus;
@@ -42,10 +43,14 @@ public class RecurringJobs(
     }
 
     /// <summary>
-    /// Pulls every SkuLabs item, links it to the matching Shopify variant, and publishes a
-    /// <see cref="SkulabsProductImportedEvent"/> for each created or re-linked record. Gated by the
-    /// <see cref="FeatureFlags.SkulabsSyncEnabled"/> flag — when disabled the sweep is a no-op.
+    /// Pulls every SkuLabs item, links it to the matching Shopify variant, surfaces the ones that
+    /// cannot be cleanly mapped, and publishes a <see cref="SkulabsProductImportedEvent"/> for each
+    /// created or re-linked record. Gated by the <see cref="FeatureFlags.SkulabsSyncEnabled"/> flag —
+    /// when disabled the sweep is a no-op. The reconciler loads all state into memory and saves once,
+    /// so two overlapping runs would race; the lock keeps this recurring job single-flight (the
+    /// manual full sync guards itself the same way).
     /// </summary>
+    [DisableConcurrentExecution(30 * 60)]
     public async Task SyncSkulabsItems(CancellationToken cancellationToken = default)
     {
         if (!await featureManager.IsEnabledAsync(FeatureFlags.SkulabsSyncEnabled))
@@ -63,8 +68,10 @@ public class RecurringJobs(
             affected.Select(id => new SkulabsProductImportedEvent(id)), cancellationToken);
 
         logger.LogInformation(
-            "SkuLabs item sync: Created: {Created}, Re-linked: {Updated}, Unmatched: {Unmatched}, Skipped: {Skipped}.",
+            "SkuLabs item sync: Created: {Created}, Re-linked: {Updated}, Unmatched: {Unmatched}, Skipped: {Skipped}, "
+            + "Ambiguous +{AmbCreated}/~{AmbUpdated}/-{AmbRemoved}.",
             result.CreatedSkulabsItemIds.Count, result.UpdatedSkulabsItemIds.Count,
-            result.UnmatchedCount, result.SkippedCount);
+            result.UnmatchedCount, result.SkippedCount,
+            result.AmbiguousCreatedCount, result.AmbiguousUpdatedCount, result.AmbiguousRemovedCount);
     }
 }

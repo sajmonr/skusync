@@ -4,6 +4,7 @@ using Infrastructure.Database.Entities;
 using Integration.Skulabs.Items;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using SharedKernel;
 
 namespace Application.Skulabs.Services;
 
@@ -23,14 +24,20 @@ public class SkulabsItemSyncService(
     {
         logger.LogDebug("Starting SkuLabs item sync.");
 
-        var apiItems = await skulabsClient.GetAllItems();
-        logger.LogDebug("Reconciler received {Count} usable item(s) from the SkuLabs client.", apiItems.Length);
-
-        if (apiItems.Length == 0)
+        var collection = await skulabsClient.GetAllItems();
+        if (collection.Items.Count == 0)
         {
-            logger.LogInformation("SkuLabs returned no usable items. Sync finished with nothing to do.");
+            // An empty response is treated as "nothing to do" rather than "everything is gone", so a
+            // transient empty payload never wipes the active links or the ambiguous quarantine.
+            logger.LogInformation("SkuLabs returned no items. Sync finished with nothing to do.");
             return SkulabsItemSyncResult.Empty;
         }
+
+        var syncable = collection.GetSyncable();
+        var ambiguous = collection.GetAmbiguous();
+        logger.LogDebug(
+            "Reconciler received {Syncable} syncable and {Ambiguous} ambiguous item(s) from the SkuLabs client.",
+            syncable.Count, ambiguous.Count);
 
         var variantLookup = await LoadVariantLookupAsync(cancellationToken);
         var indexes = await LoadExistingItemIndexesAsync(cancellationToken);
@@ -39,15 +46,19 @@ public class SkulabsItemSyncService(
             variantLookup.Count, indexes.Count);
 
         var accumulator = new ReconciliationAccumulator();
-        foreach (var apiItem in apiItems)
+        foreach (var apiItem in syncable)
         {
             ReconcileItem(apiItem, variantLookup, indexes, accumulator);
         }
 
+        await ReconcileAmbiguousItems(ambiguous, variantLookup, indexes, accumulator, cancellationToken);
+
         logger.LogDebug(
-            "Reconciliation done. About to persist — Created: {Created}, Re-linked: {Relinked}, Severed: {Severed}, Unmatched: {Unmatched}, Skipped: {Skipped}.",
+            "Reconciliation done. About to persist — Created: {Created}, Re-linked: {Relinked}, Severed: {Severed}, "
+            + "Unmatched: {Unmatched}, Skipped: {Skipped}, Ambiguous +{AmbCreated}/~{AmbUpdated}/-{AmbRemoved}.",
             accumulator.Created.Count, accumulator.Updated.Count, accumulator.Severed,
-            accumulator.Unmatched, accumulator.Skipped);
+            accumulator.Unmatched, accumulator.Skipped,
+            accumulator.AmbiguousCreated, accumulator.AmbiguousUpdated, accumulator.AmbiguousRemoved);
 
         try
         {
@@ -64,9 +75,11 @@ public class SkulabsItemSyncService(
         }
 
         logger.LogInformation(
-            "SkuLabs item sync finished. Created: {Created}, Re-linked: {Relinked}, Severed: {Severed}, Unmatched: {Unmatched}, Skipped: {Skipped}.",
+            "SkuLabs item sync finished. Created: {Created}, Re-linked: {Relinked}, Severed: {Severed}, "
+            + "Unmatched: {Unmatched}, Skipped: {Skipped}, Ambiguous +{AmbCreated}/~{AmbUpdated}/-{AmbRemoved}.",
             accumulator.Created.Count, accumulator.Updated.Count, accumulator.Severed,
-            accumulator.Unmatched, accumulator.Skipped);
+            accumulator.Unmatched, accumulator.Skipped,
+            accumulator.AmbiguousCreated, accumulator.AmbiguousUpdated, accumulator.AmbiguousRemoved);
 
         return accumulator.ToResult();
     }
@@ -248,6 +261,129 @@ public class SkulabsItemSyncService(
     }
 
     /// <summary>
+    /// Reconciles the ambiguous-item quarantine against the current SkuLabs payload: upserts every
+    /// still-ambiguous item (refreshing its listings), removes rows for items that are no longer
+    /// ambiguous, and severs any active link for an item that has just become ambiguous so a single
+    /// SkuLabs item is never both synced and quarantined.
+    /// </summary>
+    private async Task ReconcileAmbiguousItems(
+        IReadOnlyList<SkulabsAmbiguousItem> ambiguous,
+        IReadOnlyDictionary<long, Guid> variantLookup,
+        SkulabsItemIndexes activeIndexes,
+        ReconciliationAccumulator accumulator,
+        CancellationToken cancellationToken)
+    {
+        var existing = await dbContext.SkulabsAmbiguousItems
+            .Include(item => item.Listings)
+            .ToListAsync(cancellationToken);
+        var existingBySourceId = existing.ToDictionary(item => item.SkulabsSourceItemId, StringComparer.Ordinal);
+        var seenSourceIds = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var apiItem in ambiguous)
+        {
+            seenSourceIds.Add(apiItem.SourceItemId);
+
+            // An item that has just become ambiguous may still carry a stale active link from a
+            // previous run — sever it so the quarantine and the active table stay mutually exclusive.
+            var activeRow = activeIndexes.TryGetByItemId(apiItem.SourceItemId);
+            if (activeRow is not null)
+            {
+                SeverLink(activeRow, activeIndexes, accumulator);
+            }
+
+            if (existingBySourceId.TryGetValue(apiItem.SourceItemId, out var entity))
+            {
+                UpdateAmbiguousItem(entity, apiItem, variantLookup);
+                accumulator.AmbiguousUpdated++;
+            }
+            else
+            {
+                dbContext.SkulabsAmbiguousItems.Add(CreateAmbiguousItem(apiItem, variantLookup));
+                accumulator.AmbiguousCreated++;
+            }
+        }
+
+        // Items no longer reported as ambiguous leave quarantine. If they are now cleanly syncable,
+        // the active pass above has already (re)created their link in this same run.
+        foreach (var entity in existing)
+        {
+            if (!seenSourceIds.Contains(entity.SkulabsSourceItemId))
+            {
+                dbContext.SkulabsAmbiguousItems.Remove(entity);
+                accumulator.AmbiguousRemoved++;
+            }
+        }
+    }
+
+    private static SkulabsAmbiguousItemEntity CreateAmbiguousItem(
+        SkulabsAmbiguousItem apiItem,
+        IReadOnlyDictionary<long, Guid> variantLookup)
+    {
+        var entity = new SkulabsAmbiguousItemEntity
+        {
+            SkulabsSourceItemId = apiItem.SourceItemId,
+            Name = apiItem.Name,
+            Sku = apiItem.Sku,
+            Upc = apiItem.Upc,
+            ListingCount = apiItem.Listings.Count,
+            Reason = apiItem.Reason,
+            Status = SkulabsAmbiguityStatus.Unresolved
+        };
+
+        foreach (var listing in apiItem.Listings)
+        {
+            entity.Listings.Add(BuildListing(listing, variantLookup));
+        }
+
+        return entity;
+    }
+
+    /// <summary>
+    /// Refreshes a quarantined item's metadata and replaces its listings wholesale — listings can
+    /// change between runs and diffing them earns nothing at this size. <c>FirstSeenUtc</c> is left
+    /// untouched so the original quarantine time survives.
+    /// </summary>
+    private void UpdateAmbiguousItem(
+        SkulabsAmbiguousItemEntity entity,
+        SkulabsAmbiguousItem apiItem,
+        IReadOnlyDictionary<long, Guid> variantLookup)
+    {
+        entity.Name = apiItem.Name;
+        entity.Sku = apiItem.Sku;
+        entity.Upc = apiItem.Upc;
+        entity.ListingCount = apiItem.Listings.Count;
+        entity.Reason = apiItem.Reason;
+        entity.LastSeenUtc = DateTime.UtcNow;
+
+        dbContext.SkulabsAmbiguousItemListings.RemoveRange(entity.Listings);
+        entity.Listings.Clear();
+        foreach (var listing in apiItem.Listings)
+        {
+            entity.Listings.Add(BuildListing(listing, variantLookup));
+        }
+    }
+
+    private static SkulabsAmbiguousItemListingEntity BuildListing(
+        SkulabsApiListing listing,
+        IReadOnlyDictionary<long, Guid> variantLookup)
+    {
+        Guid? variantGuid = null;
+        if (long.TryParse(listing.RawVariantId, out var variantId) &&
+            variantLookup.TryGetValue(variantId, out var guid))
+        {
+            variantGuid = guid;
+        }
+
+        return new SkulabsAmbiguousItemListingEntity
+        {
+            SkulabsSourceListingId = listing.ListingId,
+            RawVariantId = listing.RawVariantId,
+            ShopifyProductId = listing.ShopifyProductId,
+            ShopifyProductVariantId = variantGuid
+        };
+    }
+
+    /// <summary>
     /// Tally of reconciliation outcomes for a single <see cref="Sync"/> run.
     /// </summary>
     private sealed class ReconciliationAccumulator
@@ -257,8 +393,13 @@ public class SkulabsItemSyncService(
         public int Unmatched { get; set; }
         public int Skipped { get; set; }
         public int Severed { get; set; }
+        public int AmbiguousCreated { get; set; }
+        public int AmbiguousUpdated { get; set; }
+        public int AmbiguousRemoved { get; set; }
 
-        public SkulabsItemSyncResult ToResult() => new(Created, Updated, Unmatched, Skipped);
+        public SkulabsItemSyncResult ToResult() => new(
+            Created, Updated, Unmatched, Skipped,
+            AmbiguousCreated, AmbiguousUpdated, AmbiguousRemoved);
     }
 
     /// <summary>

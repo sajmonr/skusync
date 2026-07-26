@@ -3,6 +3,7 @@ using Infrastructure.Database;
 using Infrastructure.Database.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using SharedKernel;
 using Shouldly;
 using Tests.E2E.Infrastructure;
 using WireMock.RequestBuilders;
@@ -126,6 +127,33 @@ public class SkulabsItemSyncTests(AppServerTestHost factory) : IAsyncLifetime
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         (await db.SkulabsItems.CountAsync()).ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task SkulabsSyncJob_QuarantinesItem_WhenItHasMultipleListings()
+    {
+        // The item has two listings — one pointing at our seeded variant, one that isn't ours.
+        var variantGuid = await SeedVariantAsync(MatchingVariantId);
+        await StubSkulabsGetAllAsync("Skulabs/Api/items-get-multiple-listings.json");
+
+        await RunSyncJobAsync();
+
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        // Not synced into the active table.
+        (await db.SkulabsItems.CountAsync()).ShouldBe(0);
+
+        // Surfaced as ambiguous, carrying both listings; the matching listing resolves to our variant.
+        var ambiguous = await db.SkulabsAmbiguousItems.Include(a => a.Listings).SingleAsync();
+        ambiguous.SkulabsSourceItemId.ShouldBe("ambiguous-multi-item");
+        ambiguous.Reason.ShouldBe(SkulabsAmbiguityReason.MultipleListings);
+        ambiguous.ListingCount.ShouldBe(2);
+
+        ambiguous.Listings.Single(l => l.RawVariantId == MatchingVariantId.ToString())
+            .ShopifyProductVariantId.ShouldBe(variantGuid);
+        ambiguous.Listings.Single(l => l.RawVariantId != MatchingVariantId.ToString())
+            .ShopifyProductVariantId.ShouldBeNull();
     }
 
     private async Task RunSyncJobAsync()

@@ -1,0 +1,21 @@
+<header class="ambiguous-toolbar">
+  <p class="intro">
+    SkuLabs items that can't be mapped to a single Shopify variant. These are held aside and take no
+    part in the active sync until they're resolved in SkuLabs.
+  </p>
+  <p-button
+    label="Refresh"
+    severity="secondary"
+    [disabled]="store.loading()"
+    (onClick)="retry()"
+  />
+</header>
+
+<app-ambiguous-items-table
+  [items]="store.items()"
+  [totalCount]="store.totalCount()"
+  [loading]="store.loading()"
+  [error]="store.error()"
+  (queryChange)="load($event)"
+  (retryRequest)="retry()"
+/>
