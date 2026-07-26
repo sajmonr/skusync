@@ -3,15 +3,8 @@ import { debounce, form, FormField } from '@angular/forms/signals';
 import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
 import { TableLazyLoadEvent, TableModule } from 'primeng/table';
-import { AmbiguityReason, AmbiguousItem } from '../../models/ambiguous-item';
+import { AmbiguousItem } from '../../models/ambiguous-item';
 import { AmbiguousItemsQuery } from '../../data-access/ambiguous-items-store';
-
-type ReasonFilter = AmbiguityReason | 'all';
-
-interface ReasonFilterOption {
-  readonly label: string;
-  readonly value: ReasonFilter;
-}
 
 @Component({
   selector: 'app-ambiguous-items-table',
@@ -27,22 +20,13 @@ export class AmbiguousItemsTable {
   readonly queryChange = output<AmbiguousItemsQuery>();
   readonly retryRequest = output<void>();
 
-  protected readonly filterModel = signal<{ search: string; reason: ReasonFilter }>({
-    search: '',
-    reason: 'all',
-  });
+  protected readonly filterModel = signal<{ search: string }>({ search: '' });
   protected readonly filterForm = form(this.filterModel, (fields) => {
     debounce(fields.search, 250);
   });
   protected readonly expandedItemId = signal<string | null>(null);
   protected readonly first = signal(0);
   protected readonly pageSize = signal(25);
-  protected readonly reasonOptions: ReasonFilterOption[] = [
-    { label: 'All reasons', value: 'all' },
-    { label: 'Multiple listings', value: 'MultipleListings' },
-    { label: 'No listings', value: 'NoListings' },
-    { label: 'Not in Shopify', value: 'ListingNotInShopify' },
-  ];
 
   protected readonly tableItems = computed<AmbiguousItem[]>(() => [...this.items()]);
   private lastLazyEvent: TableLazyLoadEvent = { first: 0, rows: 25 };
@@ -50,13 +34,13 @@ export class AmbiguousItemsTable {
 
   constructor() {
     effect(() => {
-      const { search, reason } = this.filterModel();
+      const { search } = this.filterModel();
       if (!this.filterEffectInitialized) {
         this.filterEffectInitialized = true;
         return;
       }
 
-      untracked(() => this.requestPage({ ...this.lastLazyEvent, first: 0 }, search, reason));
+      untracked(() => this.requestPage({ ...this.lastLazyEvent, first: 0 }, search));
     });
   }
 
@@ -72,22 +56,7 @@ export class AmbiguousItemsTable {
     return this.expandedItemId() === itemId;
   }
 
-  protected reasonLabel(reason: AmbiguityReason): string {
-    switch (reason) {
-      case 'MultipleListings':
-        return 'Multiple listings';
-      case 'NoListings':
-        return 'No listings';
-      case 'ListingNotInShopify':
-        return 'Not in Shopify';
-    }
-  }
-
-  private requestPage(
-    event: TableLazyLoadEvent,
-    search = this.filterModel().search,
-    reason = this.filterModel().reason,
-  ): void {
+  private requestPage(event: TableLazyLoadEvent, search = this.filterModel().search): void {
     const rows = event.rows ?? this.pageSize();
     const first = event.first ?? 0;
     this.lastLazyEvent = { ...event, rows, first };
@@ -98,7 +67,6 @@ export class AmbiguousItemsTable {
       page: Math.floor(first / rows) + 1,
       pageSize: rows,
       search: search.trim(),
-      reason,
     });
   }
 }

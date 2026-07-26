@@ -8,7 +8,6 @@ using Integration.Skulabs.Options;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NSubstitute;
-using SharedKernel;
 using Shouldly;
 
 namespace Tests.Integration.Skulabs.Items;
@@ -97,7 +96,7 @@ public class SkulabsItemClientTests
     }
 
     [Fact]
-    public async Task GetAllItems_ShouldSplitItemsIntoSyncableAndAmbiguous_ByListingShape()
+    public async Task GetAllItems_ShouldClassifyItemsByShopifyListingCount()
     {
         const string json = """
                             [
@@ -138,10 +137,9 @@ public class SkulabsItemClientTests
         syncable[0].ShouldBe(new SkuLabsItem("item-1", "listing-1", 1, "SKU-1", "UPC-1", "Item One"));
         syncable[1].ShouldBe(new SkuLabsItem("item-3", "listing-3", 3, "SKU-3", "UPC-3", "Item Three"));
 
-        var ambiguous = result.GetAmbiguous();
-        ambiguous.Count.ShouldBe(1);
-        ambiguous[0].SourceItemId.ShouldBe("item-2");
-        ambiguous[0].Reason.ShouldBe(SkulabsAmbiguityReason.NoListings);
+        // An item with no Shopify listing is neither syncable nor ambiguous — it is left alone.
+        result.GetAmbiguous().ShouldBeEmpty();
+        result.GetSourceItemIdsWithoutShopifyListings().ShouldBe(["item-2"]);
     }
 
     [Fact]
@@ -263,12 +261,11 @@ public class SkulabsItemClientTests
 
         var ambiguous = result.GetAmbiguous();
         ambiguous.Select(a => a.SourceItemId).ShouldBe(["item-multi-1", "item-multi-2"], ignoreOrder: true);
-        ambiguous.ShouldAllBe(a => a.Reason == SkulabsAmbiguityReason.MultipleListings);
         ambiguous.Single(a => a.SourceItemId == "item-multi-1").Listings.Count.ShouldBe(2);
     }
 
     [Fact]
-    public async Task GetAllItems_ShouldClassifyNonNumericSingleListingAsAmbiguous()
+    public async Task GetAllItems_ShouldDropNonNumericVariantListings_AsInternalSkulabsVariants()
     {
         const string json = """
                             [
@@ -310,16 +307,17 @@ public class SkulabsItemClientTests
         syncable.Count.ShouldBe(1);
         syncable[0].ShouldBe(new SkuLabsItem("item-good", "l-g", 42, "SKU-G", "UPC-G", "Good"));
 
-        var ambiguous = result.GetAmbiguous();
-        ambiguous.Select(a => a.SourceItemId).ShouldBe(["item-bad-1", "item-bad-2"], ignoreOrder: true);
-        ambiguous.ShouldAllBe(a => a.Reason == SkulabsAmbiguityReason.ListingNotInShopify);
+        // The non-numeric listings are dropped, leaving those items with no Shopify listing at all.
+        result.GetAmbiguous().ShouldBeEmpty();
+        result.GetSourceItemIdsWithoutShopifyListings()
+            .ShouldBe(["item-bad-1", "item-bad-2"], ignoreOrder: true);
     }
 
     [Fact]
-    public async Task GetAllItems_ShouldCoalesceNullListingFieldsToEmpty_ForNonShopifyListings()
+    public async Task GetAllItems_ShouldDropNullVariantListings_AsInternalSkulabsVariants()
     {
-        // SkuLabs sends variant_id/item_id as JSON null on non-Shopify listings. Left as null these
-        // reach the NOT NULL RawVariantId column and blow up the ambiguous-quarantine insert.
+        // SkuLabs sends variant_id as JSON null on internal (non-Shopify) listings, e.g. LINE_SKU_*
+        // placeholder items. These can never match a Shopify variant and are dropped entirely.
         const string json = """
                             [
                               {
@@ -338,13 +336,10 @@ public class SkulabsItemClientTests
 
         var result = await sut.GetAllItems();
 
-        var ambiguous = result.GetAmbiguous();
-        ambiguous.Count.ShouldBe(1);
-        ambiguous[0].Reason.ShouldBe(SkulabsAmbiguityReason.ListingNotInShopify);
-        var listing = ambiguous[0].Listings.ShouldHaveSingleItem();
-        listing.RawVariantId.ShouldBe("");
-        listing.ShopifyProductId.ShouldBe("LINE_SKU_11-LPK");
-        listing.ListingId.ShouldBe("l-null");
+        result.GetSyncable().ShouldBeEmpty();
+        result.GetAmbiguous().ShouldBeEmpty();
+        result.GetSourceItemIdsWithoutShopifyListings().ShouldBe(["item-null"]);
+        result.Items.ShouldHaveSingleItem().Listings.ShouldBeEmpty();
     }
 
     [Fact]

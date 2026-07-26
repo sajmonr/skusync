@@ -3,7 +3,6 @@ using Infrastructure.Database;
 using Infrastructure.Database.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using SharedKernel;
 using Shouldly;
 using Tests.E2E.Infrastructure;
 using WireMock.RequestBuilders;
@@ -147,7 +146,6 @@ public class SkulabsItemSyncTests(AppServerTestHost factory) : IAsyncLifetime
         // Surfaced as ambiguous, carrying both listings; the matching listing resolves to our variant.
         var ambiguous = await db.SkulabsAmbiguousItems.Include(a => a.Listings).SingleAsync();
         ambiguous.SkulabsSourceItemId.ShouldBe("ambiguous-multi-item");
-        ambiguous.Reason.ShouldBe(SkulabsAmbiguityReason.MultipleListings);
         ambiguous.ListingCount.ShouldBe(2);
 
         ambiguous.Listings.Single(l => l.RawVariantId == MatchingVariantId.ToString())

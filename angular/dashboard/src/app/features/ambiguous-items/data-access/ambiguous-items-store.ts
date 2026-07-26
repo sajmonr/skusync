@@ -3,20 +3,18 @@ import { computed, inject, Injectable, signal } from '@angular/core';
 import { API_BASE_PATH } from '../../../core/api/api-base-path';
 import { ApiRequestError } from '../../../core/api/api-request-error';
 import { PagedResponse } from '../../../core/api/paged-response';
-import { AmbiguityReason, AmbiguousItem } from '../models/ambiguous-item';
+import { AmbiguousItem } from '../models/ambiguous-item';
 
 export interface AmbiguousItemsQuery {
   readonly page: number;
   readonly pageSize: number;
   readonly search: string;
-  readonly reason: AmbiguityReason | 'all';
 }
 
 const initialQuery: AmbiguousItemsQuery = {
   page: 1,
   pageSize: 25,
   search: '',
-  reason: 'all',
 };
 
 const emptyResponse: PagedResponse<AmbiguousItem> = {
@@ -63,10 +61,6 @@ export class AmbiguousItemsStore {
       parameters['search'] = query.search;
     }
 
-    if (query.reason !== 'all') {
-      parameters['reason'] = query.reason;
-    }
-
     return parameters;
   }
 
@@ -86,8 +80,7 @@ export class AmbiguousItemsStore {
     return (
       left.page === right.page &&
       left.pageSize === right.pageSize &&
-      left.search === right.search &&
-      left.reason === right.reason
+      left.search === right.search
     );
   }
 }

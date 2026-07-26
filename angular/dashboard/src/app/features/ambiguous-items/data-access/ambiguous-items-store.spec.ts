@@ -27,8 +27,6 @@ describe('AmbiguousItemsStore', () => {
       sku: 'sku',
       upc: 'upc',
       listingCount: 2,
-      reason: 'MultipleListings',
-      status: 'Unresolved',
       firstSeenUtc: '2026-07-26T00:00:00Z',
       lastSeenUtc: '2026-07-26T00:00:00Z',
       skulabsUrl: 'https://app.skulabs.com/item?id=src-1',
@@ -37,7 +35,7 @@ describe('AmbiguousItemsStore', () => {
     };
   }
 
-  it('should request the default page with no search or reason parameters', async () => {
+  it('should request the default page with no search parameter', async () => {
     TestBed.inject(AmbiguousItemsStore);
     const httpTestingController = TestBed.inject(HttpTestingController);
     TestBed.tick();
@@ -46,7 +44,6 @@ describe('AmbiguousItemsStore', () => {
     expect(request.request.params.get('page')).toBe('1');
     expect(request.request.params.get('pageSize')).toBe('25');
     expect(request.request.params.has('search')).toBe(false);
-    expect(request.request.params.has('reason')).toBe(false);
     request.flush({ items: [], totalCount: 0, page: 1, pageSize: 25 });
     await TestBed.inject(ApplicationRef).whenStable();
 
@@ -70,7 +67,7 @@ describe('AmbiguousItemsStore', () => {
     httpTestingController.verify();
   });
 
-  it('should pass search and reason query parameters when filtering', async () => {
+  it('should pass the search query parameter when filtering', async () => {
     const store = TestBed.inject(AmbiguousItemsStore);
     const httpTestingController = TestBed.inject(HttpTestingController);
     TestBed.tick();
@@ -80,7 +77,7 @@ describe('AmbiguousItemsStore', () => {
       .flush({ items: [], totalCount: 0, page: 1, pageSize: 25 });
     await TestBed.inject(ApplicationRef).whenStable();
 
-    store.load({ page: 2, pageSize: 50, search: 'widget', reason: 'MultipleListings' });
+    store.load({ page: 2, pageSize: 50, search: 'widget' });
     TestBed.tick();
 
     const filtered = httpTestingController.expectOne(
@@ -88,31 +85,7 @@ describe('AmbiguousItemsStore', () => {
     );
     expect(filtered.request.params.get('page')).toBe('2');
     expect(filtered.request.params.get('pageSize')).toBe('50');
-    expect(filtered.request.params.get('reason')).toBe('MultipleListings');
     filtered.flush({ items: [], totalCount: 0, page: 2, pageSize: 50 });
-    await TestBed.inject(ApplicationRef).whenStable();
-
-    httpTestingController.verify();
-  });
-
-  it('should omit the reason parameter when the reason filter is "all"', async () => {
-    const store = TestBed.inject(AmbiguousItemsStore);
-    const httpTestingController = TestBed.inject(HttpTestingController);
-    TestBed.tick();
-
-    httpTestingController
-      .expectOne((r) => r.url === url)
-      .flush({ items: [], totalCount: 0, page: 1, pageSize: 25 });
-    await TestBed.inject(ApplicationRef).whenStable();
-
-    store.load({ page: 1, pageSize: 25, search: 'only-search', reason: 'all' });
-    TestBed.tick();
-
-    const request = httpTestingController.expectOne(
-      (r) => r.url === url && r.params.get('search') === 'only-search',
-    );
-    expect(request.request.params.has('reason')).toBe(false);
-    request.flush({ items: [], totalCount: 0, page: 1, pageSize: 25 });
     await TestBed.inject(ApplicationRef).whenStable();
 
     httpTestingController.verify();
