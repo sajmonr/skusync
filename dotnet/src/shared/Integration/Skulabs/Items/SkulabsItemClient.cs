@@ -110,11 +110,15 @@ public class SkulabsItemClient : ISkulabsItemClient
 
     private static SkulabsApiItem MapItem(SkulabsItemResponse response)
     {
+        // SkuLabs sends explicit `null` for a listing's variant_id / item_id on non-Shopify listings,
+        // which System.Text.Json writes over the "" property defaults. Coalesce back to "" so the
+        // non-null string invariant SkulabsApiListing and the entity both assume holds all the way to
+        // the ambiguous-quarantine insert (the column is NOT NULL).
         var listings = response.Listings
             .Select(listing => new SkulabsApiListing(
-                listing.ListingId,
-                listing.VariantId,
-                listing.ProductId))
+                listing.ListingId ?? "",
+                listing.VariantId ?? "",
+                listing.ProductId ?? ""))
             .ToArray();
 
         return new SkulabsApiItem(
