@@ -1,5 +1,5 @@
 using global::Application;
-using Application.Jobs.Maintenance;
+using Application.Jobs;
 using Application.Products.Events;
 using Application.Products.Services;
 using Integration.Aws.Sqs;
@@ -15,6 +15,8 @@ namespace Tests.Application;
 public class DependencyInjectionTests
 {
     private const string RabbitMqConnectionString = "amqp://guest:guest@localhost:5672";
+    private const string SkuSyncConnectionString =
+        "Host=localhost;Database=skusync;Username=postgres;Password=password";
 
     [Fact]
     public void AddApplication_ShouldRegisterCoreServicesAndEventProduction()
@@ -23,6 +25,7 @@ public class DependencyInjectionTests
             new Dictionary<string, string?>
             {
                 ["ConnectionStrings:RabbitMq"] = RabbitMqConnectionString,
+                ["ConnectionStrings:SkuSync"] = SkuSyncConnectionString,
             }
         );
 
@@ -39,15 +42,25 @@ public class DependencyInjectionTests
         builder.Services.ShouldNotContain(descriptor =>
             descriptor.ServiceType == typeof(IShopifyWebhookHandler)
         );
-        builder.Services.ShouldNotContain(descriptor =>
-            descriptor.ServiceType == typeof(IMaintenanceTask)
-        );
     }
 
     [Fact]
     public void AddApplication_ShouldThrow_WhenRabbitMqConnectionStringIsMissing()
     {
         var builder = CreateBuilder();
+
+        Should.Throw<InvalidOperationException>(() => builder.AddApplication());
+    }
+
+    [Fact]
+    public void AddApplication_ShouldThrow_WhenSkuSyncConnectionStringIsMissing()
+    {
+        var builder = CreateBuilder(
+            new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:RabbitMq"] = RabbitMqConnectionString,
+            }
+        );
 
         Should.Throw<InvalidOperationException>(() => builder.AddApplication());
     }
@@ -74,6 +87,7 @@ public class DependencyInjectionTests
             new Dictionary<string, string?>
             {
                 ["ConnectionStrings:RabbitMq"] = RabbitMqConnectionString,
+                ["ConnectionStrings:SkuSync"] = SkuSyncConnectionString,
             }
         );
 
@@ -87,21 +101,21 @@ public class DependencyInjectionTests
     }
 
     [Fact]
-    public void AddScheduledJobs_ShouldRegisterMaintenanceTasksAndHostedScheduler()
+    public void AddHangfireProcessing_ShouldRegisterRecurringJobsAndScheduler()
     {
         var builder = CreateBuilder(
             new Dictionary<string, string?>
             {
-                ["ScheduledJobs:SkulabsItemSync:Enabled"] = "false",
-                ["ScheduledJobs:ProductMaintenance:Enabled"] = "false",
+                ["ConnectionStrings:RabbitMq"] = RabbitMqConnectionString,
+                ["ConnectionStrings:SkuSync"] = SkuSyncConnectionString,
             }
         );
 
-        builder.AddScheduledJobs();
+        builder.AddApplication();
+        builder.AddHangfireProcessing();
 
-        builder
-            .Services.Count(descriptor => descriptor.ServiceType == typeof(IMaintenanceTask))
-            .ShouldBe(3);
+        builder.Services.ShouldContain(descriptor => descriptor.ServiceType == typeof(RecurringJobs));
+        // The Hangfire server and the recurring-job registrar are hosted services.
         builder.Services.ShouldContain(descriptor =>
             descriptor.ServiceType == typeof(IHostedService)
         );

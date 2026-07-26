@@ -10,9 +10,8 @@
       <PackageReference Include="AWS.Messaging" />
       <PackageReference Include="Microsoft.FeatureManagement" />
       <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
-      <PackageReference Include="Quartz" />
-      <PackageReference Include="Quartz.Extensions.Hosting" />
-      <PackageReference Include="Quartz.Extensions.DependencyInjection" />
+      <PackageReference Include="Hangfire.NetCore" />
+      <PackageReference Include="Hangfire.PostgreSql" />
       <PackageReference Include="SlimMessageBus.Host.RabbitMQ" />
       <PackageReference Include="SlimMessageBus.Host.Serialization.SystemTextJson" />
     </ItemGroup>

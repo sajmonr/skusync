@@ -41,10 +41,17 @@ builder.Services
     .AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
     {
-        options.Cookie.Name = "__Host-skusync-dashboard";
+        // The dashboard and API are served over plain HTTP in local development, where browsers
+        // refuse to store a "__Host-"/Secure cookie — so login would appear to succeed but the
+        // session cookie would never persist. Relax the cookie in Development only; production
+        // keeps the hardened "__Host-" prefix and always-Secure policy.
+        var isDevelopment = builder.Environment.IsDevelopment();
+        options.Cookie.Name = isDevelopment ? "skusync-dashboard" : "__Host-skusync-dashboard";
         options.Cookie.HttpOnly = true;
         options.Cookie.SameSite = SameSiteMode.Strict;
-        options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+        options.Cookie.SecurePolicy = isDevelopment
+            ? CookieSecurePolicy.SameAsRequest
+            : CookieSecurePolicy.Always;
         options.ExpireTimeSpan = TimeSpan.FromHours(dashboardAuthenticationOptions.SessionDurationHours);
         options.SlidingExpiration = true;
         options.Events.OnRedirectToLogin = context =>
@@ -68,6 +75,7 @@ builder.Services.AddAuthorization(options =>
         .Build();
 });
 builder.Services.AddDashboardLoginRateLimiting();
+builder.Services.AddProductSyncRateLimiting();
 
 var app = builder.Build();
 

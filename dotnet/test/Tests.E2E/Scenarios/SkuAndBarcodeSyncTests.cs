@@ -1,5 +1,4 @@
-using Application.Jobs.Maintenance;
-using Application.Skulabs.Maintenance;
+using Application.Jobs;
 using Infrastructure.Database;
 using Infrastructure.Database.Entities;
 using Integration.Shopify.Products;
@@ -79,11 +78,8 @@ public class SkuAndBarcodeSyncTests(AppServerTestHost factory) : IAsyncLifetime
     private async Task RunDriftSweepAsync()
     {
         using var scope = factory.Services.CreateScope();
-        var task = scope.ServiceProvider
-            .GetServices<IMaintenanceTask>()
-            .OfType<SkuAndBarcodeSyncTask>()
-            .Single();
-        await task.Execute(CancellationToken.None);
+        var recurringJobs = scope.ServiceProvider.GetRequiredService<RecurringJobs>();
+        await recurringJobs.SyncSkuAndBarcodes(CancellationToken.None);
     }
 
     private async Task<Guid> SeedDriftedVariantAsync(long productId, long variantId)

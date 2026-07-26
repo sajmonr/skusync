@@ -56,14 +56,8 @@ public class AppServerTestHost : IAsyncLifetime
     public bool EnableSqsPolling { get; init; }
 
     /// <summary>
-    /// When <c>false</c> (the default) the Quartz scheduler hosted service is stripped before
-    /// the host starts, so cron jobs never fire. Toggled independently of SQS polling.
-    /// </summary>
-    public bool EnableQuartzScheduling { get; init; }
-
-    /// <summary>
     /// Snapshot of AppServer's service registrations taken before test-only removals, so
-    /// composition tests can assert what the host wires up (SQS poller, Quartz, in-memory
+    /// composition tests can assert what the host wires up (SQS poller, Hangfire server, in-memory
     /// consumers) without those hosted services actually running.
     /// </summary>
     public IReadOnlyList<ServiceDescriptor> RegisteredServices { get; private set; } = [];
@@ -102,16 +96,12 @@ public class AppServerTestHost : IAsyncLifetime
         SetEnv("FeatureManagement__ShopifySyncEnabled", "true");
         SetEnv("FeatureManagement__SkulabsSyncEnabled", "true");
         SetEnv("FeatureManagement__SkulabsWriteBack", "true");
-        SetEnv("ScheduledJobs__ProductMaintenance__Enabled", "false");
-        SetEnv("ScheduledJobs__ProductMaintenance__RunOnStart", "false");
-        SetEnv("ScheduledJobs__ProductMaintenance__CronExpression", "0 0 0 * * ?");
-        // Keep the SkulabsItemSync job *enabled* so its type lands in DI (AddScheduledJob skips
-        // registration entirely when Enabled=false). RunOnStart is disabled and the cron is set
-        // to a far-future time so no triggers fire — and the Quartz hosted service is removed
-        // below anyway. Tests resolve the job from DI and execute it directly.
-        SetEnv("ScheduledJobs__SkulabsItemSync__Enabled", "true");
-        SetEnv("ScheduledJobs__SkulabsItemSync__RunOnStart", "false");
-        SetEnv("ScheduledJobs__SkulabsItemSync__CronExpression", "0 0 0 * * ?");
+        // Disable every recurring maintenance job; the Hangfire server is stripped below anyway, so
+        // nothing runs on a schedule. Tests resolve RecurringJobs from DI and invoke it directly.
+        SetEnv("ScheduledJobs__ShopifyProductSync__Enabled", "false");
+        SetEnv("ScheduledJobs__SkuAndBarcodeSync__Enabled", "false");
+        SetEnv("ScheduledJobs__SkulabsTitleSync__Enabled", "false");
+        SetEnv("ScheduledJobs__SkulabsItemSync__Enabled", "false");
 
         var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
         {
@@ -132,17 +122,14 @@ public class AppServerTestHost : IAsyncLifetime
 
         // Disable background services we don't want in tests, each toggled independently:
         //   - AWS SQS poller (would connect to real AWS)
-        //   - Quartz scheduler (would fire cron jobs)
-        // Webhook handlers are invoked directly; event consumers run off the RabbitMQ bus.
+        // Webhook handlers are invoked directly; event consumers run off the RabbitMQ bus. The
+        // Hangfire server is left running but is inert here — every recurring job is disabled above
+        // and nothing enqueues work, so no job fires; tests invoke RecurringJobs directly.
         var needles = new List<string>();
         if (!EnableSqsPolling)
         {
             needles.Add("AWS.Messaging");
             needles.Add("MessagePump");
-        }
-        if (!EnableQuartzScheduling)
-        {
-            needles.Add("Quartz");
         }
         if (needles.Count > 0)
         {

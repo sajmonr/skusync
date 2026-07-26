@@ -1,19 +1,12 @@
-using Application.Jobs.Maintenance;
-using Application.Skulabs.Jobs;
-using Application.Skulabs.Maintenance;
-using Application.Skulabs.Services;
+using Application.Jobs;
 using Infrastructure.Database;
 using Infrastructure.Database.Entities;
 using Integration.Aws.Sqs;
 using Integration.Shopify.Products;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using Microsoft.FeatureManagement;
 using NSubstitute;
-using Quartz;
 using Shouldly;
-using SlimMessageBus;
 using Tests.E2E.Infrastructure;
 using WireMock.RequestBuilders;
 using WireMock.ResponseBuilders;
@@ -144,12 +137,9 @@ public class SkulabsTitleSyncTests(AppServerTestHost factory) : IAsyncLifetime
         StubBulkUpsertOk();
 
         using var scope = factory.Services.CreateScope();
-        var task = scope.ServiceProvider
-            .GetServices<IMaintenanceTask>()
-            .OfType<SkulabsTitleSyncTask>()
-            .Single();
+        var recurringJobs = scope.ServiceProvider.GetRequiredService<RecurringJobs>();
 
-        await task.Execute(CancellationToken.None);
+        await recurringJobs.SyncSkulabsTitles(CancellationToken.None);
 
         var bodies = CapturedBulkUpsertBodies();
         bodies.Count.ShouldBe(1);
@@ -182,12 +172,9 @@ public class SkulabsTitleSyncTests(AppServerTestHost factory) : IAsyncLifetime
         StubBulkUpsertOk();
 
         using var scope = factory.Services.CreateScope();
-        var task = scope.ServiceProvider
-            .GetServices<IMaintenanceTask>()
-            .OfType<SkulabsTitleSyncTask>()
-            .Single();
+        var recurringJobs = scope.ServiceProvider.GetRequiredService<RecurringJobs>();
 
-        await task.Execute(CancellationToken.None);
+        await recurringJobs.SyncSkulabsTitles(CancellationToken.None);
 
         CapturedBulkUpsertBodies().ShouldBeEmpty();
     }
@@ -197,20 +184,8 @@ public class SkulabsTitleSyncTests(AppServerTestHost factory) : IAsyncLifetime
     private async Task RunSkulabsItemSyncJobAsync()
     {
         using var scope = factory.Services.CreateScope();
-        var syncService = scope.ServiceProvider.GetRequiredService<ISkulabsItemSyncService>();
-        var messageBus = scope.ServiceProvider.GetRequiredService<IMessageBus>();
-        var featureManager = scope.ServiceProvider.GetRequiredService<IFeatureManager>();
-        var logger = scope.ServiceProvider.GetRequiredService<ILogger<SkulabsItemSyncJob>>();
-        var job = new SkulabsItemSyncJob(syncService, messageBus, featureManager, logger);
-
-        var context = Substitute.For<IJobExecutionContext>();
-        var trigger = Substitute.For<ITrigger>();
-        trigger.Key.Returns(new TriggerKey("e2e-title-sync"));
-        context.Trigger.Returns(trigger);
-        context.CancellationToken.Returns(CancellationToken.None);
-        context.FireTimeUtc.Returns(DateTimeOffset.UtcNow);
-
-        await job.Execute(context);
+        var recurringJobs = scope.ServiceProvider.GetRequiredService<RecurringJobs>();
+        await recurringJobs.SyncSkulabsItems(CancellationToken.None);
     }
 
     private void StubBulkUpsertOk() =>
