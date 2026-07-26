@@ -11,7 +11,9 @@ import { apiErrorInterceptor } from './core/api/api-error.interceptor';
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
-    provideHttpClient(withInterceptors([apiCredentialsInterceptor, unauthorizedInterceptor, apiErrorInterceptor])),
+    // unauthorizedInterceptor must sit last so its error handler runs first on the response path,
+    // seeing the raw HttpErrorResponse before apiErrorInterceptor wraps it into an ApiRequestError.
+    provideHttpClient(withInterceptors([apiCredentialsInterceptor, apiErrorInterceptor, unauthorizedInterceptor])),
     provideRouter(routes),
     providePrimeNG({
       license: 'eyJpZCI6IjAyYWU3MDE2LTBkOWMtNDUyNC1iNjE1LWE2ZmNiNTE0MThiMCIsInByb2R1Y3QiOiJwcmltZXVpIiwidGllciI6ImNvbW11bml0eSIsInR5cGUiOiJkZXYiLCJpYXQiOjE3ODQ3NDMwNzgsImV4cCI6MTgxNjI3OTA3OH0.tSZBCewJQAopBjzBSNBT-0WqCzKvMNR8sAUoH5YZlAsjwHktOaArlNX1fkJ7c2pFQyeL6FbORmAv2gbOcOJ5DA',
