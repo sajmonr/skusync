@@ -1,8 +1,8 @@
+using Application.Sync;
 using Integration.Aws.Sqs;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Shouldly;
-using SlimMessageBus;
 using Tests.E2E.Infrastructure;
 
 namespace Tests.E2E.Scenarios;
@@ -36,10 +36,14 @@ public class AppServerCompositionTests(AppServerTestHost factory)
     }
 
     [Fact]
-    public void AppServer_RegistersRabbitMqEventBus()
+    public void AppServer_RegistersTheSyncPipelineComponents()
     {
         factory.RegisteredServices.ShouldContain(descriptor =>
-            descriptor.ServiceType == typeof(IMessageBus));
+            descriptor.ServiceType == typeof(IReconciler));
+        factory.RegisteredServices.ShouldContain(descriptor =>
+            descriptor.ServiceType == typeof(IShopifyDispatcher));
+        factory.RegisteredServices.ShouldContain(descriptor =>
+            descriptor.ServiceType == typeof(ISkulabsDispatcher));
     }
 
     [Fact]

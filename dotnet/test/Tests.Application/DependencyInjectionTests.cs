@@ -1,32 +1,27 @@
 using global::Application;
 using Application.Jobs;
-using Application.Products.Events;
 using Application.Products.Services;
+using Application.Sync;
 using Integration.Aws.Sqs;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Options;
 using NSubstitute;
 using Shouldly;
-using SlimMessageBus;
 
 namespace Tests.Application;
 
 public class DependencyInjectionTests
 {
-    private const string RabbitMqConnectionString = "amqp://guest:guest@localhost:5672";
     private const string SkuSyncConnectionString =
         "Host=localhost;Database=skusync;Username=postgres;Password=password";
 
     [Fact]
-    public void AddApplication_ShouldRegisterCoreServicesAndEventProduction()
+    public void AddApplication_ShouldRegisterCoreServices()
     {
         var builder = CreateBuilder(
             new Dictionary<string, string?>
             {
-                ["ConnectionStrings:RabbitMq"] = RabbitMqConnectionString,
                 ["ConnectionStrings:SkuSync"] = SkuSyncConnectionString,
             }
         );
@@ -36,56 +31,28 @@ public class DependencyInjectionTests
         builder.Services.ShouldContain(descriptor =>
             descriptor.ServiceType == typeof(IProductsService)
         );
-        // Producing events is part of the Application layer, so the bus is registered here.
         builder.Services.ShouldContain(descriptor =>
-            descriptor.ServiceType == typeof(IMessageBus)
+            descriptor.ServiceType == typeof(IReconciler)
         );
-        // Consumers and other processing infrastructure are not — those are separate concerns.
+        builder.Services.ShouldContain(descriptor =>
+            descriptor.ServiceType == typeof(IShopifyDispatcher)
+        );
+        builder.Services.ShouldContain(descriptor =>
+            descriptor.ServiceType == typeof(ISkulabsDispatcher)
+        );
+        builder.Services.ShouldContain(descriptor =>
+            descriptor.ServiceType == typeof(IShopifyDispatchTrigger)
+        );
+        // Webhook processing infrastructure is not — that is a separate concern.
         builder.Services.ShouldNotContain(descriptor =>
             descriptor.ServiceType == typeof(IShopifyWebhookHandler)
         );
     }
 
     [Fact]
-    public void AddApplication_ShouldRegisterRabbitMqReadinessHealthCheck()
-    {
-        var builder = CreateBuilder(
-            new Dictionary<string, string?>
-            {
-                ["ConnectionStrings:RabbitMq"] = RabbitMqConnectionString,
-                ["ConnectionStrings:SkuSync"] = SkuSyncConnectionString,
-            }
-        );
-
-        builder.AddApplication();
-
-        using var provider = builder.Services.BuildServiceProvider();
-        var registration = provider
-            .GetRequiredService<IOptions<HealthCheckServiceOptions>>()
-            .Value.Registrations.SingleOrDefault(registration => registration.Name == "rabbitmq");
-        registration.ShouldNotBeNull();
-        // Broker health is a readiness concern, never liveness — a broker blip must not restart us.
-        registration.Tags.ShouldContain("ready");
-        registration.Tags.ShouldNotContain("live");
-    }
-
-    [Fact]
-    public void AddApplication_ShouldThrow_WhenRabbitMqConnectionStringIsMissing()
-    {
-        var builder = CreateBuilder();
-
-        Should.Throw<InvalidOperationException>(() => builder.AddApplication());
-    }
-
-    [Fact]
     public void AddApplication_ShouldThrow_WhenSkuSyncConnectionStringIsMissing()
     {
-        var builder = CreateBuilder(
-            new Dictionary<string, string?>
-            {
-                ["ConnectionStrings:RabbitMq"] = RabbitMqConnectionString,
-            }
-        );
+        var builder = CreateBuilder();
 
         Should.Throw<InvalidOperationException>(() => builder.AddApplication());
     }
@@ -106,32 +73,11 @@ public class DependencyInjectionTests
     }
 
     [Fact]
-    public void AddEventProcessing_ShouldRegisterEventConsumers()
-    {
-        var builder = CreateBuilder(
-            new Dictionary<string, string?>
-            {
-                ["ConnectionStrings:RabbitMq"] = RabbitMqConnectionString,
-                ["ConnectionStrings:SkuSync"] = SkuSyncConnectionString,
-            }
-        );
-
-        builder.AddApplication();
-        builder.AddEventProcessing();
-
-        builder.Services.ShouldContain(descriptor => descriptor.ServiceType == typeof(IMessageBus));
-        builder.Services.ShouldContain(descriptor =>
-            descriptor.ServiceType == typeof(ShopifyVariantWritebackConsumer)
-        );
-    }
-
-    [Fact]
     public void AddHangfireProcessing_ShouldRegisterRecurringJobsAndScheduler()
     {
         var builder = CreateBuilder(
             new Dictionary<string, string?>
             {
-                ["ConnectionStrings:RabbitMq"] = RabbitMqConnectionString,
                 ["ConnectionStrings:SkuSync"] = SkuSyncConnectionString,
             }
         );

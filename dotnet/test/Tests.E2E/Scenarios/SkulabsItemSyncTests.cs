@@ -21,7 +21,13 @@ public class SkulabsItemSyncTests(AppServerTestHost factory) : IAsyncLifetime
     [Fact]
     public async Task SkulabsSyncJob_CreatesSkulabsItem_WhenMatchingVariantExistsAndNoneInDatabase()
     {
-        var variantGuid = await SeedVariantAsync(MatchingVariantId);
+        // Seed the variant already matching the fixture's SKU/barcode/title so the item sync's
+        // inline reconcile is a no-op — this test is about ID-based linking, not reconciliation.
+        var variantGuid = await SeedVariantAsync(
+            MatchingVariantId,
+            displayName: "Yellow Vintage Nature Domino Necklace (Goose (1bird))",
+            sku: "1 bird",
+            barcode: "10862241");
         await StubSkulabsGetAllAsync("Skulabs/Api/items-get-single.json");
 
         await RunSyncJobAsync();
@@ -41,6 +47,10 @@ public class SkulabsItemSyncTests(AppServerTestHost factory) : IAsyncLifetime
             .ToListAsync();
         logs.Count.ShouldBe(1);
         logs[0].Message.ShouldBe("Linked to SkuLabs item '69b4543c6642ed434a5b1c4a'.");
+
+        // Nothing drifted, so the inline reconcile marked nothing pending.
+        (await db.ShopifyProductVariants.SingleAsync()).PendingShopifySync.ShouldBeFalse();
+        stored.PendingSkulabsSync.ShouldBeFalse();
     }
 
     [Fact]
@@ -81,7 +91,14 @@ public class SkulabsItemSyncTests(AppServerTestHost factory) : IAsyncLifetime
         // API: skulabs item S now points at newVariant (99999999999999).
         // Expected: link severed from oldVariant, established on newVariant; metadata refreshed.
         var oldVariantGuid = await SeedVariantAsync(MatchingVariantId);
-        var newVariantGuid = await SeedVariantAsync(99999999999999L);
+        // Seed the new variant already matching the relinked fixture's values so the post-link
+        // inline reconcile is a no-op (it would otherwise mirror + mark pending, which is not
+        // what this linking-contract test is about).
+        var newVariantGuid = await SeedVariantAsync(
+            99999999999999L,
+            displayName: "Yellow Vintage Nature Domino Necklace (Goose (1bird))",
+            sku: "1 bird",
+            barcode: "10862241");
         var rowId = await SeedSkulabsItemAsync(
             oldVariantGuid,
             sourceItemId: "69b4543c6642ed434a5b1c4a",
@@ -112,7 +129,7 @@ public class SkulabsItemSyncTests(AppServerTestHost factory) : IAsyncLifetime
         var newLogs = await db.ShopifyProductVariantLogEvents
             .Where(l => l.ShopifyProductVariantId == newVariantGuid)
             .ToListAsync();
-        newLogs.Single().Message.ShouldBe("Linked to SkuLabs item '69b4543c6642ed434a5b1c4a'.");
+        newLogs.ShouldContain(l => l.Message == "Linked to SkuLabs item '69b4543c6642ed434a5b1c4a'.");
     }
 
     [Fact]
@@ -158,7 +175,7 @@ public class SkulabsItemSyncTests(AppServerTestHost factory) : IAsyncLifetime
     {
         // Invoke the recurring-job entry point directly (rather than waiting for the Hangfire
         // schedule) so the test exercises the real sync service, real SkuLabs HTTP client
-        // (hitting WireMock), real DbContext and real RabbitMQ message bus end-to-end.
+        // (hitting WireMock), real DbContext, and the inline reconcile end-to-end.
         using var scope = factory.Services.CreateScope();
         var recurringJobs = scope.ServiceProvider.GetRequiredService<RecurringJobs>();
         await recurringJobs.SyncSkulabsItems(CancellationToken.None);
@@ -177,7 +194,11 @@ public class SkulabsItemSyncTests(AppServerTestHost factory) : IAsyncLifetime
                 .WithBody(json));
     }
 
-    private async Task<Guid> SeedVariantAsync(long variantId)
+    private async Task<Guid> SeedVariantAsync(
+        long variantId,
+        string displayName = "Test Variant",
+        string sku = "seed-sku",
+        string barcode = "seed-barcode")
     {
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -188,9 +209,9 @@ public class SkulabsItemSyncTests(AppServerTestHost factory) : IAsyncLifetime
             ProductId = variantId,
             GlobalVariantId = $"gid://shopify/ProductVariant/{variantId}",
             VariantId = variantId,
-            DisplayName = "Test Variant",
-            Sku = "seed-sku",
-            Barcode = "seed-barcode"
+            DisplayName = displayName,
+            Sku = sku,
+            Barcode = barcode
         };
         db.ShopifyProductVariants.Add(entity);
         await db.SaveChangesAsync();

@@ -21,8 +21,9 @@ public class ProductUpdateWebhookTests(AppServerTestHost factory) : IAsyncLifeti
     public async Task ProductsUpdateWebhook_PersistsVariant_AndPushesSkuAndBarcodeBackToShopify_WhenVariantIsNew()
     {
         // arrange — same Shopify webhook envelope as products/create but topic = products/update.
-        // The variant is not in our DB, so the update handler should create it and publish a
-        // Created event (the update path also creates entities for previously-unknown variants).
+        // The variant is not in our DB, so the update handler should create it with a generated
+        // SKU, mark it pending, and immediately dispatch it (the update path also creates
+        // entities for previously-unknown variants).
         var envelope = await FixtureLoader.LoadAsync<SqsShopEventProductMessage>(
             "Shopify/Webhooks/products-update-single-variant.json");
         var payload = envelope.Detail.Payload;
@@ -50,10 +51,9 @@ public class ProductUpdateWebhookTests(AppServerTestHost factory) : IAsyncLifeti
         variant.Sku.ShouldBe("BW-Tes");
         variant.Barcode.ShouldBe(expectedBarcode);
 
-        // assert — ShopifyVariantWritebackConsumer fired and called the Shopify GraphQL mutation
-        await AsyncWait.UntilAsync(
-            () => factory.ShopifyGraphQl.ReceivedCalls().Any(),
-            because: "ShopifyVariantWritebackConsumer should have run and called IShopifyGraphQlService.");
+        // assert — the immediate dispatch ran inside the webhook flow, pushed the generated SKU
+        // via the Shopify GraphQL mutation, and cleared the pending flag.
+        variant.PendingShopifySync.ShouldBeFalse();
 
         await factory.ShopifyGraphQl.Received(1).ExecuteAsync<UpdateVariantsGraphResponse>(
             Arg.Is<string>(q => q.Contains("productVariantsBulkUpdate")),
@@ -133,7 +133,8 @@ public class ProductUpdateWebhookTests(AppServerTestHost factory) : IAsyncLifeti
     {
         // arrange — we are the source of truth for SKU/barcode. The fixture has sku=null and
         // barcode="" (Shopify drifted). We seed our locally-assigned values so the update
-        // handler's diff path fires and the consumer pushes OUR values back to Shopify.
+        // handler's diff path fires, marks the variant pending, and the immediate dispatch
+        // pushes OUR values back to Shopify.
         const long productId = 8521775284385;
         const long variantId = 46450996871329;
         const string ourSku = "OUR-SKU-46450996871329";
@@ -177,13 +178,9 @@ public class ProductUpdateWebhookTests(AppServerTestHost factory) : IAsyncLifeti
         variant.Sku.ShouldBe(ourSku);
         variant.Barcode.ShouldBe(ourBarcode);
 
-        // assert — ShopifyVariantWritebackConsumer fired and the GraphQL call carries OUR
-        // SKU and barcode. The "variants" entry is an IEnumerable of anonymous types built
-        // by ShopifyProductService.UpdateVariants, so we serialize to JSON to verify content.
-        await AsyncWait.UntilAsync(
-            () => factory.ShopifyGraphQl.ReceivedCalls().Any(),
-            because: "ShopifyVariantWritebackConsumer should have run and pushed our SKU/barcode back to Shopify.");
-
+        // assert — the immediate dispatch ran inside the webhook flow and the GraphQL call
+        // carries OUR SKU and barcode. The "variants" entry is an IEnumerable of anonymous types
+        // built by ShopifyProductService.UpdateVariants, so we serialize to JSON to verify content.
         var capturedVariables = factory.ShopifyGraphQl.ReceivedCalls()
             .Select(c => c.GetArguments()[1] as IDictionary<string, object?>)
             .Single(args => args is not null)!;
