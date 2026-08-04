@@ -24,16 +24,16 @@ dotnet test SkuSync.slnx
 
 ### Run locally
 
-Start the development dependencies (PostgreSQL on `localhost:5434`, RabbitMQ on `localhost:5674` / management UI `15674`) with the lightweight `compose.yaml`, then launch the apps from the repo root with [process-compose](https://github.com/F1bonacc1/process-compose):
+Start the development dependency (PostgreSQL on `localhost:5434`) with the lightweight `compose.yaml`, then launch the apps from the repo root with [process-compose](https://github.com/F1bonacc1/process-compose):
 
 ```bash
-docker compose up -d                               # Postgres + RabbitMQ, restart unless-stopped — leave running
+docker compose up -d                               # Postgres, restart unless-stopped — leave running
 process-compose -f process-compose.yaml --no-server up
 ```
 
 The `-f process-compose.yaml` is required: process-compose also treats `compose.yaml` as one of its
 default config names, and with both files in the repo root it would otherwise load the Docker Compose
-file and start an empty project. Starts the `web-api` HTTP host (http://localhost:5257) and the Angular dashboard (http://localhost:4200), configured in `process-compose.yaml`. The dev connection strings in `appsettings.Development.json` already point at the `compose.yaml` services. Each host's Shopify / SkuLabs / AWS config comes from its .NET user secrets, which `dotnet run` loads automatically in Development. It also starts the `app-server` background worker (RabbitMQ event consumers, Shopify webhook handlers, SQS poller, Quartz jobs) — so a manual product sync's SKU/barcode write-back is processed end-to-end.
+file and start an empty project. Starts the `web-api` HTTP host (http://localhost:5257) and the Angular dashboard (http://localhost:4200), configured in `process-compose.yaml`. The dev connection strings in `appsettings.Development.json` already point at the `compose.yaml` services. Each host's Shopify / SkuLabs / AWS config comes from its .NET user secrets, which `dotnet run` loads automatically in Development. It also starts the `app-server` background worker (Shopify webhook handlers, SQS poller, Hangfire recurring jobs) — so the scheduled reconcile/dispatch pipeline runs end-to-end.
 
 For a full end-to-end run — every service **plus** the application containers in a fresh environment — use `compose.e2e.yaml` instead: `docker compose -f compose.e2e.yaml up --build`. It publishes Postgres on `5433` so it can run alongside the dev stack.
 
@@ -41,8 +41,8 @@ For a full end-to-end run — every service **plus** the application containers 
 
 Clean Architecture with these layers:
 - `src/Web.Api` — ASP.NET Core HTTP host (OpenAPI + health endpoints). Serves traffic only; owns no background processing.
-- `src/AppServer` — .NET Generic Host worker. Owns all background processing: SQS webhook consumption, Shopify webhook handlers, in-memory event consumers, and Quartz jobs. Composed via `AddAppServer()`.
-- `src/Application` — Business logic, use cases, Quartz jobs
+- `src/AppServer` — .NET Generic Host worker. Owns all background processing: SQS webhook consumption, Shopify webhook handlers, and the Hangfire recurring jobs. Composed via `AddAppServer()`.
+- `src/Application` — Business logic, use cases, the sync pipeline (see `docs/architecture.md`: Ingest → Reconcile → Dispatch), Hangfire jobs
 - `src/Integration` — Shopify & AWS SQS integrations
 - `src/Infrastructure` — EF Core DbContext, coordinated startup migration lock, health checks
 - `src/SharedKernel` — Common types and abstractions
@@ -93,7 +93,7 @@ npm run lint
 - Aim for methods under ~100 lines. Not a hard limit — the goal is a single scannable unit of intent. When a method grows past that, look for natural seams (a loop body, an option-resolution branch, an event-publishing block) and extract a private helper with a descriptive name.
 
 ### Types
-- Prefer `readonly record struct` for small data carriers — value equality, no allocation. `ShopifyProductVariant`, `ProductVariantCreatedEvent` follow this.
+- Prefer `readonly record struct` for small data carriers — value equality, no allocation. `ShopifyProductVariant`, `DispatchResult` follow this.
 - `record class` only when reference identity or inheritance is needed.
 - Plain `class` for EF entities (they need reference identity for change tracking), services, options.
 
@@ -118,7 +118,7 @@ npm run lint
 
 ### Error handling
 - Throw `InvalidOperationException` (or a more specific type) for programmer/config errors with an actionable message including the offending input.
-- Catch at the outermost orchestration boundary — typically the public method of a service — and convert to a domain result type (`ProductImportResult.Failure(...)`) rather than letting exceptions reach a Quartz job.
+- Catch at the outermost orchestration boundary — typically the public method of a service — and convert to a domain result type (`ProductImportResult.Failure(...)`) rather than letting exceptions reach a Hangfire job.
 - In webhook handlers, let exceptions propagate to the SQS message handler so the message is retried by SQS.
 - Wrap framework boundaries (DB, HTTP, external APIs) in try/catch with a descriptive log; never swallow.
 
@@ -155,7 +155,7 @@ npm run lint
 - All E2E classes share the factory via `[Collection(E2ETestCollection.Name)]` — tests within the collection run **serially** because env-var-based config is process-wide.
 - Each test calls `factory.ResetAsync()` in `InitializeAsync` to wipe variant + log-event tables and clear recorded mock calls between runs.
 - Dispatch webhooks via `factory.DispatchWebhookAsync(envelope)` so the real `SqsShopEventProductHandler` topic routing is exercised.
-- Use `AsyncWait.UntilAsync(...)` for async post-conditions (consumers running on the in-memory bus).
+- Use `AsyncWait.UntilAsync(...)` for genuinely asynchronous post-conditions; most of the pipeline now runs synchronously in tests (ingest → inline reconcile → invoked dispatch), so prefer direct assertions.
 
 ## Comments and docs
 - Default to **no inline comments**. Only add `///` XML docs on public types/members so IDE tooltips work.

@@ -7,14 +7,11 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="AspNetCore.HealthChecks.Rabbitmq" />
       <PackageReference Include="AWS.Messaging" />
       <PackageReference Include="Microsoft.FeatureManagement" />
       <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
       <PackageReference Include="Hangfire.NetCore" />
       <PackageReference Include="Hangfire.PostgreSql" />
-      <PackageReference Include="SlimMessageBus.Host.RabbitMQ" />
-      <PackageReference Include="SlimMessageBus.Host.Serialization.SystemTextJson" />
     </ItemGroup>
 
     <ItemGroup>

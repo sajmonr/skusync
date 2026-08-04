@@ -1,4 +1,3 @@
-using Application.Messaging;
 using Hosting;
 using Infrastructure.Database;
 using Microsoft.AspNetCore.Builder;
@@ -26,21 +25,15 @@ internal static class Program
         );
 
         // AppServer owns all background processing: SQS webhook consumption, Shopify webhook
-        // handlers, in-memory event consumers, and scheduled Quartz jobs. Web.Api registers none
-        // of these — it serves HTTP only.
+        // handlers, and the Hangfire recurring jobs. Web.Api registers none of these — it serves
+        // HTTP only.
         builder.AddAppServer();
 
         var app = builder.Build();
 
-        // Run coordinated migrations before hosted services (SQS poller, Quartz) start. The
+        // Run coordinated migrations before hosted services (SQS poller, Hangfire) start. The
         // Postgres advisory lock ensures Web.Api and AppServer never migrate concurrently.
         await app.ApplyDatabaseMigrations();
-
-        // Fail fast if the broker is unreachable: a consuming host that can't connect would
-        // otherwise run dead (registering consumers on a null channel). Crash loudly so the
-        // orchestrator restarts us. Runs before the message-bus hosted service auto-starts its
-        // consumers.
-        await app.VerifyEventBusConnectivity();
 
         app.MapHealthCheckEndpoints();
 

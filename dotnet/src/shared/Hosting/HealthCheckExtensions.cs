@@ -36,7 +36,7 @@ public static class HealthCheckExtensions
         ///     <c>self</c> check. Wire container restart probes here. Must stay narrow:
         ///     failures here trigger restarts.</description></item>
         ///   <item><description><c>/_health/ready</c> — ready to serve traffic. Runs every
-        ///     <c>ready</c>-tagged check (Postgres, RabbitMQ). Wire load-balancer /
+        ///     <c>ready</c>-tagged check (Postgres). Wire load-balancer /
         ///     orchestrator readiness probes here.</description></item>
         ///   <item><description><c>/_health</c> — everything. Useful for humans and
         ///     dashboards.</description></item>

@@ -1,9 +1,9 @@
 # compose.yaml — lightweight development dependencies.
 #
-# Runs only the backing services the app needs while you develop it locally: PostgreSQL
-# and RabbitMQ. The application itself (web-api, app-server, dashboard) is NOT started
-# here — you run those on the host with `dotnet run` / process-compose, pointing them at
-# the containers below.
+# Runs only the backing service the app needs while you develop it locally: PostgreSQL.
+# The application itself (web-api, app-server, dashboard) is NOT started here — you run
+# those on the host with `dotnet run` / process-compose, pointing them at the container
+# below.
 #
 #   docker compose up -d                 # start the dev dependencies in the background
 #   docker compose down                  # stop; add -v to also drop the data volumes
@@ -17,11 +17,9 @@
 #
 #   docker compose -f compose.e2e.yaml up --build
 #
-# Host ports are deliberately non-standard so they never clash with a locally installed
-# Postgres/RabbitMQ, and so this stack and compose.e2e.yaml can be up at the same time:
+# Host port is deliberately non-standard so it never clashes with a locally installed
+# Postgres, and so this stack and compose.e2e.yaml can be up at the same time:
 #   - 5434  → PostgreSQL   (e2e uses 5433; a system Postgres would use 5432)
-#   - 5674  → RabbitMQ AMQP (standard is 5672)
-#   - 15674 → RabbitMQ management UI at http://localhost:15674 (standard is 15672)
 
 name: skusync-dev
 
@@ -49,25 +47,5 @@ services:
       retries: 20
     restart: unless-stopped
 
-  rabbitmq:
-    # -management image bundles the web management UI on 15672.
-    image: rabbitmq:4-management-alpine
-    environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
-    ports:
-      # Non-standard host ports so they never clash with a locally installed RabbitMQ.
-      - "5674:5672"    # AMQP
-      - "15674:15672"  # management UI
-    volumes:
-      - rabbitmq-data:/var/lib/rabbitmq
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-    restart: unless-stopped
-
 volumes:
   postgres-data:
-  rabbitmq-data:
