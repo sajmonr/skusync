@@ -1,0 +1,630 @@
+[
+  {
+    "_id": "69b4543c6642ed434a5b0000",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8189162225849",
+        "variant_id": "45256827044025",
+        "_id": "69b454b06642ed434a5b0000"
+      }
+    ],
+    "name": "The Untracked Snowboard",
+    "sku": "sku-untracked-1",
+    "upc": "27044025"
+  },
+  {
+    "_id": "69b4543c6642ed434a5b0001",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8189162258617",
+        "variant_id": "45256827109561",
+        "_id": "69b454b06642ed434a5b0001"
+      }
+    ],
+    "name": "Gift Card ($25)",
+    "sku": "SKL-109561",
+    "upc": "45256827109561"
+  },
+  {
+    "_id": "69b4543c6642ed434a5b0002",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8189162258617",
+        "variant_id": "45256827142329",
+        "_id": "69b454b06642ed434a5b0002"
+      }
+    ],
+    "name": "Gift Card ($50)",
+    "sku": "27142329111",
+    "upc": "0847142329"
+  },
+  {
+    "_id": "69b4543c6642ed434a5b0003",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8189162258617",
+        "variant_id": "45256827175097",
+        "_id": "69b454b06642ed434a5b0003"
+      }
+    ],
+    "name": "Gift Card ($100) [stale SkuLabs title]",
+    "sku": "27175097111",
+    "upc": "27175097"
+  },
+  {
+    "_id": "69b4543c6642ed434a5b0004",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8189162258617",
+        "variant_id": "48331988566201",
+        "_id": "69b454b06642ed434a5b0004"
+      }
+    ],
+    "name": "Gift Card ($75)",
+    "sku": "",
+    "upc": "48331988566201"
+  },
+  {
+    "_id": "69b4543c6642ed434a5b0005",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8189162291385",
+        "variant_id": "45256827207865",
+        "_id": "69b454b06642ed434a5b0005"
+      }
+    ],
+    "name": "The Out of Stock Snowboard",
+    "sku": "45256827207865",
+    "upc": ""
+  },
+  {
+    "_id": "69b4543c6642ed434a5b0006",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8189162324153",
+        "variant_id": "45256827240633",
+        "_id": "69b454b06642ed434a5b0006"
+      }
+    ],
+    "name": "The Draft Snowboard [stale SkuLabs title]",
+    "sku": "SKL-240633",
+    "upc": "27240633"
+  },
+  {
+    "_id": "69b4543c6642ed434a5b0007",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8189162356921",
+        "variant_id": "45256827306169",
+        "_id": "69b454b06642ed434a5b0007"
+      }
+    ],
+    "name": "The Archived Snowboard",
+    "sku": "45256827306169",
+    "upc": "27306169"
+  },
+  {
+    "_id": "69b4543c6642ed434a5b0008",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8189162389689",
+        "variant_id": "45256827273401",
+        "_id": "69b454b06642ed434a5b0008"
+      }
+    ],
+    "name": "The Compare at Price Snowboard",
+    "sku": "45256827273401",
+    "upc": "27273401"
+  },
+  {
+    "_id": "69b4543c6642ed434a5b0009",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8189162422457",
+        "variant_id": "45256827338937",
+        "_id": "69b454b06642ed434a5b0009"
+      }
+    ],
+    "name": "The Complete Snowboard (Ice)",
+    "sku": "45256827338937",
+    "upc": "27338937"
+  },
+  {
+    "_id": "69b4543c6642ed434a5b000a",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8189162422457",
+        "variant_id": "45256827371705",
+        "_id": "69b454b06642ed434a5b000a"
+      }
+    ],
+    "name": "The Complete Snowboard (Dawn)",
+    "sku": "SKL-371705",
+    "upc": "27371705"
+  },
+  {
+    "_id": "69b4543c6642ed434a5b000b",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8189162520761",
+        "variant_id": "45256827601081",
+        "_id": "69b454b06642ed434a5b000b"
+      }
+    ],
+    "name": "Selling Plans Ski Wax (Selling Plans Ski Wax)",
+    "sku": "45256827601081",
+    "upc": "0847601081"
+  },
+  {
+    "_id": "69b4543c6642ed434a5b000c",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8189162520761",
+        "variant_id": "45256827633849",
+        "_id": "69b454b06642ed434a5b000c"
+      }
+    ],
+    "name": "Selling Plans Ski Wax (Special Selling Plans Ski Wax) [stale SkuLabs title]",
+    "sku": "45256827633849",
+    "upc": "27633849"
+  },
+  {
+    "_id": "69b4543c6642ed434a5b000d",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8189162520761",
+        "variant_id": "45256827666617",
+        "_id": "69b454b06642ed434a5b000d"
+      }
+    ],
+    "name": "Selling Plans Ski Wax (Sample Selling Plans Ski Wax2)",
+    "sku": "",
+    "upc": "27666617"
+  },
+  {
+    "_id": "69b4543c6642ed434a5b000e",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8189162553529",
+        "variant_id": "45256827535545",
+        "_id": "69b454b06642ed434a5b000e"
+      }
+    ],
+    "name": "The Collection Snowboard: Hydrogen",
+    "sku": "45256827535545",
+    "upc": ""
+  },
+  {
+    "_id": "69b4543c6642ed434a5b000f",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8189162586297",
+        "variant_id": "45256827764921",
+        "_id": "69b454b06642ed434a5b000f"
+      }
+    ],
+    "name": "The Videographer Snowboard [stale SkuLabs title]",
+    "sku": "SKL-764921",
+    "upc": "27764921"
+  },
+  {
+    "_id": "69b4543c6642ed434a5b0010",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8189162782905",
+        "variant_id": "45256827928761",
+        "_id": "69b454b06642ed434a5b0010"
+      }
+    ],
+    "name": "The Collection Snowboard: Oxygen",
+    "sku": "45256827928761",
+    "upc": "27928761"
+  },
+  {
+    "_id": "69b4543c6642ed434a5b0011",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8189162848441",
+        "variant_id": "45256827961529",
+        "_id": "69b454b06642ed434a5b0011"
+      }
+    ],
+    "name": "The Multi-location Snowboard",
+    "sku": "45256827961529",
+    "upc": "27961529"
+  },
+  {
+    "_id": "69b4543c6642ed434a5b0012",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8189162881209",
+        "variant_id": "45256827994297",
+        "_id": "69b454b06642ed434a5b0012"
+      }
+    ],
+    "name": "The 3p Fulfilled Snowboard",
+    "sku": "sku-hosted-1",
+    "upc": "27994297"
+  },
+  {
+    "_id": "69b4543c6642ed434a5b0013",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8189162913977",
+        "variant_id": "45256828027065",
+        "_id": "69b454b06642ed434a5b0013"
+      }
+    ],
+    "name": "The Multi-managed Snowboard",
+    "sku": "SKL-027065",
+    "upc": "45256828027065"
+  },
+  {
+    "_id": "69b4543c6642ed434a5b0014",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8189162946745",
+        "variant_id": "45259864375481",
+        "_id": "69b454b06642ed434a5b0014"
+      }
+    ],
+    "name": "The Collection Snowboard: Liquid (Small / Red)",
+    "sku": "45259864375481",
+    "upc": "0847375481"
+  },
+  {
+    "_id": "69b4543c6642ed434a5b0015",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8189162946745",
+        "variant_id": "45259864408249",
+        "_id": "69b454b06642ed434a5b0015"
+      }
+    ],
+    "name": "The Collection Snowboard: Liquid (Small / Green) [stale SkuLabs title]",
+    "sku": "45259864408249",
+    "upc": "64408249"
+  },
+  {
+    "_id": "69b4543c6642ed434a5b0016",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8189162946745",
+        "variant_id": "45259864441017",
+        "_id": "69b454b06642ed434a5b0016"
+      }
+    ],
+    "name": "The Collection Snowboard: Liquid (Small / Blue)",
+    "sku": "",
+    "upc": "64441017"
+  },
+  {
+    "_id": "69b4543c6642ed434a5b0017",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8189162946745",
+        "variant_id": "45259864473785",
+        "_id": "69b454b06642ed434a5b0017"
+      }
+    ],
+    "name": "The Collection Snowboard: Liquid (Medium / Red)",
+    "sku": "45259864473785",
+    "upc": ""
+  },
+  {
+    "_id": "69b4543c6642ed434a5b0018",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8189162946745",
+        "variant_id": "45259864506553",
+        "_id": "69b454b06642ed434a5b0018"
+      }
+    ],
+    "name": "The Collection Snowboard: Liquid (Medium / Green) [stale SkuLabs title]",
+    "sku": "SKL-506553",
+    "upc": "64506553"
+  },
+  {
+    "_id": "69b4543c6642ed434a5b0019",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8189162946745",
+        "variant_id": "45259864539321",
+        "_id": "69b454b06642ed434a5b0019"
+      }
+    ],
+    "name": "The Collection Snowboard: Liquid (Medium / Blue)",
+    "sku": "45259864539321",
+    "upc": "64539321"
+  },
+  {
+    "_id": "69b4543c6642ed434a5b001a",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8189162946745",
+        "variant_id": "45259864572089",
+        "_id": "69b454b06642ed434a5b001a"
+      }
+    ],
+    "name": "The Collection Snowboard: Liquid (Large / Red)",
+    "sku": "45259864572089",
+    "upc": "64572089"
+  },
+  {
+    "_id": "69b4543c6642ed434a5b001b",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8189162946745",
+        "variant_id": "45259864604857",
+        "_id": "69b454b06642ed434a5b001b"
+      }
+    ],
+    "name": "The Collection Snowboard: Liquid (Large / Green)",
+    "sku": "45259864604857",
+    "upc": "64604857"
+  },
+  {
+    "_id": "69b4543c6642ed434a5b001c",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8189162946745",
+        "variant_id": "45259864637625",
+        "_id": "69b454b06642ed434a5b001c"
+      }
+    ],
+    "name": "The Collection Snowboard: Liquid (Large / Blue)",
+    "sku": "SKL-637625",
+    "upc": "64637625"
+  },
+  {
+    "_id": "69b4543c6642ed434a5b001d",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8189162946745",
+        "variant_id": "46840642109625",
+        "_id": "69b454b06642ed434a5b001d"
+      }
+    ],
+    "name": "The Collection Snowboard: Liquid (Small / Yellow)",
+    "sku": "5678",
+    "upc": "0847109625"
+  },
+  {
+    "_id": "69b4543c6642ed434a5b001e",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8189162946745",
+        "variant_id": "46840642142393",
+        "_id": "69b454b06642ed434a5b001e"
+      }
+    ],
+    "name": "The Collection Snowboard: Liquid (Medium / Yellow) [stale SkuLabs title]",
+    "sku": "1111",
+    "upc": "46840642142393"
+  },
+  {
+    "_id": "69b4543c6642ed434a5b001f",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8189162946745",
+        "variant_id": "46840642175161",
+        "_id": "69b454b06642ed434a5b001f"
+      }
+    ],
+    "name": "The Collection Snowboard: Liquid (Large / Yellow)",
+    "sku": "",
+    "upc": "46840642175161"
+  },
+  {
+    "_id": "69b4543c6642ed434a5b0020",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8189656629433",
+        "variant_id": "45259245879481",
+        "_id": "69b454b06642ed434a5b0020"
+      }
+    ],
+    "name": "Yellow Snowboard",
+    "sku": "45259245879481",
+    "upc": ""
+  },
+  {
+    "_id": "69b4543c6642ed434a5b0021",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8449652687033",
+        "variant_id": "46841076711609",
+        "_id": "69b454b06642ed434a5b0021"
+      }
+    ],
+    "name": "test (Small) [stale SkuLabs title]",
+    "sku": "SKL-711609",
+    "upc": "46841076711609"
+  },
+  {
+    "_id": "69b4543c6642ed434a5b0022",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8449652687033",
+        "variant_id": "46841079562425",
+        "_id": "69b454b06642ed434a5b0022"
+      }
+    ],
+    "name": "test (Medium)",
+    "sku": "46841079562425",
+    "upc": "46841079562425"
+  },
+  {
+    "_id": "69b4543c6642ed434a5b0023",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8462929395897",
+        "variant_id": "46841140478137",
+        "_id": "69b454b06642ed434a5b0023"
+      }
+    ],
+    "name": "testing",
+    "sku": "46841140478137",
+    "upc": "46841140478137"
+  },
+  {
+    "_id": "69b4543c6642ed434a5b0024",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8462929887417",
+        "variant_id": "46841144869049",
+        "_id": "69b454b06642ed434a5b0024"
+      }
+    ],
+    "name": "another",
+    "sku": "46841144869049",
+    "upc": "46841144869049"
+  },
+  {
+    "_id": "69b4543c6642ed434a5b0025",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8464147415225",
+        "variant_id": "46844138324153",
+        "_id": "69b454b06642ed434a5b0025"
+      }
+    ],
+    "name": "another11",
+    "sku": "SKL-324153",
+    "upc": "46844138324153"
+  },
+  {
+    "_id": "69b4543c6642ed434a5b0026",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8470520922297",
+        "variant_id": "46874686914745",
+        "_id": "69b454b06642ed434a5b0026"
+      }
+    ],
+    "name": "what up11",
+    "sku": "46874686914745",
+    "upc": "0847914745"
+  },
+  {
+    "_id": "69b4543c6642ed434a5b0028",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8189162422457",
+        "variant_id": "45256827404473",
+        "_id": "69b454b06642ed434a5b0028"
+      },
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8189162422457",
+        "variant_id": "45256827437241",
+        "_id": "69b454b06642ed434a5b0029"
+      }
+    ],
+    "name": "Ambiguous Multi-Variant Item",
+    "sku": "AMB-001",
+    "upc": ""
+  },
+  {
+    "_id": "69b4543c6642ed434a5b002a",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "amazon-listing",
+        "variant_id": "SKULABS-INTERNAL-CE1",
+        "_id": "69b454b06642ed434a5b002a"
+      },
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8189162422457",
+        "variant_id": "45256827470009",
+        "_id": "69b454b06642ed434a5b002b"
+      }
+    ],
+    "name": "The Complete Snowboard (Sunset)",
+    "sku": "45256827470009",
+    "upc": "0847470009"
+  },
+  {
+    "_id": "69b4543c6642ed434a5b002c",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "ebay-123",
+        "variant_id": "SKULABS-INTERNAL-KIT",
+        "_id": "69b454b06642ed434a5b002c"
+      }
+    ],
+    "name": "SkuLabs Only Bundle Kit",
+    "sku": "KIT-100",
+    "upc": "111222333444"
+  },
+  {
+    "_id": "69b4543c6642ed434a5b002d",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8189162999999",
+        "variant_id": "99990000000001",
+        "_id": "69b454b06642ed434a5b002d"
+      }
+    ],
+    "name": "Phantom Item 1 (not in Shopify)",
+    "sku": "PHANTOM-1",
+    "upc": "555001"
+  },
+  {
+    "_id": "69b4543c6642ed434a5b002e",
+    "listings": [
+      {
+        "store_id": "69926e93f8022ad7b01580ae",
+        "item_id": "8189162999999",
+        "variant_id": "99990000000002",
+        "_id": "69b454b06642ed434a5b002e"
+      }
+    ],
+    "name": "Phantom Item 2 (not in Shopify)",
+    "sku": "PHANTOM-2",
+    "upc": "555002"
+  }
+]

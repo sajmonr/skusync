@@ -1,0 +1,15 @@
+{
+  "priority": 1,
+  "request": {
+    "method": "GET",
+    "urlPath": "/item/get",
+    "headers": {
+      "Authorization": { "equalTo": "Bearer skusync-local-mock-key" }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "bodyFileName": "skulabs-items.json"
+  }
+}
