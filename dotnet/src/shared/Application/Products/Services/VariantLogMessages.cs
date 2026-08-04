@@ -76,6 +76,12 @@ internal static class VariantLogMessages
     public static string DeactivatedAfterFailedShopifySyncs(int failedAttempts) =>
         $"Variant deactivated after {failedAttempts} consecutive failed Shopify sync attempts.";
 
+    /// <summary>Returns a message indicating that the linked SkuLabs item was excluded from
+    /// future SkuLabs pushes after too many consecutive failed attempts.</summary>
+    /// <param name="failedAttempts">The number of consecutive failed SkuLabs push attempts.</param>
+    public static string SkulabsItemExcludedAfterFailedSyncs(int failedAttempts) =>
+        $"Linked SkuLabs item excluded from sync after {failedAttempts} consecutive failed SkuLabs push attempts.";
+
     /// <summary>Returns a message indicating that a previously-deactivated variant was revived
     /// because Shopify sent a fresh <c>products/update</c> webhook for it.</summary>
     public static string Reactivated() =>

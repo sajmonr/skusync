@@ -22,6 +22,10 @@ public class SkulabsItemConfiguration : IEntityTypeConfiguration<SkulabsItemEnti
             .IsRequired()
             .HasDefaultValue(false);
 
+        builder.Property(x => x.FailedSkulabsSyncAttempts)
+            .IsRequired()
+            .HasDefaultValue(0);
+
         builder.HasIndex(x => x.SkulabsSourceItemId).IsUnique();
         builder.HasIndex(x => x.SkulabsSourceListingId).IsUnique();
         builder.HasIndex(x => x.PendingSkulabsSync)
