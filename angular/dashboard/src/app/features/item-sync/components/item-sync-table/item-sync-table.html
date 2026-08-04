@@ -117,6 +117,7 @@
             label="Sync"
             size="small"
             severity="secondary"
+            [outlined]="true"
             [loading]="isSyncing(item.id)"
             [disabled]="isSyncing(item.id)"
             (onClick)="syncRequested.emit(item)"
