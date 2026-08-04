@@ -22,10 +22,10 @@ public class SkulabsTitleSyncTests(AppServerTestHost factory) : IAsyncLifetime
     public Task InitializeAsync() => factory.ResetAsync();
     public Task DisposeAsync() => Task.CompletedTask;
 
-    // ---------- Event-driven push: variant title changed via webhook ----------
+    // ---------- Webhook ingest → inline reconcile → scheduled SkuLabs dispatch ----------
 
     [Fact]
-    public async Task ProductsUpdateWebhook_PushesVariantTitleToSkulabs_WhenLinkedItemTitleDiverges()
+    public async Task ProductsUpdateWebhook_MarksItemPending_AndDispatchPushesTitleToSkulabs()
     {
         // Seed a variant + linked SkuLabs item whose titles already match each other but will
         // diverge once the inbound webhook applies the Shopify product title to DisplayName.
@@ -51,12 +51,19 @@ public class SkulabsTitleSyncTests(AppServerTestHost factory) : IAsyncLifetime
 
         await factory.DispatchWebhookAsync(envelope);
 
-        // Wait for the terminal state — the local mirror committed — not just the PUT. The
-        // consumer calls SkuLabs first and only then commits the local title/log in a separate
-        // scope, so synchronizing on the PUT alone races that commit (flaky under CI timing).
-        await AsyncWait.UntilAsync(
-            () => CapturedBulkUpsertBodies().Any() && SkulabsItemHasTitle("Testprod1"),
-            because: "SkulabsTitleSyncConsumer should have called PUT /item/bulk_upsert and mirrored the corrected title locally.");
+        // The inline reconcile mirrors the new title into the item and marks it pending — the
+        // SkuLabs push itself rides the dispatch cadence, so no PUT has happened yet.
+        using (var afterIngest = factory.Services.CreateScope())
+        {
+            var db = afterIngest.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var item = await db.SkulabsItems.SingleAsync();
+            item.Title.ShouldBe("Testprod1");
+            item.PendingSkulabsSync.ShouldBeTrue();
+        }
+        CapturedBulkUpsertBodies().ShouldBeEmpty();
+
+        // The scheduled dispatch drains the pending item to SkuLabs and clears the flag.
+        await RunSkulabsDispatchAsync();
 
         var bodies = CapturedBulkUpsertBodies();
         bodies.Count.ShouldBe(1);
@@ -64,11 +71,12 @@ public class SkulabsTitleSyncTests(AppServerTestHost factory) : IAsyncLifetime
         bodies[0].ShouldContain("\"name\":\"Testprod1\"");
 
         using var scope = factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var storedItem = await db.SkulabsItems.SingleAsync();
+        var dbAfter = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var storedItem = await dbAfter.SkulabsItems.SingleAsync();
         storedItem.Title.ShouldBe("Testprod1");
+        storedItem.PendingSkulabsSync.ShouldBeFalse();
 
-        var titleLog = await db.ShopifyProductVariantLogEvents
+        var titleLog = await dbAfter.ShopifyProductVariantLogEvents
             .Where(l => l.ShopifyProductVariantId == variantGuid
                         && l.Message.Contains("SkuLabs item title corrected"))
             .SingleAsync();
@@ -76,15 +84,15 @@ public class SkulabsTitleSyncTests(AppServerTestHost factory) : IAsyncLifetime
             "SkuLabs item title corrected to match variant: 'Stale Title' → 'Testprod1'.");
     }
 
-    // ---------- Event-driven push: SkuLabs item linked via sync job ----------
+    // ---------- Item-sync ingest → inline reconcile → scheduled SkuLabs dispatch ----------
 
     [Fact]
-    public async Task SkulabsSyncJob_PushesVariantDisplayName_WhenNewlyLinkedItemTitleDiffers()
+    public async Task SkulabsSyncJob_MarksNewlyLinkedItemPending_AndDispatchPushesVariantDisplayName()
     {
         // Seed a variant whose DisplayName we want to keep ("Authoritative Display Name").
         // The /item/get fixture's name field ("Yellow Vintage Nature Domino Necklace (Goose (1bird))")
-        // will land in SkulabsItem.Title on link, immediately diverging from the variant — and the
-        // post-link SkulabsTitleSyncConsumer should then push the variant value back up.
+        // lands in SkulabsItem.Title on link, immediately diverging from the variant — the item
+        // sync's inline reconcile mirrors the variant value and marks the item pending.
         const long variantId = 45696210862241L;
         var variantGuid = await SeedVariantAsync(variantId, displayName: "Authoritative Display Name");
 
@@ -93,11 +101,16 @@ public class SkulabsTitleSyncTests(AppServerTestHost factory) : IAsyncLifetime
 
         await RunSkulabsItemSyncJobAsync();
 
-        // Wait for the local mirror to commit, not just the PUT (see the note in the webhook
-        // test above — synchronizing on the PUT alone races the consumer's separate commit).
-        await AsyncWait.UntilAsync(
-            () => CapturedBulkUpsertBodies().Any() && SkulabsItemHasTitle("Authoritative Display Name"),
-            because: "Post-link SkulabsTitleSyncConsumer should have pushed the variant DisplayName to SkuLabs and mirrored it locally.");
+        using (var afterIngest = factory.Services.CreateScope())
+        {
+            var db = afterIngest.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var item = await db.SkulabsItems.SingleAsync();
+            item.Title.ShouldBe("Authoritative Display Name");
+            item.PendingSkulabsSync.ShouldBeTrue();
+        }
+        CapturedBulkUpsertBodies().ShouldBeEmpty();
+
+        await RunSkulabsDispatchAsync();
 
         var bodies = CapturedBulkUpsertBodies();
         bodies.Count.ShouldBe(1);
@@ -105,11 +118,12 @@ public class SkulabsTitleSyncTests(AppServerTestHost factory) : IAsyncLifetime
         bodies[0].ShouldContain("\"name\":\"Authoritative Display Name\"");
 
         using var scope = factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var storedItem = await db.SkulabsItems.SingleAsync();
+        var dbAfter = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var storedItem = await dbAfter.SkulabsItems.SingleAsync();
         storedItem.Title.ShouldBe("Authoritative Display Name");
+        storedItem.PendingSkulabsSync.ShouldBeFalse();
 
-        var titleLogs = await db.ShopifyProductVariantLogEvents
+        var titleLogs = await dbAfter.ShopifyProductVariantLogEvents
             .Where(l => l.ShopifyProductVariantId == variantGuid
                         && l.Message.Contains("SkuLabs item title corrected"))
             .ToListAsync();
@@ -119,13 +133,13 @@ public class SkulabsTitleSyncTests(AppServerTestHost factory) : IAsyncLifetime
             "'Yellow Vintage Nature Domino Necklace (Goose (1bird))' → 'Authoritative Display Name'.");
     }
 
-    // ---------- Maintenance task: drift sweep ----------
+    // ---------- Nightly reconcile as the safety net ----------
 
     [Fact]
-    public async Task SkulabsTitleSyncTask_PushesCorrections_WhenDatabaseAlreadyHasDriftedTitles()
+    public async Task FullReconcileAndDispatch_PushCorrections_WhenDatabaseAlreadyHasDriftedTitles()
     {
-        // Pre-existing drift in the DB that no event ever fired for (e.g. manual edit or a
-        // missed message). The nightly maintenance task should detect and correct it.
+        // Pre-existing drift in the DB that no ingest ever reconciled (e.g. manual edit or a
+        // missed webhook). The nightly reconcile should detect and mark it; the dispatch drains it.
         const long productId = 9999000000001;
         var variantGuid = await SeedLinkedVariantAsync(
             productId: productId,
@@ -139,7 +153,8 @@ public class SkulabsTitleSyncTests(AppServerTestHost factory) : IAsyncLifetime
         using var scope = factory.Services.CreateScope();
         var recurringJobs = scope.ServiceProvider.GetRequiredService<RecurringJobs>();
 
-        await recurringJobs.SyncSkulabsTitles(CancellationToken.None);
+        await recurringJobs.ReconcileAll(CancellationToken.None);
+        await recurringJobs.DispatchSkulabs(CancellationToken.None);
 
         var bodies = CapturedBulkUpsertBodies();
         bodies.Count.ShouldBe(1);
@@ -149,6 +164,7 @@ public class SkulabsTitleSyncTests(AppServerTestHost factory) : IAsyncLifetime
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var storedItem = await db.SkulabsItems.SingleAsync();
         storedItem.Title.ShouldBe("Newest Authoritative Title");
+        storedItem.PendingSkulabsSync.ShouldBeFalse();
 
         var titleLog = await db.ShopifyProductVariantLogEvents
             .Where(l => l.ShopifyProductVariantId == variantGuid
@@ -160,7 +176,7 @@ public class SkulabsTitleSyncTests(AppServerTestHost factory) : IAsyncLifetime
     }
 
     [Fact]
-    public async Task SkulabsTitleSyncTask_DoesNotCallSkulabs_WhenAllTitlesAlreadyMatch()
+    public async Task FullReconcileAndDispatch_DoNotCallSkulabs_WhenAllTitlesAlreadyMatch()
     {
         await SeedLinkedVariantAsync(
             productId: 9999000000010L,
@@ -174,7 +190,8 @@ public class SkulabsTitleSyncTests(AppServerTestHost factory) : IAsyncLifetime
         using var scope = factory.Services.CreateScope();
         var recurringJobs = scope.ServiceProvider.GetRequiredService<RecurringJobs>();
 
-        await recurringJobs.SyncSkulabsTitles(CancellationToken.None);
+        await recurringJobs.ReconcileAll(CancellationToken.None);
+        await recurringJobs.DispatchSkulabs(CancellationToken.None);
 
         CapturedBulkUpsertBodies().ShouldBeEmpty();
     }
@@ -186,6 +203,13 @@ public class SkulabsTitleSyncTests(AppServerTestHost factory) : IAsyncLifetime
         using var scope = factory.Services.CreateScope();
         var recurringJobs = scope.ServiceProvider.GetRequiredService<RecurringJobs>();
         await recurringJobs.SyncSkulabsItems(CancellationToken.None);
+    }
+
+    private async Task RunSkulabsDispatchAsync()
+    {
+        using var scope = factory.Services.CreateScope();
+        var recurringJobs = scope.ServiceProvider.GetRequiredService<RecurringJobs>();
+        await recurringJobs.DispatchSkulabs(CancellationToken.None);
     }
 
     private void StubBulkUpsertOk() =>
@@ -207,13 +231,6 @@ public class SkulabsTitleSyncTests(AppServerTestHost factory) : IAsyncLifetime
                 .WithStatusCode(200)
                 .WithHeader("Content-Type", "application/json")
                 .WithBody(json));
-    }
-
-    private bool SkulabsItemHasTitle(string title)
-    {
-        using var scope = factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        return db.SkulabsItems.AsNoTracking().Any(item => item.Title == title);
     }
 
     private List<string> CapturedBulkUpsertBodies() =>

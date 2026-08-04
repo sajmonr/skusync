@@ -1,0 +1,18 @@
+{
+  "priority": 10,
+  "request": {
+    "method": "ANY",
+    "urlPathPattern": "/item/.*"
+  },
+  "response": {
+    "status": 401,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": {
+      "error": {
+        "code": "unauthorized",
+        "message": "Missing or invalid API key.",
+        "user_error": true
+      }
+    }
+  }
+}

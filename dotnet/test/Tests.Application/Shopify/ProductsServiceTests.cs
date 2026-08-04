@@ -1,6 +1,6 @@
-using Application.Products.Events;
 using Application.Products.Services;
 using Application.Skus;
+using Application.Sync;
 using Infrastructure.Database;
 using Infrastructure.Database.Entities;
 using Integration.Shopify.Products;
@@ -11,14 +11,13 @@ using Microsoft.Extensions.Options;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Shouldly;
-using SlimMessageBus;
 
 namespace Tests.Application.Shopify;
 
 public class ProductsServiceTests : IDisposable
 {
     private readonly IShopifyProductService _shopifyProductService = Substitute.For<IShopifyProductService>();
-    private readonly IMessageBus _messageBus = Substitute.For<IMessageBus>();
+    private readonly IShopifyDispatchTrigger _dispatchTrigger = Substitute.For<IShopifyDispatchTrigger>();
     private readonly ISkuGenerator _skuGenerator = Substitute.For<ISkuGenerator>();
     private readonly ApplicationDbContext _dbContext;
     private readonly TestLogger<ProductsService> _logger = new();
@@ -898,12 +897,48 @@ public class ProductsServiceTests : IDisposable
         infoLogs.Length.ShouldBeGreaterThan(0);
     }
 
+    [Fact]
+    public async Task DeduplicateProducts_ShouldMarkRewrittenVariantsPending_AndDispatchThem()
+    {
+        var first = SeedVariant("gid://shopify/ProductVariant/100", sku: "DUPE-SKU", barcode: "BAR-A", variantId: 100);
+        var second = SeedVariant("gid://shopify/ProductVariant/200", sku: "DUPE-SKU", barcode: "BAR-B", variantId: 200);
+        await _dbContext.SaveChangesAsync();
+
+        var sut = CreateSut();
+
+        await sut.DeduplicateProducts();
+
+        var variants = await _dbContext.Set<ShopifyProductVariantEntity>().ToListAsync();
+        variants.ShouldAllBe(v => v.PendingShopifySync);
+        await _dispatchTrigger.Received(1).TryDispatch(
+            Arg.Is<IReadOnlyCollection<Guid>>(ids =>
+                ids.Count == 2
+                && ids.Contains(first.ShopifyProductVariantId)
+                && ids.Contains(second.ShopifyProductVariantId)),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task DeduplicateProducts_ShouldNotDispatch_WhenNoDuplicatesExist()
+    {
+        SeedVariant("gid://shopify/ProductVariant/100", sku: "SKU-A", barcode: "BAR-A", variantId: 100);
+        SeedVariant("gid://shopify/ProductVariant/200", sku: "SKU-B", barcode: "BAR-B", variantId: 200);
+        await _dbContext.SaveChangesAsync();
+
+        var sut = CreateSut();
+
+        await sut.DeduplicateProducts();
+
+        await _dispatchTrigger.DidNotReceive().TryDispatch(
+            Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>());
+    }
+
     // -------------------------------------------------------------------------
-    // Event accumulation — ImportProducts
+    // Dispatch triggering and pending marking — ImportProducts
     // -------------------------------------------------------------------------
 
     [Fact]
-    public async Task ImportProducts_ShouldPublishCreatedEvent_WhenNewVariantIsSaved()
+    public async Task ImportProducts_ShouldDispatchCreatedVariant_WithoutMarkingPending_WhenSkuComesFromShopify()
     {
         _shopifyProductService.GetProducts().Returns(
         [
@@ -912,15 +947,41 @@ public class ProductsServiceTests : IDisposable
 
         await CreateSut().ImportProductsFromShopify();
 
-        await _messageBus.Received(1).Publish(
-            Arg.Is<ProductVariantCreatedEvent>(e => e.ProductVariantId != Guid.Empty),
-            Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
+        var created = await _dbContext.Set<ShopifyProductVariantEntity>().SingleAsync();
+        created.PendingShopifySync.ShouldBeFalse();
+        await _dispatchTrigger.Received(1).TryDispatch(
+            Arg.Is<IReadOnlyCollection<Guid>>(ids =>
+                ids.Count == 1 && ids.Contains(created.ShopifyProductVariantId)),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task ImportProducts_ShouldPublishUpdatedEvent_WhenExistingVariantIsChanged()
+    public async Task ImportProducts_ShouldMarkCreatedVariantPending_WhenSkuWasGenerated()
     {
-        SeedVariant("gid://shopify/ProductVariant/200", displayName: "Old Title", sku: "SKU-1", barcode: "BAR-1", variantId: 200);
+        _shopifyProductService.GetProducts().Returns(
+        [
+            new ShopifyProductVariant(
+                "gid://shopify/Product/100",
+                "gid://shopify/ProductVariant/200",
+                "T-Shirt - Large",
+                Sku: "",
+                Barcode: "BAR-1")
+            {
+                ProductTitle = "T-Shirt",
+                VariantTitle = "Large",
+            }
+        ]);
+
+        await CreateSut().ImportProductsFromShopify();
+
+        var created = await _dbContext.Set<ShopifyProductVariantEntity>().SingleAsync();
+        created.PendingShopifySync.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task ImportProducts_ShouldDispatchUpdatedVariant_WhenExistingVariantIsChanged()
+    {
+        var seeded = SeedVariant("gid://shopify/ProductVariant/200", displayName: "Old Title", sku: "SKU-1", barcode: "BAR-1", variantId: 200);
         await _dbContext.SaveChangesAsync();
 
         _shopifyProductService.GetProducts().Returns(
@@ -930,13 +991,31 @@ public class ProductsServiceTests : IDisposable
 
         await CreateSut().ImportProductsFromShopify();
 
-        await _messageBus.Received(1).Publish(
-            Arg.Is<ProductVariantUpdatedEvent>(e => e.ProductVariantId != Guid.Empty),
-            Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
+        await _dispatchTrigger.Received(1).TryDispatch(
+            Arg.Is<IReadOnlyCollection<Guid>>(ids =>
+                ids.Count == 1 && ids.Contains(seeded.ShopifyProductVariantId)),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task ImportProducts_ShouldNotPublishAnyEvent_WhenNoChangesOccur()
+    public async Task ImportProducts_ShouldMarkUpdatedVariantPending_WhenLocalSkuDiffersFromShopify()
+    {
+        SeedVariant("gid://shopify/ProductVariant/200", displayName: "T-Shirt", sku: "OLD-SKU", barcode: "BAR-1", variantId: 200);
+        await _dbContext.SaveChangesAsync();
+
+        _shopifyProductService.GetProducts().Returns(
+        [
+            new ShopifyProductVariant("gid://shopify/Product/100", "gid://shopify/ProductVariant/200", "T-Shirt", "NEW-SKU", "BAR-1")
+        ]);
+
+        await CreateSut().ImportProductsFromShopify();
+
+        var updated = await _dbContext.Set<ShopifyProductVariantEntity>().SingleAsync();
+        updated.PendingShopifySync.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task ImportProducts_ShouldNotDispatchAnyVariant_WhenNoChangesOccur()
     {
         SeedVariant("gid://shopify/ProductVariant/200", displayName: "T-Shirt - Large", sku: "SKU-1", barcode: "BAR-1", variantId: 200);
         await _dbContext.SaveChangesAsync();
@@ -948,12 +1027,13 @@ public class ProductsServiceTests : IDisposable
 
         await CreateSut().ImportProductsFromShopify();
 
-        await _messageBus.DidNotReceive().Publish(
-            Arg.Any<ProductVariantCreatedEvent>(),
-            Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
-        await _messageBus.DidNotReceive().Publish(
-            Arg.Any<ProductVariantUpdatedEvent>(),
-            Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
+        // The import always calls TryDispatch after its save — with an empty id set when
+        // nothing changed — so assert no call carried any variant id.
+        var variant = await _dbContext.Set<ShopifyProductVariantEntity>().SingleAsync();
+        variant.PendingShopifySync.ShouldBeFalse();
+        await _dispatchTrigger.DidNotReceive().TryDispatch(
+            Arg.Is<IReadOnlyCollection<Guid>>(ids => ids.Count > 0),
+            Arg.Any<CancellationToken>());
     }
 
     private ShopifyProductVariantEntity SeedVariant(
@@ -985,13 +1065,13 @@ public class ProductsServiceTests : IDisposable
         return entity;
     }
 
-    private ProductsService CreateSut() => new(_shopifyProductService, _dbContext, _logger, _messageBus, _skuGenerator);
+    private ProductsService CreateSut() => new(_shopifyProductService, _dbContext, _logger, _dispatchTrigger, _skuGenerator);
 
     private ProductsService CreateSutWithRealGenerator()
     {
         var skuGenerator = new SkuGenerator(
             _dbContext, Options.Create(new SkuGeneratorOptions()), NullLogger<SkuGenerator>.Instance);
-        return new(_shopifyProductService, _dbContext, _logger, _messageBus, skuGenerator);
+        return new(_shopifyProductService, _dbContext, _logger, _dispatchTrigger, skuGenerator);
     }
 
     private sealed class TestLogger<T> : ILogger<T>

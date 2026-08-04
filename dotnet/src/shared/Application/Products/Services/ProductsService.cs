@@ -1,11 +1,10 @@
-using Application.Products.Events;
 using Application.Skus;
+using Application.Sync;
 using Infrastructure.Database;
 using Infrastructure.Database.Entities;
 using Integration.Shopify.Products;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using SlimMessageBus;
 
 namespace Application.Products.Services;
 
@@ -13,7 +12,7 @@ public class ProductsService(
     IShopifyProductService shopifyProductService,
     ApplicationDbContext dbContext,
     ILogger<ProductsService> logger,
-    IMessageBus messageBus,
+    IShopifyDispatchTrigger dispatchTrigger,
     ISkuGenerator skuGenerator) : IProductsService
 {
     public async Task SyncProducts(CancellationToken cancellationToken = default)
@@ -85,11 +84,17 @@ public class ProductsService(
                 "Could not import products from Shopify because the product variants could not be saved to the database.");
         }
 
-        // Variants a concurrent writer beat us to were dropped from the insert; don't announce
-        // them as created here — the writer that won the race publishes their creation event.
+        // Variants a concurrent writer beat us to were dropped from the insert; don't count or
+        // dispatch them here — the writer that won the race handles its own rows.
         createdEntities.RemoveAll(droppedInserts.Contains);
 
-        await PublishVariantEvents(createdEntities, updatedEntities);
+        // Push whatever this import marked pending (generated SKUs, Shopify-side drift) toward
+        // Shopify right away instead of waiting for the scheduled dispatch run. The dispatcher
+        // batches per product and skips rows that aren't pending.
+        await dispatchTrigger.TryDispatch(createdEntities
+            .Concat(updatedEntities)
+            .Select(e => e.ShopifyProductVariantId)
+            .ToArray());
 
         logger.LogDebug("Synchronization complete. Created: {Created}, Updated: {Updated}, Deleted: {Deleted}.",
             createdEntities.Count, updatedEntities.Count, deletedCount);
@@ -263,7 +268,10 @@ public class ProductsService(
             VariantId = shopifyVariant.VariantId,
             DisplayName = shopifyVariant.DisplayName,
             Sku = sku,
-            Barcode = shopifyVariant.Barcode
+            Barcode = shopifyVariant.Barcode,
+            // A generated SKU is a divergence we originated — Shopify doesn't have it yet. A SKU
+            // taken from the Shopify payload matches Shopify, so nothing is pending.
+            PendingShopifySync = skuWasGenerated
         };
 
         newVariant.LogEvents.Add(new ShopifyProductVariantLogEventEntity
@@ -307,21 +315,6 @@ public class ProductsService(
             "Shopify variant {GlobalVariantId} had no SKU; assigning generated SKU '{Sku}'.",
             shopifyVariant.GlobalVariantId, sku);
         return (sku, WasGenerated: true);
-    }
-
-    /// <summary>
-    /// Publishes one <c>ProductVariantCreated</c>/<c>ProductVariantUpdated</c> event per
-    /// persisted entity. Called only after the DbContext save has succeeded, so that no
-    /// phantom events ever reach the queue.
-    /// </summary>
-    private async Task PublishVariantEvents(
-        List<ShopifyProductVariantEntity> createdEntities,
-        List<ShopifyProductVariantEntity> updatedEntities)
-    {
-        await messageBus.PublishBatch(
-            updatedEntities.Select(e => new ProductVariantUpdatedEvent(e.ShopifyProductVariantId)));
-        await messageBus.PublishBatch(
-            createdEntities.Select(e => new ProductVariantCreatedEvent(e.ShopifyProductVariantId)));
     }
 
     public async Task<ProductDeduplicationResult> DeduplicateProducts()
@@ -401,6 +394,9 @@ public class ProductsService(
 
         logger.LogInformation("Deduplication complete. Modified {Count} variant(s).", affectedVariantIds.Length);
 
+        // The rewritten SKUs/barcodes are divergences we originated; push them right away.
+        await dispatchTrigger.TryDispatch(variants.Select(v => v.ShopifyProductVariantId).ToArray());
+
         return ProductDeduplicationResult.Success(affectedVariantIds);
     }
 
@@ -441,6 +437,8 @@ public class ProductsService(
                 });
             }
 
+            // The rewritten value is a divergence we originated — Shopify still has the duplicate.
+            variant.PendingShopifySync = true;
             variant.UpdatedOnUtc = DateTime.UtcNow;
         }
     }
@@ -501,9 +499,12 @@ public class ProductsService(
             });
         }
 
-        // The below will force change to run
+        // Shopify's SKU/barcode differs from our authoritative local values — covers both a SKU
+        // we just generated (Shopify sent none) and Shopify-side drift. Either way the variant
+        // needs a push to bring Shopify back in line.
         if (existing.Sku != shopifyVariant.Sku || existing.Barcode != shopifyVariant.Barcode)
         {
+            existing.PendingShopifySync = true;
             changed = true;
         }
 

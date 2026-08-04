@@ -9,6 +9,14 @@ interface TriggerResponse {
   readonly alreadyRunning: boolean;
 }
 
+/** Outcome of a manual per-item sync — counts are 0 or 1 per side. */
+export interface ItemSyncResult {
+  readonly shopifyPushed: number;
+  readonly shopifyFailed: number;
+  readonly skulabsPushed: number;
+  readonly skulabsFailed: number;
+}
+
 /**
  * Starts a product sync and observes it to completion.
  *
@@ -39,5 +47,14 @@ export class ProductSyncService {
       }),
       filter((status) => status.state === 'Succeeded'),
     );
+  }
+
+  /**
+   * Manually syncs a single variant. Unlike {@link startSync} this resolves synchronously on the
+   * server (no background job), so the returned observable emits once with the outcome and
+   * completes, or errors with the `HttpErrorResponse` (e.g. a 429 rate limit).
+   */
+  syncItem(variantId: string): Observable<ItemSyncResult> {
+    return this.http.post<ItemSyncResult>(`${this.apiBasePath}/item-sync/${variantId}/sync`, {});
   }
 }

@@ -1,7 +1,7 @@
 using Application;
-using Application.Products.Events;
 using Application.Products.Webhook;
 using Application.Skus;
+using Application.Sync;
 using Infrastructure.Database;
 using Infrastructure.Database.Entities;
 using Integration.Aws.Sqs;
@@ -12,13 +12,13 @@ using Microsoft.Extensions.Options;
 using Microsoft.FeatureManagement;
 using NSubstitute;
 using Shouldly;
-using SlimMessageBus;
 
 namespace Tests.Application.Queue;
 
 public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
 {
-    private readonly IMessageBus _messageBus = Substitute.For<IMessageBus>();
+    private readonly IReconciler _reconciler = Substitute.For<IReconciler>();
+    private readonly IShopifyDispatchTrigger _dispatchTrigger = Substitute.For<IShopifyDispatchTrigger>();
     private readonly IFeatureManager _featureManager = Substitute.For<IFeatureManager>();
     private readonly ISkuGenerator _skuGenerator = Substitute.For<ISkuGenerator>();
     private readonly ApplicationDbContext _dbContext;
@@ -39,6 +39,9 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
                 Arg.Any<string>(), Arg.Any<string?>(),
                 Arg.Any<ISet<string>?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(_ => Task.FromResult($"GEN-{Guid.NewGuid():N}"[..12]));
+
+        _reconciler.ReconcileVariants(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>())
+            .Returns(ReconcileResult.Empty);
     }
 
     public void Dispose() => _dbContext.Dispose();
@@ -61,16 +64,34 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
     }
 
     [Fact]
-    public async Task Handle_ShouldPublishCreatedEvent_WhenNewVariantIsSaved()
+    public async Task Handle_ShouldMarkPendingAndDispatchNewVariant_WhenNewVariantIsSaved()
     {
         var product = CreateProduct(100,
             CreateVariant(200, variantTitle: "Large", sku: "SKU-A", barcode: "BAR-A"));
 
         await CreateSut().Handle(product);
 
-        await _messageBus.Received(1).Publish(
-            Arg.Is<ProductVariantCreatedEvent>(e => e.ProductVariantId != Guid.Empty),
-            Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
+        var saved = await _dbContext.ShopifyProductVariants.SingleAsync();
+        saved.PendingShopifySync.ShouldBeTrue();
+        await _dispatchTrigger.Received(1).TryDispatch(
+            Arg.Is<IReadOnlyCollection<Guid>>(ids =>
+                ids.Count == 1 && ids.Contains(saved.ShopifyProductVariantId)),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_ShouldReconcileNewVariant_BeforeDispatching()
+    {
+        var product = CreateProduct(100,
+            CreateVariant(200, variantTitle: "Large", sku: "SKU-A", barcode: "BAR-A"));
+
+        await CreateSut().Handle(product);
+
+        var saved = await _dbContext.ShopifyProductVariants.SingleAsync();
+        await _reconciler.Received(1).ReconcileVariants(
+            Arg.Is<IReadOnlyCollection<Guid>>(ids =>
+                ids.Count == 1 && ids.Contains(saved.ShopifyProductVariantId)),
+            Arg.Any<CancellationToken>());
     }
 
     // -------------------------------------------------------------------------
@@ -146,13 +167,13 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
     }
 
     // -------------------------------------------------------------------------
-    // Updated event dispatching — barcode / SKU mismatch
+    // Pending marking and dispatch — barcode / SKU mismatch
     // -------------------------------------------------------------------------
 
     [Fact]
-    public async Task Handle_ShouldPublishUpdatedEvent_WhenBarcodeDoesNotMatch()
+    public async Task Handle_ShouldMarkPendingAndDispatch_WhenBarcodeDoesNotMatch()
     {
-        SeedVariant(100, 200, sku: "SKU-A", barcode: "OLD-BAR");
+        var seeded = SeedVariant(100, 200, sku: "SKU-A", barcode: "OLD-BAR");
         await _dbContext.SaveChangesAsync();
 
         var product = CreateProduct(100,
@@ -160,15 +181,18 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
 
         await CreateSut().Handle(product);
 
-        await _messageBus.Received(1).Publish(
-            Arg.Is<ProductVariantUpdatedEvent>(e => e.ProductVariantId != Guid.Empty),
-            Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
+        var updated = await _dbContext.ShopifyProductVariants.SingleAsync();
+        updated.PendingShopifySync.ShouldBeTrue();
+        await _dispatchTrigger.Received(1).TryDispatch(
+            Arg.Is<IReadOnlyCollection<Guid>>(ids =>
+                ids.Count == 1 && ids.Contains(seeded.ShopifyProductVariantId)),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Handle_ShouldPublishUpdatedEvent_WhenSkuDoesNotMatch()
+    public async Task Handle_ShouldMarkPendingAndDispatch_WhenSkuDoesNotMatch()
     {
-        SeedVariant(100, 200, sku: "OLD-SKU", barcode: "BAR-A");
+        var seeded = SeedVariant(100, 200, sku: "OLD-SKU", barcode: "BAR-A");
         await _dbContext.SaveChangesAsync();
 
         var product = CreateProduct(100,
@@ -176,13 +200,16 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
 
         await CreateSut().Handle(product);
 
-        await _messageBus.Received(1).Publish(
-            Arg.Is<ProductVariantUpdatedEvent>(e => e.ProductVariantId != Guid.Empty),
-            Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
+        var updated = await _dbContext.ShopifyProductVariants.SingleAsync();
+        updated.PendingShopifySync.ShouldBeTrue();
+        await _dispatchTrigger.Received(1).TryDispatch(
+            Arg.Is<IReadOnlyCollection<Guid>>(ids =>
+                ids.Count == 1 && ids.Contains(seeded.ShopifyProductVariantId)),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task Handle_ShouldNotPublishUpdatedEvent_WhenBarcodeIsEmptyInDatabase()
+    public async Task Handle_ShouldNotMarkPending_WhenBarcodeIsEmptyInDatabase()
     {
         // Display name must match so UpdateEntity returns false; only DidBarcodeOrSkuChange is tested.
         SeedVariant(100, 200, displayName: "T-Shirt (Large)", sku: "SKU-A", barcode: "");
@@ -193,11 +220,13 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
 
         await CreateSut().Handle(product);
 
-        await AssertNoEventsPublished();
+        var variant = await _dbContext.ShopifyProductVariants.SingleAsync();
+        variant.PendingShopifySync.ShouldBeFalse();
+        await AssertNoVariantsDispatched();
     }
 
     [Fact]
-    public async Task Handle_ShouldNotPublishUpdatedEvent_WhenSkuIsEmptyInDatabase()
+    public async Task Handle_ShouldNotMarkPending_WhenSkuIsEmptyInDatabase()
     {
         // Display name must match so UpdateEntity returns false; only DidBarcodeOrSkuChange is tested.
         SeedVariant(100, 200, displayName: "T-Shirt (Large)", sku: "", barcode: "BAR-A");
@@ -208,11 +237,13 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
 
         await CreateSut().Handle(product);
 
-        await AssertNoEventsPublished();
+        var variant = await _dbContext.ShopifyProductVariants.SingleAsync();
+        variant.PendingShopifySync.ShouldBeFalse();
+        await AssertNoVariantsDispatched();
     }
 
     [Fact]
-    public async Task Handle_ShouldNotPublishAnyEvent_WhenVariantIsFullyUpToDate()
+    public async Task Handle_ShouldNotMarkPendingOrDispatch_WhenVariantIsFullyUpToDate()
     {
         SeedVariant(100, 200, displayName: "T-Shirt (Large)", sku: "SKU-A", barcode: "BAR-A");
         await _dbContext.SaveChangesAsync();
@@ -222,7 +253,32 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
 
         await CreateSut().Handle(product);
 
-        await AssertNoEventsPublished();
+        var variant = await _dbContext.ShopifyProductVariants.SingleAsync();
+        variant.PendingShopifySync.ShouldBeFalse();
+        await AssertNoVariantsDispatched();
+    }
+
+    [Fact]
+    public async Task Handle_ShouldDispatchWithoutMarkingPending_WhenOnlyDisplayNameChanged()
+    {
+        var seeded = SeedVariant(100, 200, displayName: "Old Product (Old Variant)", sku: "SKU-A", barcode: "BAR-A");
+        await _dbContext.SaveChangesAsync();
+
+        var product = CreateProduct(100, productTitle: "New Product",
+            CreateVariant(200, variantTitle: "New Variant", sku: "SKU-A", barcode: "BAR-A"));
+
+        await CreateSut().Handle(product);
+
+        var updated = await _dbContext.ShopifyProductVariants.SingleAsync();
+        updated.PendingShopifySync.ShouldBeFalse();
+        await _reconciler.Received(1).ReconcileVariants(
+            Arg.Is<IReadOnlyCollection<Guid>>(ids =>
+                ids.Count == 1 && ids.Contains(seeded.ShopifyProductVariantId)),
+            Arg.Any<CancellationToken>());
+        await _dispatchTrigger.Received(1).TryDispatch(
+            Arg.Is<IReadOnlyCollection<Guid>>(ids =>
+                ids.Count == 1 && ids.Contains(seeded.ShopifyProductVariantId)),
+            Arg.Any<CancellationToken>());
     }
 
     // -------------------------------------------------------------------------
@@ -246,23 +302,30 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
     }
 
     [Fact]
-    public async Task Handle_ShouldPublishOneEventPerVariant_WhenMixedCreatedAndUpdated()
+    public async Task Handle_ShouldReconcileAndDispatchBothVariants_WhenMixedCreatedAndUpdated()
     {
-        SeedVariant(100, 200, sku: "SKU-A", barcode: "BAR-A");
+        var seeded = SeedVariant(100, 200, sku: "SKU-A", barcode: "BAR-A");
         await _dbContext.SaveChangesAsync();
 
         var product = CreateProduct(100,
-            CreateVariant(200, variantTitle: "Large", sku: "SKU-A", barcode: "NEW-BAR"), // existing → Updated (barcode mismatch)
-            CreateVariant(201, variantTitle: "Small", sku: "SKU-B", barcode: "BAR-B")); // new → Created
+            CreateVariant(200, variantTitle: "Large", sku: "SKU-A", barcode: "NEW-BAR"), // existing → updated (barcode mismatch)
+            CreateVariant(201, variantTitle: "Small", sku: "SKU-B", barcode: "BAR-B")); // new → created
 
         await CreateSut().Handle(product);
 
-        await _messageBus.Received(1).Publish(
-            Arg.Any<ProductVariantUpdatedEvent>(),
-            Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
-        await _messageBus.Received(1).Publish(
-            Arg.Any<ProductVariantCreatedEvent>(),
-            Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
+        var created = await _dbContext.ShopifyProductVariants.SingleAsync(v => v.VariantId == 201);
+        await _reconciler.Received(1).ReconcileVariants(
+            Arg.Is<IReadOnlyCollection<Guid>>(ids =>
+                ids.Count == 2
+                && ids.Contains(seeded.ShopifyProductVariantId)
+                && ids.Contains(created.ShopifyProductVariantId)),
+            Arg.Any<CancellationToken>());
+        await _dispatchTrigger.Received(1).TryDispatch(
+            Arg.Is<IReadOnlyCollection<Guid>>(ids =>
+                ids.Count == 2
+                && ids.Contains(seeded.ShopifyProductVariantId)
+                && ids.Contains(created.ShopifyProductVariantId)),
+            Arg.Any<CancellationToken>());
     }
 
     // -------------------------------------------------------------------------
@@ -326,7 +389,7 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
         variants.Count.ShouldBe(1);
         variants[0].IsDeleted.ShouldBeTrue();
         variants[0].DisplayName.ShouldBe("Frozen Name");
-        await AssertNoEventsPublished();
+        await AssertNoVariantsDispatched();
     }
 
     [Fact]
@@ -357,7 +420,10 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
         await CreateSut().Handle(product);
 
         (await _dbContext.ShopifyProductVariants.CountAsync()).ShouldBe(0);
-        await AssertNoEventsPublished();
+        await _dispatchTrigger.DidNotReceive().TryDispatch(
+            Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>());
+        await _reconciler.DidNotReceive().ReconcileVariants(
+            Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>());
     }
 
     // -------------------------------------------------------------------------
@@ -385,23 +451,22 @@ public class ShopifyProductUpdateWebhookHandlerTests : IDisposable
     // -------------------------------------------------------------------------
 
     private ShopifyProductUpdateWebhookHandler CreateSut() =>
-        new(_dbContext, _logger, _messageBus, _featureManager, _skuGenerator);
+        new(_dbContext, _logger, _reconciler, _dispatchTrigger, _featureManager, _skuGenerator);
 
     private ShopifyProductUpdateWebhookHandler CreateSutWithRealGenerator()
     {
         var skuGenerator = new SkuGenerator(
             _dbContext, Options.Create(new SkuGeneratorOptions()), NullLogger<SkuGenerator>.Instance);
-        return new(_dbContext, _logger, _messageBus, _featureManager, skuGenerator);
+        return new(_dbContext, _logger, _reconciler, _dispatchTrigger, _featureManager, skuGenerator);
     }
 
-    private async Task AssertNoEventsPublished()
+    // The handler always calls TryDispatch after a save — with an empty id set when nothing was
+    // touched — so "nothing dispatched" means no call carrying at least one variant id.
+    private async Task AssertNoVariantsDispatched()
     {
-        await _messageBus.DidNotReceive().Publish(
-            Arg.Any<ProductVariantCreatedEvent>(),
-            Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
-        await _messageBus.DidNotReceive().Publish(
-            Arg.Any<ProductVariantUpdatedEvent>(),
-            Arg.Any<string?>(), Arg.Any<IDictionary<string, object>?>(), Arg.Any<CancellationToken>());
+        await _dispatchTrigger.DidNotReceive().TryDispatch(
+            Arg.Is<IReadOnlyCollection<Guid>>(ids => ids.Count > 0),
+            Arg.Any<CancellationToken>());
     }
 
     private ShopifyProductVariantEntity SeedVariant(

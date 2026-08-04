@@ -46,10 +46,9 @@ public class ProductCreateWebhookTests(AppServerTestHost factory) : IAsyncLifeti
         variant.Sku.ShouldBe("BW-Tes");
         variant.Barcode.ShouldBe(expectedBarcode);
 
-        // assert — ShopifyVariantWritebackConsumer fired and called the Shopify GraphQL mutation
-        await AsyncWait.UntilAsync(
-            () => factory.ShopifyGraphQl.ReceivedCalls().Any(),
-            because: "ShopifyVariantWritebackConsumer should have run and called IShopifyGraphQlService.");
+        // assert — the immediate dispatch ran inside the webhook flow, pushed the generated SKU
+        // via the Shopify GraphQL mutation, and cleared the pending flag.
+        variant.PendingShopifySync.ShouldBeFalse();
 
         await factory.ShopifyGraphQl.Received(1).ExecuteAsync<UpdateVariantsGraphResponse>(
             Arg.Is<string>(q => q.Contains("productVariantsBulkUpdate")),

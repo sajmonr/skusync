@@ -1,0 +1,15 @@
+{
+  "priority": 1,
+  "request": {
+    "method": "PUT",
+    "urlPath": "/item/bulk_upsert",
+    "headers": {
+      "Authorization": { "equalTo": "Bearer skusync-local-mock-key" }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": { "items": [] }
+  }
+}

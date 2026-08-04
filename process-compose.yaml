@@ -8,13 +8,12 @@
 # its default config names, and with both files in the repo root it would otherwise load the Docker
 # Compose file and start an empty project.
 #
-# PostgreSQL and RabbitMQ are NOT started here — bring them up with `docker compose up -d`
-# (compose.yaml: Postgres on localhost:5434, RabbitMQ on localhost:5674). The dev connection
-# strings in appsettings.Development.json already point at them. Each host's Shopify / SkuLabs / AWS configuration still
-# comes from its .NET user secrets, which `dotnet run` loads automatically in the Development
-# environment. AppServer owns background processing (RabbitMQ event consumers, Shopify webhook
-# handlers, the SQS poller, and Quartz jobs) — the SKU/barcode write-back after a product sync
-# happens here.
+# PostgreSQL is NOT started here — bring it up with `docker compose up -d`
+# (compose.yaml: Postgres on localhost:5434). The dev connection string in
+# appsettings.Development.json already points at it. Each host's Shopify / SkuLabs / AWS
+# configuration still comes from its .NET user secrets, which `dotnet run` loads automatically in
+# the Development environment. AppServer owns background processing (Shopify webhook handlers,
+# the SQS poller, and the Hangfire recurring jobs) — the reconcile/dispatch pipeline runs here.
 version: "0.5"
 
 processes:
@@ -41,16 +40,16 @@ processes:
       max_restarts: 5
 
   app-server:
-    description: "AppServer background worker (RabbitMQ consumers, Shopify webhooks, SQS, Quartz)"
+    description: "AppServer background worker (Shopify webhooks, SQS, Hangfire jobs)"
     working_dir: dotnet
     # AppServer hosts a minimal HTTP surface for health only. Its launch profile sets
     # DOTNET_ENVIRONMENT=Development — which WebApplicationBuilder still honours — so `dotnet run`
-    # loads appsettings.Development.json (Postgres + RabbitMq connection strings) and binds the
+    # loads appsettings.Development.json (the Postgres connection string) and binds the
     # health endpoints on http://localhost:5258; Shopify / SkuLabs / AWS values come from its .NET
     # user secrets.
     command: dotnet run --project src/AppServer
     readiness_probe:
-      # /_health/ready runs the Postgres + RabbitMQ checks, so "ready" means the worker can reach
+      # /_health/ready runs the Postgres check, so "ready" means the worker can reach
       # its dependencies.
       http_get:
         host: 127.0.0.1

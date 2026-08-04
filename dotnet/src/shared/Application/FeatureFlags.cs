@@ -7,14 +7,33 @@ namespace Application;
 public static class FeatureFlags
 {
     /// <summary>
-    /// When disabled, all writes back to Shopify (variant SKU/barcode sync) are skipped.
+    /// Kill switch for every Shopify write — automatic and manual alike. Checked only inside
+    /// <c>ShopifyDispatcher</c>'s push path; when disabled, dirty variants stay pending and
+    /// nothing reaches Shopify.
     /// </summary>
     public const string ShopifyWriteBack = "ShopifyWriteBack";
 
     /// <summary>
-    /// When disabled, all writes back to SkuLabs (variant title push) are skipped.
+    /// Kill switch for every SkuLabs write — automatic and manual alike. Checked only inside
+    /// <c>SkulabsDispatcher</c>'s push path; when disabled, dirty items stay pending and
+    /// nothing reaches SkuLabs.
     /// </summary>
     public const string SkulabsWriteBack = "SkulabsWriteBack";
+
+    /// <summary>
+    /// When disabled, the <em>automatic</em> Shopify dispatch triggers — the scheduled
+    /// <c>shopify-dispatch</c> job and the immediate post-commit dispatch after SKU generation —
+    /// no-op. Dirty variants accumulate as pending (visible in the Item Sync grid) until a manual
+    /// sync pushes them or the flag is re-enabled. Defaults to enabled.
+    /// </summary>
+    public const string ShopifyAutoDispatch = "ShopifyAutoDispatch";
+
+    /// <summary>
+    /// When disabled, the <em>automatic</em> SkuLabs dispatch trigger — the scheduled
+    /// <c>skulabs-dispatch</c> job — no-ops. Dirty items accumulate as pending until a manual
+    /// sync pushes them or the flag is re-enabled. Defaults to enabled.
+    /// </summary>
+    public const string SkulabsAutoDispatch = "SkulabsAutoDispatch";
 
     /// <summary>
     /// When disabled, Shopify product webhook handlers (products/create, products/update)

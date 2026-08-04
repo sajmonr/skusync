@@ -231,6 +231,11 @@ namespace Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<int>("FailedSkulabsSyncAttempts")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
                     b.Property<bool>("PendingSkulabsSync")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")

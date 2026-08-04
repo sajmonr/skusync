@@ -1,25 +1,25 @@
-using Application.Products.Events;
 using Application.Products.Services;
 using Application.Skus;
+using Application.Sync;
 using Infrastructure.Database;
 using Infrastructure.Database.Entities;
 using Integration.Aws.Sqs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.FeatureManagement;
-using SlimMessageBus;
 
 namespace Application.Products.Webhook;
 
 /// <summary>
-/// Handles the <c>products/create</c> Shopify webhook topic. When a new product is created
-/// in Shopify, this handler persists each of its variants to the local database and then
-/// writes the generated SKU and barcode back to Shopify.
+/// Handles the <c>products/create</c> Shopify webhook topic. When a new product is created in
+/// Shopify, this handler persists each of its variants to the local database with a generated
+/// SKU, marks them pending a Shopify push, and triggers an immediate dispatch so the SKU reaches
+/// Shopify within seconds.
 /// </summary>
 public class ShopifyProductCreateWebhookHandler(
     ApplicationDbContext dbContext,
     ILogger<ShopifyProductUpdateWebhookHandler> logger,
-    IMessageBus messageBus,
+    IShopifyDispatchTrigger dispatchTrigger,
     IFeatureManager featureManager,
     ISkuGenerator skuGenerator)
     : ShopifyWebhookBase, IShopifyWebhookHandler
@@ -80,6 +80,8 @@ public class ShopifyProductCreateWebhookHandler(
                 generatedSku, variant.Id, product.Id);
 
             var newEntity = ConstructEntity(product, variant, generatedSku);
+            // The generated SKU is a divergence we originated — Shopify doesn't have it yet.
+            newEntity.PendingShopifySync = true;
 
             newEntity.LogEvents.Add(new ShopifyProductVariantLogEventEntity
             {
@@ -101,10 +103,11 @@ public class ShopifyProductCreateWebhookHandler(
         await dbContext.ShopifyProductVariants.AddRangeAsync(entities);
         var droppedInserts = await dbContext.SaveChangesToleratingVariantConflicts(logger);
 
-        // Enqueue only after a successful save so no phantom events enter the queue, and skip any
-        // variant a concurrent writer had already committed — re-inserting it was redundant.
-        await messageBus.PublishBatch(entities
+        // Dispatch only after a successful save, and skip any variant a concurrent writer had
+        // already committed — the writer that won the race dispatches its own row.
+        await dispatchTrigger.TryDispatch(entities
             .Where(e => !droppedInserts.Contains(e))
-            .Select(e => new ProductVariantCreatedEvent(e.ShopifyProductVariantId)));
+            .Select(e => e.ShopifyProductVariantId)
+            .ToArray());
     }
 }

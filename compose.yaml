@@ -1,9 +1,9 @@
 # compose.yaml — lightweight development dependencies.
 #
-# Runs only the backing services the app needs while you develop it locally: PostgreSQL
-# and RabbitMQ. The application itself (web-api, app-server, dashboard) is NOT started
-# here — you run those on the host with `dotnet run` / process-compose, pointing them at
-# the containers below.
+# Runs the backing services the app needs while you develop it locally: PostgreSQL and a
+# WireMock stand-in for the SkuLabs API. The application itself (web-api, app-server,
+# dashboard) is NOT started here — you run those on the host with `dotnet run` /
+# process-compose, pointing them at the containers below.
 #
 #   docker compose up -d                 # start the dev dependencies in the background
 #   docker compose down                  # stop; add -v to also drop the data volumes
@@ -18,10 +18,9 @@
 #   docker compose -f compose.e2e.yaml up --build
 #
 # Host ports are deliberately non-standard so they never clash with a locally installed
-# Postgres/RabbitMQ, and so this stack and compose.e2e.yaml can be up at the same time:
+# Postgres, and so this stack and compose.e2e.yaml can be up at the same time:
 #   - 5434  → PostgreSQL   (e2e uses 5433; a system Postgres would use 5432)
-#   - 5674  → RabbitMQ AMQP (standard is 5672)
-#   - 15674 → RabbitMQ management UI at http://localhost:15674 (standard is 15672)
+#   - 5675  → SkuLabs mock (WireMock): API + admin + web UI on one port
 
 name: skusync-dev
 
@@ -49,25 +48,21 @@ services:
       retries: 20
     restart: unless-stopped
 
-  rabbitmq:
-    # -management image bundles the web management UI on 15672.
-    image: rabbitmq:4-management-alpine
-    environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
-    ports:
-      # Non-standard host ports so they never clash with a locally installed RabbitMQ.
-      - "5674:5672"    # AMQP
-      - "15674:15672"  # management UI
+  skulabs-mock:
+    # WireMock with an integrated web UI (a community fork of the official WireMock image).
+    # Stands in for the SkuLabs Items API locally. Committed stubs in ./mocks/skulabs are
+    # mounted read-only and loaded on startup, so they are the immutable baseline; edits made
+    # live via the web UI or admin API stay in memory and are discarded on restart. See
+    # mocks/skulabs/README.md.
+    image: holomekc/wiremock-gui:latest
+    command: ["--verbose", "--disable-banner"]
     volumes:
-      - rabbitmq-data:/var/lib/rabbitmq
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
+      - ./mocks/skulabs/mappings:/home/wiremock/mappings:ro
+      - ./mocks/skulabs/__files:/home/wiremock/__files:ro
+    ports:
+      # API, admin, and the web UI (/__admin/webapp) are all served on this one port.
+      - "5675:8080"
     restart: unless-stopped
 
 volumes:
   postgres-data:
-  rabbitmq-data:

@@ -24,10 +24,10 @@ builder.Services.AddCors(options => options.AddPolicy("dashboard", policy => pol
 // Add Serilog
 builder.Host.UseSerilog((context, loggerConfig) => loggerConfig.ReadFrom.Configuration(context.Configuration));
 
-// Web.Api serves HTTP and can *produce* application events, but owns no background processing:
-// SQS webhook consumption, Shopify webhook handlers, RabbitMQ event *consumers*, and scheduled
-// jobs all belong to AppServer. AddApplication registers the event producers (and requires the
-// RabbitMq connection string); event consumption (AddEventProcessing) is deliberately not called.
+// Web.Api serves HTTP only — SQS webhook consumption, Shopify webhook handlers, and the Hangfire
+// recurring jobs all belong to AppServer. Web.Api enqueues background work (the manual full sync)
+// through the Hangfire client on shared Postgres storage and calls the sync services directly for
+// synchronous work (the per-item manual sync).
 builder.AddInfrastructure()
     .AddApplication()
     .AddPresentation();
