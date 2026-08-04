@@ -35,8 +35,10 @@ export class ItemSyncTable {
   readonly totalCount = input.required<number>();
   readonly loading = input.required<boolean>();
   readonly error = input.required<string | null>();
+  readonly syncingIds = input<ReadonlySet<string>>(new Set<string>());
   readonly queryChange = output<ItemSyncQuery>();
   readonly retryRequest = output<void>();
+  readonly syncRequested = output<ItemSyncListItem>();
   protected readonly filterModel = signal<{ search: string; status: ItemSyncStatusFilter }>({
     search: '',
     status: 'all',
@@ -87,6 +89,10 @@ export class ItemSyncTable {
 
   protected isExpanded(itemId: string): boolean {
     return this.expandedItemId() === itemId;
+  }
+
+  protected isSyncing(itemId: string): boolean {
+    return this.syncingIds().has(itemId);
   }
 
   private requestPage(

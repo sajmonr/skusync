@@ -59,6 +59,7 @@
         <th>Shopify ID</th>
         <th>Skulabs ID</th>
         <th>Status</th>
+        <th class="actions-column"><span class="sr-only">Actions</span></th>
       </tr>
     </ng-template>
 
@@ -111,11 +112,21 @@
         <td>
           <span class="status-badge" [class]="item.status">{{ statusLabel(item.status) }}</span>
         </td>
+        <td class="actions-column" (click)="$event.stopPropagation()">
+          <p-button
+            label="Sync"
+            size="small"
+            severity="secondary"
+            [loading]="isSyncing(item.id)"
+            [disabled]="isSyncing(item.id)"
+            (onClick)="syncRequested.emit(item)"
+          />
+        </td>
       </tr>
 
       @if (isExpanded(item.id)) {
         <tr class="detail-row">
-          <td colspan="5">
+          <td colspan="6">
             <section class="comparison" [attr.aria-label]="item.displayName + ' comparison'">
               <div class="comparison-heading">
                 <div>Property</div>
@@ -137,7 +148,7 @@
 
     <ng-template #emptymessage>
       <tr>
-        <td colspan="5">
+        <td colspan="6">
           <div class="empty-message">
             <strong>No matching items</strong>
             <span>Try adjusting the search or status filter.</span>

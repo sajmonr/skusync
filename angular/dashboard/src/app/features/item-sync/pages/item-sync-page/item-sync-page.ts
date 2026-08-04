@@ -8,6 +8,7 @@ import { ToastModule } from 'primeng/toast';
 import { ItemSyncTable } from '../../components/item-sync-table/item-sync-table';
 import { ItemSyncQuery, ItemSyncStore } from '../../data-access/item-sync-store';
 import { ProductSyncService } from '../../data-access/product-sync.service';
+import { ItemSyncListItem } from '../../models/item-sync-list-item';
 
 @Component({
   selector: 'app-item-sync-page',
@@ -22,6 +23,7 @@ export class ItemSyncPage {
   private readonly destroyRef = inject(DestroyRef);
 
   protected readonly syncing = signal(false);
+  protected readonly syncingIds = signal<ReadonlySet<string>>(new Set<string>());
 
   protected load(query: ItemSyncQuery): void {
     this.store.load(query);
@@ -29,6 +31,61 @@ export class ItemSyncPage {
 
   protected retry(): void {
     this.store.retry();
+  }
+
+  protected syncItem(item: ItemSyncListItem): void {
+    if (this.syncingIds().has(item.id)) {
+      return;
+    }
+
+    this.setSyncing(item.id, true);
+    this.productSync
+      .syncItem(item.id)
+      .pipe(
+        takeUntilDestroyed(this.destroyRef),
+        finalize(() => this.setSyncing(item.id, false)),
+      )
+      .subscribe({
+        next: (result) => {
+          this.store.retry();
+          const failed = result.shopifyFailed + result.skulabsFailed > 0;
+          this.messages.add(
+            failed
+              ? {
+                  severity: 'warn',
+                  summary: 'Sync incomplete',
+                  detail: `${item.displayName} could not be fully pushed. It stays pending.`,
+                }
+              : {
+                  severity: 'success',
+                  summary: 'Item synced',
+                  detail: `${item.displayName} was synced.`,
+                },
+          );
+        },
+        error: (error: unknown) => {
+          const rateLimited = error instanceof HttpErrorResponse && error.status === 429;
+          this.messages.add({
+            severity: 'error',
+            summary: 'Sync failed',
+            detail: rateLimited
+              ? 'Syncing too quickly — please wait a moment before trying again.'
+              : `${item.displayName} could not be synced.`,
+          });
+        },
+      });
+  }
+
+  private setSyncing(id: string, syncing: boolean): void {
+    this.syncingIds.update((ids) => {
+      const next = new Set(ids);
+      if (syncing) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
+      return next;
+    });
   }
 
   protected syncNow(): void {
