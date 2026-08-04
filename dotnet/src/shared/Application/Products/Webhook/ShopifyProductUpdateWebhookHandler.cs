@@ -1,6 +1,6 @@
-using Application.Products.Events;
 using Application.Products.Services;
 using Application.Skus;
+using Application.Sync;
 using Infrastructure.Database;
 using Infrastructure.Database.Entities;
 using Integration.Aws.Sqs;
@@ -8,20 +8,21 @@ using Integration.Shopify.Products;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.FeatureManagement;
-using SlimMessageBus;
 
 namespace Application.Products.Webhook;
 
 /// <summary>
-/// Handles the <c>products/update</c> Shopify webhook topic. Reconciles incoming variant
-/// data with the local database — creating new variant records for any variants not yet
-/// tracked and updating titles for existing ones — then pushes any SKU or barcode
-/// discrepancies back to Shopify.
+/// Handles the <c>products/update</c> Shopify webhook topic. Absorbs incoming variant data into
+/// the local database — creating new variant records (with generated SKUs marked pending) for any
+/// variants not yet tracked, updating titles for existing ones, and re-marking variants pending
+/// when Shopify's SKU/barcode has drifted from our authoritative values — then reconciles the
+/// touched pairs and triggers an immediate dispatch of whatever became pending.
 /// </summary>
 public class ShopifyProductUpdateWebhookHandler(
     ApplicationDbContext dbContext,
     ILogger<ShopifyProductUpdateWebhookHandler> logger,
-    IMessageBus messageBus,
+    IReconciler reconciler,
+    IShopifyDispatchTrigger dispatchTrigger,
     IFeatureManager featureManager,
     ISkuGenerator skuGenerator)
     : ShopifyWebhookBase, IShopifyWebhookHandler
@@ -80,6 +81,8 @@ public class ShopifyProductUpdateWebhookHandler(
                     generatedSku, variant.Id, product.Id);
 
                 var newEntity = ConstructEntity(product, variant, generatedSku);
+                // The generated SKU is a divergence we originated — Shopify doesn't have it yet.
+                newEntity.PendingShopifySync = true;
 
                 newEntity.LogEvents.Add(new ShopifyProductVariantLogEventEntity
                 {
@@ -115,6 +118,13 @@ public class ShopifyProductUpdateWebhookHandler(
                 var didChange = UpdateEntity(entity, product, variant);
                 var didBarcodeOrSkuChange = DidBarcodeOrSkuChange(entity, variant);
 
+                if (didBarcodeOrSkuChange)
+                {
+                    // Shopify's SKU/barcode has drifted from our authoritative values — the
+                    // variant needs a re-push to bring Shopify back in line.
+                    entity.PendingShopifySync = true;
+                }
+
                 if (!didChange && !didBarcodeOrSkuChange)
                 {
                     continue;
@@ -128,13 +138,18 @@ public class ShopifyProductUpdateWebhookHandler(
 
         var droppedInserts = await dbContext.SaveChangesToleratingVariantConflicts(logger);
 
-        // Enqueue only after a successful save so no phantom events enter the queue, and skip any
-        // newly-seen variant a concurrent writer had already committed under us.
-        await messageBus.PublishBatch(
-            updatedEntities.Select(e => new ProductVariantUpdatedEvent(e.ShopifyProductVariantId)));
-        await messageBus.PublishBatch(createdEntities
-            .Where(e => !droppedInserts.Contains(e))
-            .Select(e => new ProductVariantCreatedEvent(e.ShopifyProductVariantId)));
+        // Reconcile and dispatch only after a successful save, skipping any newly-seen variant a
+        // concurrent writer had already committed under us — the writer that won the race handles
+        // its own row. Reconcile runs first so a title change is mirrored to the linked SkuLabs
+        // item (marked pending for the SkuLabs dispatch cadence); the immediate dispatch then
+        // pushes whatever became pending toward Shopify within seconds.
+        var touchedVariantIds = updatedEntities
+            .Concat(createdEntities.Where(e => !droppedInserts.Contains(e)))
+            .Select(e => e.ShopifyProductVariantId)
+            .ToArray();
+
+        await reconciler.ReconcileVariants(touchedVariantIds);
+        await dispatchTrigger.TryDispatch(touchedVariantIds);
     }
 
     /// <summary>

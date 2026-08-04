@@ -1,20 +1,27 @@
 using Application.Products.Services;
+using Application.Sync;
 using Hangfire;
 using Microsoft.Extensions.Logging;
 
 namespace Application.Jobs;
 
 /// <summary>
-/// Runs a full, best-effort reconciliation as a single background job — the work behind the
-/// dashboard "Sync now" button. Steps run sequentially in dependency order: the Shopify product
-/// import must land before the SkuLabs passes, which read the freshly imported variants. Each step
-/// self-gates on its own feature flag (inside the service it calls), so a disabled area is simply a
-/// no-op. A failing step is logged and the run continues; if any step failed the job still finishes
-/// faulted so the operator sees it.
+/// Runs a full, best-effort pass over the whole pipeline as a single background job — the work
+/// behind the dashboard "Sync now" button. Steps run sequentially in dependency order: the imports
+/// must land before the reconcile, which feeds the dispatchers. A failing step is logged and the
+/// run continues; if any step failed the job still finishes faulted so the operator sees it.
 /// </summary>
+/// <remarks>
+/// "Sync now" is a manual trigger, so the dispatch steps call the dispatchers directly — bypassing
+/// the <c>ShopifyAutoDispatch</c>/<c>SkulabsAutoDispatch</c> gates the scheduled runs honour. The
+/// dispatchers' own <c>*WriteBack</c> kill switches still apply.
+/// </remarks>
 public class FullSyncOrchestrator(
     IProductsService productsService,
     RecurringJobs recurringJobs,
+    IReconciler reconciler,
+    IShopifyDispatcher shopifyDispatcher,
+    ISkulabsDispatcher skulabsDispatcher,
     ILogger<FullSyncOrchestrator> logger)
 {
     // A full sync over a large catalogue can run for many minutes; the distributed lock must outlive
@@ -28,8 +35,9 @@ public class FullSyncOrchestrator(
 
         await RunStep("Shopify product sync", () => productsService.SyncProducts(cancellationToken), failedSteps);
         await RunStep("SkuLabs item sync", () => recurringJobs.SyncSkulabsItems(cancellationToken), failedSteps);
-        await RunStep("SKU/barcode sync", () => recurringJobs.SyncSkuAndBarcodes(cancellationToken), failedSteps);
-        await RunStep("SkuLabs title sync", () => recurringJobs.SyncSkulabsTitles(cancellationToken), failedSteps);
+        await RunStep("Reconcile", () => reconciler.ReconcileAll(cancellationToken), failedSteps);
+        await RunStep("Shopify dispatch", () => shopifyDispatcher.DispatchAll(cancellationToken), failedSteps);
+        await RunStep("SkuLabs dispatch", () => skulabsDispatcher.DispatchAll(cancellationToken), failedSteps);
 
         if (failedSteps.Count > 0)
         {
