@@ -4,7 +4,7 @@
   "loading": "Recherche de cette variante dans SkuLabs…",
   "openInSkulabs": "Ouvrir cet article dans SkuLabs",
   "itemId": "Article SkuLabs {{id}}",
-  "notLinked": "Cette variante n'est pas encore liée à un article SkuLabs.",
+  "notFound": "Aucune information à afficher pour cette variante.",
   "failure": {
     "unauthenticated": {
       "heading": "Session non vérifiée",

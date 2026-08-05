@@ -13,7 +13,7 @@ network_access = true
 
 # Only 1 target can be specified for each Admin block extension
 [[extensions.targeting]]
-module = "./src/BlockExtension.jsx"
+module = "./src/BlockExtension.tsx"
 target = "admin.product-variant-details.block.render"
 
 

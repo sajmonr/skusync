@@ -5,9 +5,17 @@
 //
 // The fallback keeps `shopify app dev` working with no `.env` at all, against the Web.Api `https`
 // launch profile. A deployed build MUST set SKUSYNC_API_URL; see this extension's README.
+
+// Declared here rather than pulled in from @types/node: nothing in this extension runs on Node, and
+// this is the only Node global the build substitutes. The declaration is erased at compile time, so
+// it does not promise `process` exists at runtime — readConfiguredApiUrl handles it not existing.
+declare const process: { env: Record<string, string | undefined> };
+
 const DEVELOPMENT_API_BASE_URL = "https://localhost:7257";
 
-export const API_BASE_URL = trimTrailingSlash(readConfiguredApiUrl() || DEVELOPMENT_API_BASE_URL);
+export const API_BASE_URL: string = trimTrailingSlash(
+  readConfiguredApiUrl() || DEVELOPMENT_API_BASE_URL,
+);
 
 /**
  * When SKUSYNC_API_URL is set at build time esbuild inlines it here as a string literal. When it
@@ -15,7 +23,7 @@ export const API_BASE_URL = trimTrailingSlash(readConfiguredApiUrl() || DEVELOPM
  * exist in the extension sandbox, so reading it throws. Catching that is what turns a missing
  * variable into the development fallback instead of an extension that fails to load at all.
  */
-function readConfiguredApiUrl() {
+function readConfiguredApiUrl(): string | undefined {
   try {
     return process.env.SKUSYNC_API_URL;
   } catch {
@@ -23,6 +31,7 @@ function readConfiguredApiUrl() {
   }
 }
 
-function trimTrailingSlash(url) {
+function trimTrailingSlash(url: string): string {
   return url.endsWith("/") ? url.slice(0, -1) : url;
 }
+

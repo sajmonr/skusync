@@ -22,8 +22,9 @@ public class GetVariantInformationEndpoint(
         {
             summary.Summary = "Get SkuLabs information for a Shopify variant";
             summary.Description =
-                "Returns the SkuLabs admin URL for the variant's linked SkuLabs item. Responds with "
-                + "404 when the variant is unknown to SkuSync or has no linked SkuLabs item.";
+                "Returns the SkuLabs admin URL for the variant. Responds with 404 when there is no "
+                + "SkuLabs information to return, without distinguishing between the possible "
+                + "reasons — callers get no signal about the variant's internal sync state.";
         });
     }
 
@@ -38,8 +39,8 @@ public class GetVariantInformationEndpoint(
 
         if (string.IsNullOrWhiteSpace(skulabsItemId))
         {
-            logger.LogInformation(
-                "No linked SkuLabs item for Shopify variant {VariantId}.",
+            logger.LogDebug(
+                "No SkuLabs information to return for Shopify variant {VariantId}.",
                 variantId);
 
             await Send.NotFoundAsync(cancellationToken);

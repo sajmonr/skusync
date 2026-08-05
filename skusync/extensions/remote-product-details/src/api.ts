@@ -7,23 +7,52 @@ import { API_BASE_URL } from "./config";
 export const FailureReason = {
   /** No session token, or the API rejected the one we sent. */
   Unauthenticated: "unauthenticated",
-  /** The API has no SkuLabs item linked to this variant yet. */
-  NotLinked: "not-linked",
+  /** The API has nothing to show for this variant. Deliberately says no more than that. */
+  NotFound: "not-found",
   /** The API could not be reached at all — usually a wrong base URL or an untrusted certificate. */
   Unreachable: "unreachable",
   /** Anything else, including 5xx. */
   Unexpected: "unexpected",
-};
+} as const;
+
+export type FailureReason = (typeof FailureReason)[keyof typeof FailureReason];
+
+/** The successful response body of `GET /shopify/variant-information`. */
+export interface VariantInformation {
+  variantId: number;
+  skulabsItemId: string;
+  skulabsUrl: string;
+}
+
+export interface VariantInformationSuccess {
+  ok: true;
+  data: VariantInformation;
+}
+
+export interface VariantInformationFailure {
+  ok: false;
+  reason: FailureReason;
+  /** Extra context for the merchant-facing message, such as the URL that didn't respond. */
+  detail?: string;
+}
+
+/**
+ * Discriminated on `ok`, so narrowing gives access to `data` or to `reason` but never both — the
+ * compiler rejects rendering a success body for a failed lookup.
+ */
+export type VariantInformationResult = VariantInformationSuccess | VariantInformationFailure;
 
 /**
  * Looks up the SkuLabs information for a Shopify product variant.
  *
- * @param {string} variantGid The variant's Admin GraphQL global ID.
- * @param {AbortSignal} [signal] Aborts the request when the merchant navigates away.
- * @returns {Promise<{ok: true, data: {variantId: number, skulabsItemId: string, skulabsUrl: string}}
- *   | {ok: false, reason: string, detail?: string}>}
+ * @param variantGid The variant's Admin GraphQL global ID.
+ * @param signal Aborts the request when the merchant navigates away.
+ * @throws When the request is aborted, so callers can ignore a stale lookup.
  */
-export async function fetchVariantInformation(variantGid, signal) {
+export async function fetchVariantInformation(
+  variantGid: string,
+  signal?: AbortSignal,
+): Promise<VariantInformationResult> {
   const token = await shopify.auth.idToken();
 
   if (!token) {
@@ -31,7 +60,7 @@ export async function fetchVariantInformation(variantGid, signal) {
   }
 
   const url = `${API_BASE_URL}/shopify/variant-information?variantId=${encodeURIComponent(variantGid)}`;
-  let response;
+  let response: Response;
 
   try {
     response = await fetch(url, {
@@ -41,7 +70,7 @@ export async function fetchVariantInformation(variantGid, signal) {
     });
   } catch (error) {
     // fetch only rejects for transport-level problems: DNS, TLS, CORS, or an abort.
-    if (error?.name === "AbortError") {
+    if (error instanceof Error && error.name === "AbortError") {
       throw error;
     }
 
@@ -49,11 +78,11 @@ export async function fetchVariantInformation(variantGid, signal) {
   }
 
   if (response.ok) {
-    return { ok: true, data: await response.json() };
+    return { ok: true, data: (await response.json()) as VariantInformation };
   }
 
   if (response.status === 404) {
-    return { ok: false, reason: FailureReason.NotLinked };
+    return { ok: false, reason: FailureReason.NotFound };
   }
 
   if (response.status === 401 || response.status === 403) {

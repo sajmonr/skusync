@@ -4,7 +4,7 @@
   "loading": "Looking up this variant in SkuLabs…",
   "openInSkulabs": "Open this item in SkuLabs",
   "itemId": "SkuLabs item {{id}}",
-  "notLinked": "This variant isn't linked to a SkuLabs item yet.",
+  "notFound": "No information to display for this variant.",
   "failure": {
     "unauthenticated": {
       "heading": "Couldn't verify this session",
