@@ -45,8 +45,10 @@ src/
   hooks/
     useVariantInformation.ts   the lookup, and the LookupState union it returns
   api.ts                       the fetch call and its typed result union
-  config.ts                    API base URL resolution
 ```
+
+The API base URL is not resolved here — it lives in `skusync/shared/config/api.ts` so other
+Shopify-side projects resolve it identically.
 
 Child components read `i18n` (and `extension.target`) off the `shopify` global directly rather than
 taking them as props.
@@ -68,27 +70,41 @@ Three pieces have to line up or the request never completes:
 
 ## Configuring the API base URL
 
-The URL is resolved at **build** time, not runtime. The Shopify CLI substitutes
-`process.env.SKUSYNC_API_URL` into the bundle via esbuild's `define`, and Shopify's CDN serves that
-bundle verbatim — there is no runtime configuration on Shopify's side. Whatever is baked in when
-`shopify app deploy` runs is what every merchant's browser calls until the next deploy. Only named
-members are substituted; reading `process.env` as an object does not work.
+URL construction lives in **`skusync/shared/config/api.ts`**, not in this extension, so other
+Shopify-side projects resolve it the same way. It maps an environment to an origin:
 
-**Development needs no configuration.** `src/config.ts` defaults to the fixed ngrok hostname that
-`pnpm dev` opens a tunnel on. That constant and `ngrok.yml` must agree — they are the same value in
-two places.
+| `NODE_ENV` | API base URL |
+| --- | --- |
+| `development` | `https://shopify-skusync.ngrok.app` (the fixed tunnel; must match `ngrok.yml`) |
+| `production` | `https://skusync.darkflux.app` |
 
-**Production overrides it at deploy time:**
+It is resolved at **build** time, not runtime: the Shopify CLI substitutes `process.env.NODE_ENV` into
+the bundle via esbuild's `define`, and Shopify's CDN serves that bundle verbatim — there is no runtime
+configuration on Shopify's side. Whatever environment is set when the build runs is baked in until the
+next deploy. Only named members are substituted; reading `process.env` as an object does not work.
+
+**Every package script sets `NODE_ENV` explicitly**, and that is deliberate:
 
 ```sh
-SKUSYNC_API_URL=https://api.example.com shopify app deploy
+pnpm dev                # NODE_ENV=development -> tunnel URL
+pnpm build              # NODE_ENV=development -> tunnel URL
+pnpm build:production    # NODE_ENV=production  -> skusync.darkflux.app
+pnpm deploy             # NODE_ENV=production  -> skusync.darkflux.app
 ```
 
-Forgetting that ships the *development tunnel URL* to production, because the fallback can't know
-which target it is building for. Verify what a build actually baked in:
+The reason nothing relies on the default: **the CLI sets `NODE_ENV=production` itself when the variable
+is unset.** So bypassing these scripts (a bare `shopify app build`) produces a *production* bundle,
+not a development one. That is the safer of the two failure modes — an unlabelled build points at
+production rather than at someone's dev tunnel — but it is the opposite of what an unset variable
+normally implies, so it is worth knowing. Note also that the match is exact: `NODE_ENV=Production`
+resolves to development, which is why the scripts hardcode the value rather than leaving it to a
+typo-prone shell.
+
+Verify what a build actually baked in:
 
 ```sh
-grep -o 'return"https://[^"]*"' extensions/remote-product-details/dist/remote-product-details.js
+grep -o 'function [A-Za-z]*(){try{return"[^"]*"' \
+  extensions/remote-product-details/dist/remote-product-details.js
 ```
 
 ## Running it locally
@@ -117,10 +133,14 @@ Two things to know:
   fails with `ERR_NGROK_4018`, "not authenticated", which reads misleadingly like a bad token. The
   script hardcodes the macOS config path — set `NGROK_CONFIG` to override it elsewhere.
 
-`pnpm tunnel` runs the tunnel alone. `pnpm dev:no-tunnel` skips it, for when you're supplying
-`SKUSYNC_API_URL` yourself — pointing at a deployed API, say, or at the Web.Api `https` launch profile
-(`https://localhost:7257`, after `dotnet dev-certs https --trust`), though the sandbox may reject that
-self-signed certificate.
+`pnpm tunnel` runs the tunnel alone. `pnpm dev:no-tunnel` skips it — useful when the tunnel is already
+running in another terminal, though note the extension still builds against the tunnel hostname, so
+something has to be serving it.
+
+There is no longer an HTTPS launch profile on Web.Api. It existed to work around the mixed-content
+block before the tunnel did, and its self-signed certificate was the weaker option anyway — the
+sandbox may reject it, where ngrok's certificate is publicly trusted. Web.Api serves plain HTTP on
+:5257 and the tunnel terminates TLS in front of it.
 
 The API needs the app's credentials to verify session tokens. They are secrets, so they go in user
 secrets rather than `appsettings.Development.json`:

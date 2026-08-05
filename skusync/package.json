@@ -7,13 +7,14 @@
   ],
   "scripts": {
     "shopify": "shopify",
-    "build": "shopify app build",
-    "dev": "concurrently --kill-others --names ngrok,shopify --prefix-colors cyan,magenta \"pnpm tunnel\" \"shopify app dev\"",
-    "dev:no-tunnel": "shopify app dev",
+    "build": "NODE_ENV=development shopify app build",
+    "build:production": "NODE_ENV=production shopify app build",
+    "dev": "concurrently --kill-others --names ngrok,shopify --prefix-colors cyan,magenta \"pnpm tunnel\" \"NODE_ENV=development shopify app dev\"",
+    "dev:no-tunnel": "NODE_ENV=development shopify app dev",
     "tunnel": "ngrok start --config \"${NGROK_CONFIG:-$HOME/Library/Application Support/ngrok/ngrok.yml}\" --config ../ngrok.yml skusync-api",
     "info": "shopify app info",
     "generate": "shopify app generate",
-    "deploy": "shopify app deploy",
+    "deploy": "NODE_ENV=production shopify app deploy",
     "typecheck": "pnpm --recursive --if-present run typecheck"
   },
   "dependencies": {},

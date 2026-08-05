@@ -19,9 +19,8 @@ version: "3"
 
 endpoints:
   - name: skusync-api
-    # A fixed hostname so the URL never changes: the extension hardcodes the same value as its
-    # development default (see extensions/remote-product-details/src/config.ts), and nothing has to
-    # discover the URL at runtime.
+    # A fixed hostname so the URL never changes: the same value is the development entry in
+    # skusync/shared/config/api.ts, and nothing has to discover the URL at runtime.
     #
     # Custom subdomains are a PAID ngrok feature. On a free authtoken this is rejected and the agent
     # falls back to complaining rather than assigning a random URL — if that happens, check that

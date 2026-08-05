@@ -12,6 +12,7 @@
     "strict": true
   },
   // Without an explicit include, tsc also walks dist/ and reports thousands of errors from the
-  // minified Preact bundle the Shopify CLI writes there.
-  "include": ["src/**/*", "*.d.ts"]
+  // minified Preact bundle the Shopify CLI writes there. ../../shared holds the cross-project URL
+  // construction this extension imports.
+  "include": ["src/**/*", "*.d.ts", "../../shared/**/*"]
 }

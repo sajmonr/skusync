@@ -1,4 +1,4 @@
-import { API_BASE_URL } from "./config";
+import { API_BASE_URL, apiUrl } from "../../../shared/config/api";
 
 /**
  * Why a request failed. The component maps each of these to its own message, so a variant that
@@ -59,7 +59,7 @@ export async function fetchVariantInformation(
     return { ok: false, reason: FailureReason.Unauthenticated };
   }
 
-  const url = `${API_BASE_URL}/shopify/variant-information?variantId=${encodeURIComponent(variantGid)}`;
+  const url = apiUrl(`shopify/variant-information?variantId=${encodeURIComponent(variantGid)}`);
   let response: Response;
 
   try {
