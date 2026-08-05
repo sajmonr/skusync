@@ -41,7 +41,7 @@ src/
   components/
     Loading.tsx                spinner shown while the lookup is in flight
     SkulabsLink.tsx            the link + item ID, on success
-    Failure.tsx                not-linked text, or a warning/critical banner
+    Failure.tsx                nothing-found text, or a warning/critical banner
   hooks/
     useVariantInformation.ts   the lookup, and the LookupState union it returns
   api.ts                       the fetch call and its typed result union
@@ -68,42 +68,59 @@ Three pieces have to line up or the request never completes:
 
 ## Configuring the API base URL
 
-`src/config.ts` reads `process.env.SKUSYNC_API_URL`, which the Shopify CLI substitutes at build time
-from the `.env` file matching the active app config — `.env` for `shopify.app.toml`, `.env.<name>`
-for `shopify app deploy -c <name>`. Only named members are substituted; reading `process.env` as an
-object does not work.
+The URL is resolved at **build** time, not runtime. The Shopify CLI substitutes
+`process.env.SKUSYNC_API_URL` into the bundle via esbuild's `define`, and Shopify's CDN serves that
+bundle verbatim — there is no runtime configuration on Shopify's side. Whatever is baked in when
+`shopify app deploy` runs is what every merchant's browser calls until the next deploy. Only named
+members are substituted; reading `process.env` as an object does not work.
 
-When the variable is unset the reference survives into the bundle, and `process` doesn't exist in the
-extension sandbox — so `config.ts` reads it inside a `try`/`catch` and falls back to
-`https://localhost:7257` for local development. **A deployed build must set `SKUSYNC_API_URL`**, or
-it will silently ship pointing at localhost. `.env*` is gitignored, so these files are created per
-machine and per deploy environment:
+**Development needs no configuration.** `src/config.ts` defaults to the fixed ngrok hostname that
+`pnpm dev` opens a tunnel on. That constant and `ngrok.yml` must agree — they are the same value in
+two places.
+
+**Production overrides it at deploy time:**
 
 ```sh
-# .env — used by `shopify app dev`
-SKUSYNC_API_URL=https://localhost:7257
+SKUSYNC_API_URL=https://api.example.com shopify app deploy
 ```
 
-Verify what a build actually baked in:
+Forgetting that ships the *development tunnel URL* to production, because the fallback can't know
+which target it is building for. Verify what a build actually baked in:
 
 ```sh
-shopify app build
-grep -o 'https://[^"]*' extensions/remote-product-details/dist/remote-product-details.js
+grep -o 'return"https://[^"]*"' extensions/remote-product-details/dist/remote-product-details.js
 ```
 
 ## Running it locally
 
 The extension sandbox is served over HTTPS, so it cannot call the API over plain HTTP — a
-`http://localhost:5257` request is blocked as mixed content. Use the `https` launch profile, which
-listens on `https://localhost:7257` alongside the existing HTTP port:
+`http://localhost:5257` request is blocked as mixed content. The ngrok tunnel solves this by
+terminating TLS with a publicly trusted certificate:
 
 ```sh
-# once, so the browser trusts the local certificate
-dotnet dev-certs https --trust
+docker compose up -d                                   # Postgres
+process-compose -f process-compose.yaml --no-server up # Web.Api on :5257, AppServer, dashboard
 
-docker compose up -d                                      # Postgres
-cd dotnet && dotnet run --project src/Web.Api --launch-profile https
+cd skusync && pnpm dev                                 # ngrok tunnel + shopify app dev, together
 ```
+
+`pnpm dev` is just `concurrently` running `pnpm tunnel` and `shopify app dev` in parallel with
+`--kill-others`, so quitting either tears down both. Because the tunnel hostname is fixed there is
+nothing to wait for and nothing to discover — the two processes are independent.
+
+Two things to know:
+
+- **The hostname is a custom ngrok subdomain, which is a paid feature.** It lives in `ngrok.yml` as
+  the endpoint's `url:`. `ngrok.io` is the legacy domain; current accounts use `ngrok.app`.
+- **`--config` replaces the agent's default config rather than adding to it.** The `tunnel` script
+  names the global config (holding your authtoken) alongside `ngrok.yml`; passing only `ngrok.yml`
+  fails with `ERR_NGROK_4018`, "not authenticated", which reads misleadingly like a bad token. The
+  script hardcodes the macOS config path — set `NGROK_CONFIG` to override it elsewhere.
+
+`pnpm tunnel` runs the tunnel alone. `pnpm dev:no-tunnel` skips it, for when you're supplying
+`SKUSYNC_API_URL` yourself — pointing at a deployed API, say, or at the Web.Api `https` launch profile
+(`https://localhost:7257`, after `dotnet dev-certs https --trust`), though the sandbox may reject that
+self-signed certificate.
 
 The API needs the app's credentials to verify session tokens. They are secrets, so they go in user
 secrets rather than `appsettings.Development.json`:
@@ -118,19 +135,6 @@ dotnet user-secrets set "Shopify:ShopUrl" "https://<your-dev-store>.myshopify.co
 `Shopify:ShopUrl` matters: the API rejects any token whose `dest` claim names a different shop, and
 the committed development value is a placeholder. Without these the API logs a warning at startup
 and every Shopify endpoint answers 401.
-
-Then, from `skusync/`:
-
-```sh
-shopify app dev
-```
-
-If the sandbox rejects the local development certificate, put a trusted HTTPS hostname in front of
-the API instead and point `SKUSYNC_API_URL` at it:
-
-```sh
-cloudflared tunnel --url http://localhost:5257
-```
 
 ## States the block renders
 

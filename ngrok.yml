@@ -1,0 +1,36 @@
+# ngrok agent config for local development — the "skusync-api" endpoint fronts the Web.Api HTTP host
+# with a public HTTPS URL on a fixed hostname.
+#
+# Why a tunnel at all: admin UI extensions run sandboxed on https://extensions.shopifycdn.com, and a
+# browser blocks a plain-HTTP request from an HTTPS page as mixed content. ngrok terminates TLS with a
+# publicly trusted certificate, which the sandbox accepts — unlike the self-signed certificate behind
+# the Web.Api "https" launch profile.
+#
+# Start it alongside the app:
+#
+#   cd skusync && pnpm dev        # runs this tunnel and `shopify app dev` together
+#   cd skusync && pnpm tunnel     # just the tunnel
+#
+# Your authtoken is NOT here — it stays in the global agent config that `ngrok config add-authtoken`
+# writes, so this file is safe to commit. Note that `--config` REPLACES the agent's default config
+# rather than adding to it, which is why the `tunnel` script names the global config as well; passing
+# only this file fails with ERR_NGROK_4018 ("not authenticated"), which reads like a bad token.
+version: "3"
+
+endpoints:
+  - name: skusync-api
+    # A fixed hostname so the URL never changes: the extension hardcodes the same value as its
+    # development default (see extensions/remote-product-details/src/config.ts), and nothing has to
+    # discover the URL at runtime.
+    #
+    # Custom subdomains are a PAID ngrok feature. On a free authtoken this is rejected and the agent
+    # falls back to complaining rather than assigning a random URL — if that happens, check that
+    # `ngrok config add-authtoken` was run with the subscribed account's token.
+    #
+    # ngrok.io is the legacy domain; current accounts use ngrok.app. Swap the suffix if your account
+    # holds the .io name instead.
+    url: https://shopify-skusync.ngrok.app
+
+    # The port the Web.Api "http" launch profile listens on; process-compose starts that host.
+    upstream:
+      url: 5257

@@ -8,13 +8,18 @@
   "scripts": {
     "shopify": "shopify",
     "build": "shopify app build",
-    "dev": "shopify app dev",
+    "dev": "concurrently --kill-others --names ngrok,shopify --prefix-colors cyan,magenta \"pnpm tunnel\" \"shopify app dev\"",
+    "dev:no-tunnel": "shopify app dev",
+    "tunnel": "ngrok start --config \"${NGROK_CONFIG:-$HOME/Library/Application Support/ngrok/ngrok.yml}\" --config ../ngrok.yml skusync-api",
     "info": "shopify app info",
     "generate": "shopify app generate",
     "deploy": "shopify app deploy",
     "typecheck": "pnpm --recursive --if-present run typecheck"
   },
   "dependencies": {},
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
   "trustedDependencies": [
     "@shopify/plugin-cloudflare"
   ],
