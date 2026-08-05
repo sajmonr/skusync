@@ -113,16 +113,30 @@ The extension sandbox is served over HTTPS, so it cannot call the API over plain
 `http://localhost:5257` request is blocked as mixed content. The ngrok tunnel solves this by
 terminating TLS with a publicly trusted certificate:
 
+The whole stack, including the tunnel and the CLI dev session, comes up from the repo root:
+
 ```sh
 docker compose up -d                                   # Postgres
-process-compose -f process-compose.yaml --no-server up # Web.Api on :5257, AppServer, dashboard
-
-cd skusync && pnpm dev                                 # ngrok tunnel + shopify app dev, together
+process-compose -f process-compose.yaml --no-server up # everything else
 ```
 
-`pnpm dev` is just `concurrently` running `pnpm tunnel` and `shopify app dev` in parallel with
-`--kill-others`, so quitting either tears down both. Because the tunnel hostname is fixed there is
-nothing to wait for and nothing to discover — the two processes are independent.
+That runs `shopify-app-install` (`pnpm install`, a no-op when already satisfied), `shopify-tunnel`
+and `shopify-app-dev` alongside the .NET hosts and the dashboard. **Run `shopify app dev` by hand
+once first** — the CLI needs a terminal for login and store selection before it can start unattended.
+ngrok's request log is at <http://127.0.0.1:4040>, which is where the per-request detail lives since
+ngrok prints nothing without a terminal of its own.
+
+`shopify-app-dev` sets `CI=1`, which turns off the CLI's live terminal UI. Without it the dev session
+repaints in place using cursor-control escapes, which a log pane renders as garbage instead of
+scrolling lines. CI mode also makes the CLI fail on a prompt rather than wait for input nobody can
+give. If it ever refuses to run without a terminal, add `is_tty: true` to that process and accept the
+noisier output.
+
+To work on just the Shopify side, `cd skusync && pnpm dev` runs the tunnel and the CLI together via
+`concurrently --kill-others`, so quitting either tears down both. Because the tunnel hostname is
+fixed there is nothing to wait for and nothing to discover — the two are independent processes,
+which is also why process-compose can manage them separately rather than nesting `concurrently`
+inside it.
 
 Two things to know:
 

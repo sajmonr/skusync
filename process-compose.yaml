@@ -1,5 +1,5 @@
 # process-compose.yaml — local dev launcher for the Web.Api HTTP host, the AppServer background
-# worker, and the Angular dashboard.
+# worker, the Angular dashboard, and the Shopify app (ngrok tunnel + CLI dev session).
 #
 #   process-compose -f process-compose.yaml --no-server up   # start the processes (no PC HTTP server)
 #   Ctrl+C                                                    # stop them
@@ -14,6 +14,10 @@
 # configuration still comes from its .NET user secrets, which `dotnet run` loads automatically in
 # the Development environment. AppServer owns background processing (Shopify webhook handlers,
 # the SQS poller, and the Hangfire recurring jobs) — the reconcile/dispatch pipeline runs here.
+#
+# Node dependencies are installed by one-shot `*-install` processes, so a fresh checkout needs no
+# manual `npm install` / `pnpm install`. The Shopify CLI dev session needs a terminal: run
+# `shopify app dev` by hand once to get through login and store selection before relying on it here.
 version: "0.5"
 
 processes:
@@ -90,3 +94,68 @@ processes:
     availability:
       restart: on_failure
       max_restarts: 5
+
+  shopify-app-install:
+    description: "Install the Shopify app's pnpm dependencies (one-shot)"
+    working_dir: skusync
+    # pnpm, not npm: the app is a pnpm workspace (pnpm-workspace.yaml), and this installs the
+    # extensions' dependencies too. It is a no-op when node_modules already matches the lockfile,
+    # so it is cheap to run on every start.
+    command: pnpm install
+    availability:
+      # One-shot: run to completion, don't restart. `shopify-app-dev` waits for a clean exit.
+      restart: no
+
+  shopify-tunnel:
+    description: "ngrok tunnel fronting Web.Api at https://shopify-skusync.ngrok.app"
+    working_dir: skusync
+    # Reuses the `tunnel` package script so the ngrok invocation — which has to name both the global
+    # agent config and ngrok.yml — is defined in exactly one place.
+    #
+    # Deliberately NOT dependent on web-api: ngrok tunnels happily to a port nothing is listening on
+    # yet and starts forwarding as soon as the host comes up, so coupling them would only mean a
+    # web-api failure also hides the tunnel.
+    command: pnpm tunnel
+    readiness_probe:
+      # The agent's local API only answers once the tunnel is registered, so this means "the public
+      # URL is live". Browse http://127.0.0.1:4040 for ngrok's request log — ngrok's own TUI produces
+      # no output without a terminal, so that page is where the per-request detail lives.
+      http_get:
+        host: 127.0.0.1
+        port: 4040
+        path: /api/tunnels
+      initial_delay_seconds: 3
+      period_seconds: 5
+      timeout_seconds: 3
+      failure_threshold: 20
+    availability:
+      restart: on_failure
+      max_restarts: 5
+
+  shopify-app-dev:
+    description: "Shopify CLI dev session for the admin UI extension"
+    working_dir: skusync
+    # dev:no-tunnel rather than dev: process-compose is the process manager here, so the tunnel runs
+    # as its own process above instead of nesting concurrently inside this one. The script still sets
+    # NODE_ENV=development, which is what points the extension at the tunnel hostname.
+    command: pnpm dev:no-tunnel
+    environment:
+      # CI=1 turns off the CLI's live terminal UI. Without it the dev session repaints in place with
+      # cursor-control escapes (ESC[2K, ESC[1A, ESC[G), which a log pane renders as garbage rather
+      # than as scrolling lines. Measured on `shopify app build`: escape sequences drop to zero,
+      # leaving only static box-drawing characters, which are just text. CI mode also makes the CLI
+      # fail on a prompt instead of waiting for input nobody can give — the right behaviour for an
+      # unattended process, provided the first run was completed by hand (see below).
+      - "CI=1"
+    # No is_tty: with CI=1 the CLI does not open an interactive UI, so it does not need a pty, and
+    # line-based output is what process-compose displays well. If the CLI ever fails here demanding a
+    # terminal, add `is_tty: true` back and accept the noisier output.
+    #
+    # Complete the first `shopify app dev` by hand: login and store selection are interactive, and
+    # this process cannot answer them.
+    depends_on:
+      shopify-app-install:
+        condition: process_completed_successfully
+    availability:
+      # Not restarted: if the CLI exits wanting input, relaunching it in a loop buries the message.
+      restart: no

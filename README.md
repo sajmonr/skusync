@@ -42,7 +42,13 @@ process-compose -f process-compose.yaml --no-server up
 ```
 
 This starts the `web-api` HTTP host (<http://localhost:5257>), the `app-server`
-background worker, and the Angular dashboard (<http://localhost:4200>). The `--no-server` flag prevents Process Compose
+background worker, the Angular dashboard (<http://localhost:4200>), and the Shopify
+app — an ngrok tunnel fronting `web-api` at <https://shopify-skusync.ngrok.app> plus
+the Shopify CLI dev session for the admin UI extension. Node dependencies are
+installed by one-shot `dashboard-install` / `shopify-app-install` processes, so a
+fresh checkout needs no manual `npm install`. Run `shopify app dev` by hand once
+first, though: the CLI needs a terminal for login and store selection before it can
+start unattended. The `--no-server` flag prevents Process Compose
 from binding its HTTP server to port `8080`. The `-f process-compose.yaml` is
 required because Process Compose also treats `compose.yaml` as one of its default
 config file names — with both present in the repo root it would otherwise load the
