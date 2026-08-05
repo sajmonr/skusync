@@ -79,7 +79,7 @@ npm run lint
 
 ## Notes
 
-- CI: GitHub Actions verifies PRs — `pr-develop.yml` (build + tests, no E2E) and `pr-main.yml` (build + tests incl. E2E). `main-build-shopify-app.yml` typechecks and production-builds the Shopify app on pushes to `main` that touch `skusync/**`; it builds only and does not deploy. Building and deployment are done by Dokploy on a build server using each service's Dockerfile (`src/Web.Api/Dockerfile`, `src/AppServer/Dockerfile`), not GitHub Actions.
+- CI: GitHub Actions verifies PRs — `pr-develop.yml` (build + tests, no E2E) and `pr-main.yml` (build + tests incl. E2E). Building and deployment are done by Dokploy on a build server using each service's Dockerfile (`src/Web.Api/Dockerfile`, `src/AppServer/Dockerfile`), not GitHub Actions.
 - Frontend uses SQLite (dev) via Prisma; backend uses PostgreSQL via EF Core
 - NuGet versions are centrally managed in `dotnet/Directory.Packages.props`
 
