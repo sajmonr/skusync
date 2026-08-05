@@ -5,3 +5,15 @@ declare module './src/BlockExtension.jsx' {
   const shopify: import('@shopify/ui-extensions/admin.product-variant-details.block.render').Api;
   const globalThis: { shopify: typeof shopify };
 }
+
+//@ts-ignore
+declare module './src/api.js' {
+  const shopify: import('@shopify/ui-extensions/admin.product-variant-details.block.render').Api;
+  const globalThis: { shopify: typeof shopify };
+}
+
+//@ts-ignore
+declare module './src/config.js' {
+  const shopify: import('@shopify/ui-extensions/admin.product-variant-details.block.render').Api;
+  const globalThis: { shopify: typeof shopify };
+}

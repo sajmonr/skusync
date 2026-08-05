@@ -1,5 +1,13 @@
+using System.Security.Claims;
+using System.Text;
+using Infrastructure.Database;
+using Infrastructure.Database.Entities;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.IdentityModel.JsonWebTokens;
+using Microsoft.IdentityModel.Tokens;
 using Testcontainers.PostgreSql;
 using Web.Api;
 
@@ -7,6 +15,14 @@ namespace Tests.E2E.Infrastructure;
 
 public class WebApiTestHost : WebApplicationFactory<Program>, IAsyncLifetime
 {
+    /// <summary>The shop this host is configured to serve. Tokens for any other shop are rejected.</summary>
+    public const string ShopUrl = "https://e2e-web-api.myshopify.com";
+
+    public const string ShopifyClientId = "e2e-shopify-client-id";
+
+    // HS256 signing needs at least a 256-bit key, so this is deliberately long.
+    private const string ShopifyClientSecret = "e2e-shopify-client-secret-at-least-32-bytes";
+
     private readonly PostgreSqlContainer postgres = new PostgreSqlBuilder("postgres:18.3").Build();
     private readonly Dictionary<string, string?> originalEnvironmentValues = [];
 
@@ -17,6 +33,99 @@ public class WebApiTestHost : WebApplicationFactory<Program>, IAsyncLifetime
         SetEnvironmentVariable("ConnectionStrings__SkuSync", postgres.GetConnectionString());
         SetEnvironmentVariable("DashboardAuthentication__Password", "test-password");
         SetEnvironmentVariable("DashboardAuthentication__BypassOnDevelopment", "false");
+        SetEnvironmentVariable("Shopify__ShopUrl", ShopUrl);
+        SetEnvironmentVariable("Shopify__App__ClientId", ShopifyClientId);
+        SetEnvironmentVariable("Shopify__App__ClientSecret", ShopifyClientSecret);
+    }
+
+    /// <summary>
+    /// Mints a session token shaped like the ones Shopify hands to admin UI extensions. Defaults
+    /// produce a token this host accepts; override an argument to exercise a rejection path.
+    /// </summary>
+    public string CreateSessionToken(
+        string? shop = null,
+        string? clientId = null,
+        string? signingSecret = null,
+        TimeSpan? lifetime = null)
+    {
+        var issuedAt = DateTime.UtcNow;
+        var destination = shop ?? ShopUrl;
+
+        var descriptor = new SecurityTokenDescriptor
+        {
+            Issuer = $"{destination}/admin",
+            Audience = clientId ?? ShopifyClientId,
+            IssuedAt = issuedAt,
+            NotBefore = issuedAt,
+            Expires = issuedAt.Add(lifetime ?? TimeSpan.FromMinutes(1)),
+            Claims = new Dictionary<string, object>
+            {
+                ["dest"] = destination,
+                ["sub"] = "42",
+                ["sid"] = Guid.NewGuid().ToString(),
+                ["jti"] = Guid.NewGuid().ToString()
+            },
+            SigningCredentials = new SigningCredentials(
+                new SymmetricSecurityKey(Encoding.UTF8.GetBytes(signingSecret ?? ShopifyClientSecret)),
+                SecurityAlgorithms.HmacSha256)
+        };
+
+        return new JsonWebTokenHandler().CreateToken(descriptor);
+    }
+
+    /// <summary>
+    /// Seeds one Shopify variant, optionally linked to a SkuLabs item, and returns its numeric
+    /// Shopify variant ID.
+    /// </summary>
+    public async Task<long> SeedVariant(
+        long variantId,
+        string? skulabsSourceItemId,
+        bool isDeleted = false,
+        bool isActive = true)
+    {
+        using var scope = Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var variant = new ShopifyProductVariantEntity
+        {
+            GlobalProductId = $"gid://shopify/Product/{variantId}00",
+            ProductId = variantId * 100,
+            GlobalVariantId = $"gid://shopify/ProductVariant/{variantId}",
+            VariantId = variantId,
+            Sku = $"SKU-{variantId}",
+            Barcode = $"BAR-{variantId}",
+            DisplayName = $"Variant {variantId}",
+            IsActive = isActive,
+            IsDeleted = isDeleted
+        };
+
+        if (skulabsSourceItemId is not null)
+        {
+            variant.SkulabsItem = new SkulabsItemEntity
+            {
+                SkulabsSourceItemId = skulabsSourceItemId,
+                SkulabsSourceListingId = $"listing-{skulabsSourceItemId}",
+                Title = $"SkuLabs {skulabsSourceItemId}",
+                Sku = variant.Sku,
+                Barcode = variant.Barcode
+            };
+        }
+
+        dbContext.ShopifyProductVariants.Add(variant);
+        await dbContext.SaveChangesAsync();
+
+        return variantId;
+    }
+
+    /// <summary>Removes every seeded variant and its linked SkuLabs item.</summary>
+    public async Task ResetAsync()
+    {
+        using var scope = Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        await dbContext.SkulabsItems.ExecuteDeleteAsync();
+        await dbContext.ShopifyProductVariantLogEvents.ExecuteDeleteAsync();
+        await dbContext.ShopifyProductVariants.ExecuteDeleteAsync();
     }
 
     public new async Task DisposeAsync()

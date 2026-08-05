@@ -1,4 +1,22 @@
 {
   "name": "SkuSync",
-  "welcome": "Welcome to the {{target}} extension!"
+  "heading": "SkuSync",
+  "loading": "Looking up this variant in SkuLabs…",
+  "openInSkulabs": "Open this item in SkuLabs",
+  "itemId": "SkuLabs item {{id}}",
+  "notLinked": "This variant isn't linked to a SkuLabs item yet.",
+  "failure": {
+    "unauthenticated": {
+      "heading": "Couldn't verify this session",
+      "body": "SkuSync rejected the session token for this page. Reload the page, and if that doesn't help check that the app's client secret matches the one SkuSync is configured with."
+    },
+    "unreachable": {
+      "heading": "Couldn't reach SkuSync",
+      "body": "No response from {{detail}}. Check that the SkuSync API is running and reachable over HTTPS from this browser."
+    },
+    "unexpected": {
+      "heading": "Something went wrong",
+      "body": "SkuSync couldn't return this variant's SkuLabs information. {{detail}}"
+    }
+  }
 }

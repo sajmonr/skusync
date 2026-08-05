@@ -21,6 +21,7 @@ lerna-debug.log*
 
 # Build
 dist
+extensions/*/manifest.json
 shared/types/graphql
 *.local
 
