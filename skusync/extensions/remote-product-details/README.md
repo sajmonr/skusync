@@ -28,8 +28,11 @@ pnpm typecheck          # from skusync/, covers every workspace extension
   source file makes `tsc` fail until someone runs a build, and a CI typecheck with no preceding build
   fails outright. The two files don't conflict; they populate different scopes.
 
-Note that `pnpm typecheck` is not currently run in CI — `.github/workflows/pr-*.yml` has a Node job
-for `angular/dashboard` only.
+`pnpm typecheck` runs in CI on pushes to `main`, via
+[`main-build-shopify-app.yml`](../../../.github/workflows/main-build-shopify-app.yml), which also
+production-builds the extension and asserts the bundle resolved to the production API URL. It does
+**not** run on pull requests — `pr-main.yml` and `pr-develop.yml` cover `dotnet/**` and
+`angular/dashboard/**` only — so a type error in `skusync/**` surfaces after the merge, not before it.
 
 ## Layout
 
