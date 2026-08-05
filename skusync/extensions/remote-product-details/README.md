@@ -111,7 +111,7 @@ grep -o 'function [A-Za-z]*(){try{return"[^"]*"' \
 
 The extension sandbox is served over HTTPS, so it cannot call the API over plain HTTP — a
 `http://localhost:5257` request is blocked as mixed content. The ngrok tunnel solves this by
-terminating TLS with a publicly trusted certificate:
+terminating TLS with a publicly trusted certificate.
 
 The whole stack, including the tunnel and the CLI dev session, comes up from the repo root:
 
