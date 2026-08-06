@@ -57,6 +57,9 @@ public class ShopifyProductVariantConfiguration : IEntityTypeConfiguration<Shopi
 
         builder.HasIndex(x => x.GlobalVariantId).IsUnique();
         builder.HasIndex(x => x.VariantId).IsUnique();
+        // Not unique: a product owns many variants. The product-details admin extension reads a whole
+        // product's variants on every page view, which without this index is a full table scan.
+        builder.HasIndex(x => x.ProductId);
         // Filtered index so the drift sweep scans a small subset even at high variant counts.
         builder.HasIndex(x => x.PendingShopifySync)
             .HasFilter("\"PendingShopifySync\" = true");
