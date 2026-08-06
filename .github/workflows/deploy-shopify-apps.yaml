@@ -1,0 +1,72 @@
+name: Deploy app
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'skusync/**'
+      - '.github/workflows/deploy-shopify-apps.yaml'
+
+permissions:
+  contents: read
+
+# One release at a time. Two pushes racing would leave whichever job finished last released, which is
+# not necessarily the newer commit.
+concurrency:
+  group: shopify-deploy
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: skusync
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+
+      # pnpm before setup-node, so setup-node's cache step can find the pnpm store. The app is a pnpm
+      # workspace (pnpm-workspace.yaml): npm would install from no lockfile at all.
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6.0.10
+        with:
+          version: 11
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: skusync/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # esbuild strips types without checking them, so a successful bundle says nothing about type
+      # correctness. Both gates are cheap and this is the last chance before merchants see it.
+      - name: Typecheck extensions
+        run: pnpm typecheck
+
+      - name: Run tests
+        run: pnpm test
+
+      # Pinned deliberately: @shopify/cli@latest means a CLI release can break deploys with no commit
+      # of ours. Bump it on purpose.
+      - name: Install Shopify CLI
+        run: npm install -g @shopify/cli@4.6.0
+
+      # Through the package script rather than calling `shopify app deploy` directly: the script is what
+      # sets NODE_ENV=production, and NODE_ENV is what bakes the production API base URL into the
+      # bundles. `pnpm run`, not `pnpm deploy` — the latter is a pnpm built-in that shadows the script
+      # and silently does not run it.
+      - name: Deploy
+        env:
+          # Automation token from the Dev Dashboard.
+          SHOPIFY_APP_AUTOMATION_TOKEN: ${{ secrets.SHOPIFY_APP_AUTOMATION_TOKEN }}
+          COMMIT_URL: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}
+        run: pnpm run deploy -- --allow-updates --source-control-url "$COMMIT_URL"
