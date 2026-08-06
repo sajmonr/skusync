@@ -1,0 +1,17 @@
+{
+  "name": "product-skulabs-details",
+  "private": true,
+  "version": "1.0.0",
+  "license": "UNLICENSED",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "preact": "^10.10.x",
+    "@preact/signals": "^2.3.x",
+    "@shopify/ui-extensions": "2025.10.x"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "name": "SkuSync",
+  "heading": "SkuSync",
+  "viewInSkulabs": "Voir dans SkuLabs",
+  "loading": {
+    "product": "Recherche des variantes de ce produit dans SkuLabs…"
+  },
+  "notFound": {
+    "product": "Aucune information à afficher pour ce produit."
+  },
+  "variant": {
+    "noSku": "Aucun SKU",
+    "notLinked": "Aucune information à afficher pour cette variante."
+  },
+  "failure": {
+    "unauthenticated": {
+      "heading": "Session non vérifiée",
+      "body": "SkuSync a refusé le jeton de session de cette page. Rechargez la page, puis vérifiez que la clé secrète de l'application correspond à celle configurée dans SkuSync."
+    },
+    "unreachable": {
+      "heading": "SkuSync est inaccessible",
+      "body": "Aucune réponse de {{detail}}. Vérifiez que l'API SkuSync est démarrée et accessible en HTTPS depuis ce navigateur."
+    },
+    "unexpected": {
+      "heading": "Une erreur s'est produite",
+      "body": "SkuSync n'a pas pu renvoyer les informations SkuLabs de cette page. {{detail}}"
+    }
+  }
+}

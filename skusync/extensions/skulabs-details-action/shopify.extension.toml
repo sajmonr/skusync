@@ -1,0 +1,24 @@
+api_version = "2025-10"
+[[extensions]]
+# Change the merchant-facing name of the extension in locales/en.default.json. For an action target
+# that name is the label of the More actions menu item merchants tap, so it reads as an instruction
+# ("View SkuLabs details") rather than as the app's name.
+name = "t:name"
+handle = "skulabs-details-action"
+type = "ui_extension"
+# Written by the CLI on the first `shopify app dev`. It is how a deploy maps to this registration, so
+# keep it committed and don't regenerate it.
+uid = "fedbdbb3-50da-ae7a-6f1c-c47b3e567a500a6d4dce"
+
+[extensions.capabilities]
+# Required to fetch from the SkuSync API. Without it the sandbox blocks the request before it is
+# ever sent, regardless of how the API's CORS policy is configured.
+network_access = true
+
+# This exists as its own extension because a single extension may not mix action and block targets. The
+# blocks are extensions of their own too — one admin block target per extension is a platform limit —
+# in extensions/variant-skulabs-details (variant page) and extensions/product-skulabs-details (product
+# page). This is also the only surface the Shopify mobile apps show, where inline blocks don't render.
+[[extensions.targeting]]
+module = "./src/targets/ProductAction.tsx"
+target = "admin.product-details.action.render"

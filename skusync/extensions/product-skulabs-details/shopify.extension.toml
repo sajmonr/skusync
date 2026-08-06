@@ -1,0 +1,23 @@
+api_version = "2025-10"
+[[extensions]]
+# Change the merchant-facing name of the extension in locales/en.default.json
+name = "t:name"
+handle = "product-skulabs-details"
+uid = "787821ba-f318-b747-d77f-7b6f888e4ba8e467040a"
+type = "ui_extension"
+# uid is intentionally absent: the CLI generates one on the first `shopify app dev` or
+# `shopify app deploy` and writes it here. Commit it once it appears — it is how a deploy maps to this
+# extension's registration.
+
+[extensions.capabilities]
+# Required to fetch from the SkuSync API. Without it the sandbox blocks the request before it is
+# ever sent, regardless of how the API's CORS policy is configured.
+network_access = true
+
+# This is its own extension rather than a second target on variant-skulabs-details because an extension
+# may hold only ONE admin block target — see the comment there. It covers what the variant block cannot:
+# a single-variant product, which Shopify gives no variant page at all, and a multi-variant product
+# whose variants would otherwise take one page visit each.
+[[extensions.targeting]]
+module = "./src/targets/ProductBlock.tsx"
+target = "admin.product-details.block.render"
