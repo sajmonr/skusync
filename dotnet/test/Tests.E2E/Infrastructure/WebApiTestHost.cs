@@ -75,21 +75,25 @@ public class WebApiTestHost : WebApplicationFactory<Program>, IAsyncLifetime
 
     /// <summary>
     /// Seeds one Shopify variant, optionally linked to a SkuLabs item, and returns its numeric
-    /// Shopify variant ID.
+    /// Shopify variant ID. Pass <paramref name="productId"/> to put several variants on one product;
+    /// left unset, each variant gets a product of its own.
     /// </summary>
     public async Task<long> SeedVariant(
         long variantId,
         string? skulabsSourceItemId,
         bool isDeleted = false,
-        bool isActive = true)
+        bool isActive = true,
+        long? productId = null)
     {
         using var scope = Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
+        var owningProductId = productId ?? variantId * 100;
+
         var variant = new ShopifyProductVariantEntity
         {
-            GlobalProductId = $"gid://shopify/Product/{variantId}00",
-            ProductId = variantId * 100,
+            GlobalProductId = $"gid://shopify/Product/{owningProductId}",
+            ProductId = owningProductId,
             GlobalVariantId = $"gid://shopify/ProductVariant/{variantId}",
             VariantId = variantId,
             Sku = $"SKU-{variantId}",

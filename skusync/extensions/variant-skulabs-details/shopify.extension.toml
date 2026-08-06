@@ -1,0 +1,31 @@
+api_version = "2026-07"
+[[extensions]]
+# Change the merchant-facing name of the extension in locales/en.default.json
+name = "t:name"
+handle = "variant-skulabs-details"
+type = "ui_extension"
+# Renamed from the scaffold's "remote-product-details" handle. The uid is unchanged and deliberately so:
+# after the first deploy it is the uid alone that maps this config to an existing extension
+# registration, which is what makes a handle rename safe rather than a delete-and-recreate. Don't
+# regenerate it.
+uid = "516d1543-ffc5-3157-7f33-4d5c55aeb6f93250c04c"
+
+[extensions.capabilities]
+# Required to fetch from the SkuSync API. Without it the sandbox blocks the request before it is
+# ever sent, regardless of how the API's CORS policy is configured.
+network_access = true
+
+# One target, and that is a hard platform limit rather than a stylistic choice: an extension may hold
+# only ONE of the admin block targets, and may not hold a block target and an action target together.
+# So SkuSync's three admin surfaces are three extensions, all rendering the same components out of
+# skusync/shared:
+#
+#   variant-skulabs-details   this one — the card on the variant page
+#   product-skulabs-details   the card on the product page
+#   skulabs-details-action    the More actions modal, and the only surface the mobile apps show
+#
+# Both limits are enforced by `shopify app dev` / `shopify app deploy`, not by `shopify app build` —
+# a build bundles an illegal target layout without complaint, so it proves nothing here.
+[[extensions.targeting]]
+module = "./src/targets/VariantBlock.tsx"
+target = "admin.product-variant-details.block.render"

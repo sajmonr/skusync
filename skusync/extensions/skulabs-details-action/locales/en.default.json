@@ -1,0 +1,29 @@
+{
+  "name": "View SkuLabs details",
+  "heading": "SkuSync",
+  "done": "Done",
+  "openInSkulabs": "Open in SkuLabs",
+  "loading": {
+    "product": "Looking up this product's variants in SkuLabs…"
+  },
+  "notFound": {
+    "product": "No information to display for this product."
+  },
+  "variant": {
+    "notLinked": "No information to display for this variant."
+  },
+  "failure": {
+    "unauthenticated": {
+      "heading": "Couldn't verify this session",
+      "body": "SkuSync rejected the session token for this page. Reload the page, and if that doesn't help check that the app's client secret matches the one SkuSync is configured with."
+    },
+    "unreachable": {
+      "heading": "Couldn't reach SkuSync",
+      "body": "No response from {{detail}}. Check that the SkuSync API is running and reachable over HTTPS from this browser."
+    },
+    "unexpected": {
+      "heading": "Something went wrong",
+      "body": "SkuSync couldn't return the SkuLabs information for this page. {{detail}}"
+    }
+  }
+}

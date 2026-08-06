@@ -110,7 +110,7 @@ processes:
     description: "ngrok tunnel fronting Web.Api at https://shopify-skusync.ngrok.app"
     working_dir: skusync
     # Reuses the `tunnel` package script so the ngrok invocation — which has to name both the global
-    # agent config and ngrok.yml — is defined in exactly one place.
+    # agent config and ngrok.yaml — is defined in exactly one place.
     #
     # Deliberately NOT dependent on web-api: ngrok tunnels happily to a port nothing is listening on
     # yet and starts forwarding as soon as the host comes up, so coupling them would only mean a

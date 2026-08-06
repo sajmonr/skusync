@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1200" width="1200" height="1200" role="img" aria-label="SkuSync">
+  <title>SkuSync — matching SKUs on both sides, kept in step</title>
+  <!-- Two systems holding the same SKU, with traffic both ways.
+
+       Three things here are load-bearing, and all three are easy to "tidy" into a worse icon:
+
+       1. The tiles stay on a diagonal. Setting them side by side above the arrows turns the mark into a
+          face — two eyes and a smile — and it cannot be unseen once noticed.
+       2. Both tiles carry the same bars. A blank second tile reads as content that failed to load,
+          which is the opposite of what the app does.
+       3. The badge is 880px on a 1200px canvas, leaving a 160px margin. Shopify requires the artwork to
+          fill 750–900px with at least 75px clear, so the geometry is a spec constraint, not taste. -->
+  <rect x="160" y="160" width="880" height="880" rx="208" fill="#1E293B"/>
+  <g fill="#FFFFFF">
+    <rect x="286" y="386" width="236" height="236" rx="54"/>
+    <rect x="678" y="578" width="236" height="236" rx="54"/>
+  </g>
+  <g stroke="#F5A524" stroke-width="58" fill="none">
+    <path d="M 566 504 H 690"/>
+    <path d="M 634 696 H 510"/>
+  </g>
+  <g fill="#F5A524">
+    <polygon points="0,-64 0,64 100,0" transform="translate(690 504)"/>
+    <polygon points="0,-64 0,64 100,0" transform="translate(510 696) rotate(180)"/>
+  </g>
+  <!-- Bars knock out to the ground colour. Same five-bar reading in both tiles. -->
+  <g fill="#1E293B">
+    <rect x="330" y="452" width="22" height="104" rx="11"/>
+    <rect x="366" y="452" width="12" height="104" rx="6"/>
+    <rect x="392" y="452" width="22" height="104" rx="11"/>
+    <rect x="428" y="452" width="12" height="104" rx="6"/>
+    <rect x="454" y="452" width="22" height="104" rx="11"/>
+    <rect x="722" y="644" width="22" height="104" rx="11"/>
+    <rect x="758" y="644" width="12" height="104" rx="6"/>
+    <rect x="784" y="644" width="22" height="104" rx="11"/>
+    <rect x="820" y="644" width="12" height="104" rx="6"/>
+    <rect x="846" y="644" width="22" height="104" rx="11"/>
+  </g>
+</svg>

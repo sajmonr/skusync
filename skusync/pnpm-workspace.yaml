@@ -1,2 +1,6 @@
 packages:
  - 'extensions/*'
+ # Not an extension: the view code both extensions render. It is a workspace package purely so that
+ # `preact` and `@shopify/ui-extensions` resolve from shared/node_modules — Node resolution walks up
+ # from the importing file, and without this the imports in shared/ would find nothing.
+ - 'shared'

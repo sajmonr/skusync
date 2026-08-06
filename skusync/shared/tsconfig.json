@@ -1,0 +1,22 @@
+{
+  // This file is here for the *bundler*, not for a typecheck. The Shopify CLI's esbuild resolves JSX
+  // per source file from the nearest tsconfig.json walking up from that file. Without one here, the
+  // .tsx files in this directory fall outside every extension's tsconfig reach and esbuild defaults to
+  // `react/jsx-runtime`, failing the build with "Could not resolve react/jsx-runtime".
+  //
+  // There is deliberately no typecheck script for this package: each extension's tsconfig includes
+  // ../../shared/**/*, so this code is checked once per extension against that extension's real target
+  // API. Running `tsc` here on its own would report the `shopify` global as undefined, because which
+  // API object the host injects is a property of the extension, not of this directory.
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact",
+    "target": "ES2020",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "strict": true
+  },
+  "include": ["**/*.ts", "**/*.tsx"]
+}
