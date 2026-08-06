@@ -31,12 +31,21 @@ export function useLookup<T>(
     }
 
     const controller = new AbortController();
+    // Aborting is advisory: a lookup that resolves before the abort lands, or one that ignores the
+    // signal, still settles its promise and would write over the newer resource's state. This flag is
+    // what makes the write conditional on the effect still being the current one.
+    let current = true;
+
     setState({ status: "loading" });
 
     lookup(resourceGid, controller.signal)
-      .then((result) => setState(toLookupState(result)))
+      .then((result) => {
+        if (current) {
+          setState(toLookupState(result));
+        }
+      })
       .catch((error: unknown) => {
-        if (error instanceof Error && error.name === "AbortError") {
+        if (!current || (error instanceof Error && error.name === "AbortError")) {
           return;
         }
 
@@ -50,7 +59,10 @@ export function useLookup<T>(
         });
       });
 
-    return () => controller.abort();
+    return () => {
+      current = false;
+      controller.abort();
+    };
   }, [resourceGid, lookup]);
 
   return state;

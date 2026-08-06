@@ -86,8 +86,8 @@ pnpm typecheck          # from skusync/, covers every workspace extension
   compiled once per extension against a different global each time — so copy that differs per surface
   (the loading and nothing-to-show messages) is passed in as a prop.
 
-Note that `pnpm typecheck` is not currently run in CI — `.github/workflows/pr-*.yml` has a Node job
-for `angular/dashboard` only.
+`pnpm typecheck` and `pnpm test` both run in CI: `.github/workflows/pr-*.yaml` has a
+`test-extensions` job, and the deploy workflow runs both again before releasing a version.
 
 ## Layout
 
@@ -150,6 +150,42 @@ English only. The scaffold shipped an `fr.json` alongside each default and it ha
 translations nobody maintains drift from the English and quietly ship stale copy to the merchants who
 would notice. Adding a locale back means adding it to all three extensions.
 
+## Tests
+
+Vitest, in `skusync/shared`, because that is where the logic lives:
+
+```sh
+pnpm test               # from skusync/, recursive; only shared has tests
+```
+
+The suite covers the parts that can be exercised without a Shopify host, which is also where the bugs
+turn out to be:
+
+- **`api/request.ts`** — the status-to-failure mapping, and that an `AbortError` is rethrown rather than
+  turned into a failure. Get that second one wrong and switching variants repaints the block as an error
+  every time.
+- **`api/productInformation.ts`** — the fold that turns a 200 carrying no variants into a not-found, so
+  no surface ever renders an empty card.
+- **`hooks/useLookup.ts`** — that changing the resource aborts the in-flight lookup, and that a stale
+  result which lands late cannot overwrite a newer one.
+
+That last case was a real bug, found by writing the test: aborting is only advisory, so a lookup that
+resolved after the merchant navigated away would overwrite the newer state. The effect now carries a
+`current` flag and the write is conditional on it.
+
+Two things to know about the setup:
+
+- **`shared` has no `typecheck` script but does have `test`.** Each extension's tsconfig includes
+  `../../shared/**/*`, so the test files are typechecked as part of every extension already.
+- **The hook test builds its probe with `h()` rather than JSX**, which is why `vitest.config.mts` needs
+  no Preact or JSX plugin. It opts into jsdom with a `@vitest-environment` docblock so the rest of the
+  suite runs in plain Node.
+
+There is deliberately **no `@shopify/ui-extensions-tester`** yet. It would add component-level rendering
+assertions — does a row emit a button when the variant is linked — which is the smaller half of the
+value, and it is a separate decision rather than a free addition. If it goes in, note it is a library
+rather than a runner: it renders an extension with a mocked `shopify` global *inside* Vitest.
+
 ## How it talks to SkuSync
 
 Two endpoints, both authenticated with the Shopify session token from `shopify.auth.idToken()` sent as
@@ -184,7 +220,7 @@ Shopify-side projects resolve it the same way. It maps an environment to an orig
 
 | `NODE_ENV` | API base URL |
 | --- | --- |
-| `development` | `https://shopify-skusync.ngrok.app` (the fixed tunnel; must match `ngrok.yml`) |
+| `development` | `https://shopify-skusync.ngrok.app` (the fixed tunnel; must match `ngrok.yaml`) |
 | `production` | `https://skusync.darkflux.app` |
 
 It is resolved at **build** time, not runtime: the Shopify CLI substitutes `process.env.NODE_ENV` into
@@ -248,10 +284,10 @@ inside it.
 
 Two things to know:
 
-- **The hostname is a custom ngrok subdomain, which is a paid feature.** It lives in `ngrok.yml` as
+- **The hostname is a custom ngrok subdomain, which is a paid feature.** It lives in `ngrok.yaml` as
   the endpoint's `url:`. `ngrok.io` is the legacy domain; current accounts use `ngrok.app`.
 - **`--config` replaces the agent's default config rather than adding to it.** The `tunnel` script
-  names the global config (holding your authtoken) alongside `ngrok.yml`; passing only `ngrok.yml`
+  names the global config (holding your authtoken) alongside `ngrok.yaml`; passing only `ngrok.yaml`
   fails with `ERR_NGROK_4018`, "not authenticated", which reads misleadingly like a bad token. The
   script hardcodes the macOS config path — set `NGROK_CONFIG` to override it elsewhere.
 
