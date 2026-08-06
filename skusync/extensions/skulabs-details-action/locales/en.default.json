@@ -2,7 +2,7 @@
   "name": "View SkuLabs details",
   "heading": "SkuSync",
   "done": "Done",
-  "viewInSkulabs": "View in SkuLabs",
+  "openInSkulabs": "Open in SkuLabs",
   "loading": {
     "product": "Looking up this product's variants in SkuLabs…"
   },
@@ -10,7 +10,6 @@
     "product": "No information to display for this product."
   },
   "variant": {
-    "noSku": "No SKU",
     "notLinked": "No information to display for this variant."
   },
   "failure": {

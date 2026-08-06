@@ -105,10 +105,10 @@ extensions/skulabs-details-action/src/targets/ProductAction.tsx   s-admin-action
 skusync/shared/
   components/
     ProductVariants.tsx        product lookup -> Loading | VariantList | Failure
-    VariantDetails.tsx         variant lookup -> Loading | SkulabsLink | Failure
+    VariantDetails.tsx         variant lookup -> Loading | SkulabsButton | Failure
     VariantList.tsx            the rows
-    VariantRow.tsx             one row: SKU, display name, link or nothing-to-show
-    SkulabsLink.tsx            a link out to a SkuLabs item
+    VariantRow.tsx             one row: display name as heading, then button or nothing-to-show
+    SkulabsButton.tsx          an s-button carrying an href, so it navigates rather than acts
     Loading.tsx                spinner plus the message it was given
     Failure.tsx                nothing-found text, or a warning/critical banner
   hooks/
@@ -141,10 +141,14 @@ Components read `i18n` off the `shopify` global directly rather than taking it a
 differs per surface (the loading and nothing-to-show messages) is passed in, because a shared component
 cannot ask which target it is rendering in.
 
-Each extension needs its own `locales/*.json` and holds only the keys its own surface uses, so the
-strings the product view needs appear in two of them. There is no shared-locale mechanism; the platform
-resolves translations per extension. Adding a surface means adding an extension, and the locale strings
-are the one thing that has to be copied along with it.
+Each extension needs its own `locales/en.default.json` and holds only the keys its own surface uses, so
+the strings the product view needs appear in two of them. There is no shared-locale mechanism; the
+platform resolves translations per extension. Adding a surface means adding an extension, and the locale
+strings are the one thing that has to be copied along with it.
+
+English only. The scaffold shipped an `fr.json` alongside each default and it has been removed —
+translations nobody maintains drift from the English and quietly ship stale copy to the merchants who
+would notice. Adding a locale back means adding it to all three extensions.
 
 ## How it talks to SkuSync
 
@@ -279,7 +283,7 @@ and every Shopify endpoint answers 401.
 | State | Rendering |
 | --- | --- |
 | Loading | Spinner while the lookup is in flight; re-runs when the merchant moves to another product or variant |
-| Found | The variant surface links to the SkuLabs item; the product surfaces list every variant with its SKU, display name and link |
+| Found | The variant surface offers one **Open in SkuLabs** button; the product surfaces list every variant, each with its display name as a heading and its own button |
 | Nothing found (404) | Quiet subdued text — having nothing to show is a normal state, not an error |
 | 401 / 403 | Warning banner pointing at the client-secret mismatch |
 | Unreachable | Critical banner naming the base URL that didn't respond |
@@ -289,5 +293,13 @@ SkuSync, has no SkuLabs item associated with it, or is soft-deleted is internal 
 API response nor the extension reveals which applies. The same applies to an unlinked row inside the
 product list.
 
-Rows lead with the SKU because that is what SkuLabs is keyed on; the display name sits underneath as
-supporting detail, since it repeats the product title on every row of a product.
+A row is the variant's full display name as an `s-heading`, and its button. Nothing else — the SKU used
+to sit underneath and was removed: the merchant is already on the page that lists it, so repeating it
+here only made the rows taller. The API still returns `sku` on each variant, and
+`ProductVariantInformation` still declares it, because that type mirrors the wire format rather than
+what this view happens to render.
+
+The way out to SkuLabs is an `s-button` carrying an `href` rather than an `s-link`. It still navigates,
+so middle-click and open-in-new-tab behave as merchants expect; it just carries the visual weight of the
+row's one action. Both stacks that hold a button set `alignItems="start"`, because `s-button` fills the
+inline space it is given and its `inlineSize` property isn't exposed to JSX.

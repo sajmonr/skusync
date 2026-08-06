@@ -1,7 +1,7 @@
 {
   "name": "SkuSync",
   "heading": "SkuSync",
-  "openInSkulabs": "Open this item in SkuLabs",
+  "openInSkulabs": "Open in SkuLabs",
   "loading": {
     "variant": "Looking up this variant in SkuLabs…"
   },
