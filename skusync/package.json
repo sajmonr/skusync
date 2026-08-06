@@ -2,20 +2,18 @@
   "name": "skusync",
   "version": "1.0.0",
   "license": "UNLICENSED",
-  "workspaces": [
-    "extensions/*"
-  ],
   "scripts": {
     "shopify": "shopify",
     "build": "NODE_ENV=development shopify app build",
     "build:production": "NODE_ENV=production shopify app build",
     "dev": "concurrently --kill-others --names ngrok,shopify --prefix-colors cyan,magenta \"pnpm tunnel\" \"NODE_ENV=development shopify app dev\"",
     "dev:no-tunnel": "NODE_ENV=development shopify app dev",
-    "tunnel": "ngrok start --config \"${NGROK_CONFIG:-$HOME/Library/Application Support/ngrok/ngrok.yml}\" --config ../ngrok.yml skusync-api",
+    "tunnel": "ngrok start --config \"${NGROK_CONFIG:-$HOME/Library/Application Support/ngrok/ngrok.yml}\" --config ../ngrok.yaml skusync-api",
     "info": "shopify app info",
     "generate": "shopify app generate",
     "deploy": "NODE_ENV=production shopify app deploy",
-    "typecheck": "pnpm --recursive --if-present run typecheck"
+    "typecheck": "pnpm --recursive --if-present run typecheck",
+    "test": "pnpm --recursive --if-present run test"
   },
   "dependencies": {},
   "devDependencies": {
