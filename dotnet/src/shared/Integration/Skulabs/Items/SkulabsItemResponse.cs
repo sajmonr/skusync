@@ -28,4 +28,13 @@ public class SkulabsItemResponse
 
     [JsonPropertyName("name")]
     public string Title { get; init; } = "";
+
+    /// <summary>
+    /// Gets the item's bin location per warehouse, keyed by SkuLabs warehouse id. Absent entirely for
+    /// items with no location anywhere, and present but missing our key for items located only in
+    /// another warehouse. System.Text.Json matches dictionary keys verbatim, which is what the hex
+    /// ObjectId keys need.
+    /// </summary>
+    [JsonPropertyName("alias_locations")]
+    public Dictionary<string, string?> AliasLocations { get; init; } = new();
 }

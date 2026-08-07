@@ -36,4 +36,14 @@ public sealed class SkulabsApiOptions
     [Required]
     public string ApiKey { get; init; } = "";
 
+    /// <summary>
+    /// Gets the SkuLabs warehouse id whose bin location is mirrored onto each item.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not required: an empty value means "don't request or store locations", so a
+    /// deployment that has no warehouse configured keeps working instead of failing at startup.
+    /// SkuLabs reports locations per warehouse under <c>alias_locations</c>; this key selects ours.
+    /// </remarks>
+    public string WarehouseId { get; init; } = "";
+
 }

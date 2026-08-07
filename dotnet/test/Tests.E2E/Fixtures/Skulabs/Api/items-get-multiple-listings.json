@@ -17,6 +17,9 @@
     ],
     "name": "Ambiguous Multi Listing Item",
     "sku": "amb-sku",
-    "upc": "amb-upc"
+    "upc": "amb-upc",
+    "alias_locations": {
+      "69912a8923657b958806a418": "D-03-09"
+    }
   }
 ]
