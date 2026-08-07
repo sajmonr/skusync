@@ -64,9 +64,21 @@ jobs:
       # sets NODE_ENV=production, and NODE_ENV is what bakes the production API base URL into the
       # bundles. `pnpm run`, not `pnpm deploy` — the latter is a pnpm built-in that shadows the script
       # and silently does not run it.
+      #
+      # Every flag goes in as an env var rather than an argument. pnpm forwards script arguments
+      # directly and passes a literal `--` straight through to the script, so the npm habit of
+      # `pnpm run deploy -- --flag` reaches the CLI as `shopify app deploy -- --flag` and dies on
+      # "Unexpected arguments". Dropping the `--` does work, but every flag oclif exposes has an env
+      # binding, and using them keeps the invocation immune to how a package manager happens to treat
+      # argument separators.
       - name: Deploy
         env:
           # Automation token from the Dev Dashboard.
           SHOPIFY_APP_AUTOMATION_TOKEN: ${{ secrets.SHOPIFY_APP_AUTOMATION_TOKEN }}
-          COMMIT_URL: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}
-        run: pnpm run deploy -- --allow-updates --source-control-url "$COMMIT_URL"
+          # --allow-updates: adds and updates extensions without an interactive confirmation, which is
+          # what Shopify recommends for CI. It does not cover deletions; removing an extension needs
+          # SHOPIFY_FLAG_ALLOW_DELETES and a deliberate decision.
+          SHOPIFY_FLAG_ALLOW_UPDATES: "true"
+          # --source-control-url: stamps the version with the commit that produced it.
+          SHOPIFY_FLAG_SOURCE_CONTROL_URL: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}
+        run: pnpm run deploy
