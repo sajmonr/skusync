@@ -11,9 +11,9 @@ export type AppEnvironment = "development" | "production";
 
 const API_BASE_URLS: Record<AppEnvironment, string> = {
   // The fixed ngrok tunnel that fronts the local Web.Api host. Must match the endpoint's `url:` in
-  // ngrok.yml at the repo root.
+  // ngrok.yaml at the repo root.
   development: "https://shopify-skusync.ngrok.app",
-  production: "https://skusync.darkflux.app",
+  production: "https://api.skusync.darkflux.app",
 };
 
 // Declared here rather than pulled in from @types/node: nothing in these projects runs on Node, and
