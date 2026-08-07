@@ -276,12 +276,21 @@ public class ReconcilerTests : IDisposable
         var entity = new SkulabsItemEntity
         {
             SkulabsItemId = Guid.NewGuid(),
-            ShopifyProductVariantId = variantGuid,
             SkulabsSourceItemId = sourceItemId,
-            SkulabsSourceListingId = sourceListingId,
             Title = title,
             Sku = sku,
-            Barcode = barcode
+            Barcode = barcode,
+            Listings =
+            {
+                new SkulabsItemListingEntity
+                {
+                    SkulabsItemListingId = Guid.NewGuid(),
+                    SkulabsSourceListingId = sourceListingId,
+                    RawVariantId = variantGuid.ToString(),
+                    ShopifyProductId = "prod",
+                    ShopifyProductVariantId = variantGuid
+                }
+            }
         };
         _dbContext.SkulabsItems.Add(entity);
         return entity;

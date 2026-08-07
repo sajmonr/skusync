@@ -4,8 +4,8 @@ namespace Web.Api.Features.ItemSync.GetItemSyncItems;
 
 public static class ItemSyncQueryExtensions
 {
-    public static IQueryable<ShopifyProductVariantEntity> ApplyItemSyncSearch(
-        this IQueryable<ShopifyProductVariantEntity> query,
+    public static IQueryable<VariantWithSkulabsItem> ApplyItemSyncSearch(
+        this IQueryable<VariantWithSkulabsItem> query,
         string? search)
     {
         if (string.IsNullOrWhiteSpace(search))
@@ -16,11 +16,11 @@ public static class ItemSyncQueryExtensions
         var normalizedSearch = search.Trim().ToLower();
 
         return query.Where(entity =>
-            entity.DisplayName.ToLower().Contains(normalizedSearch) ||
-            entity.ProductId.ToString().Contains(normalizedSearch) ||
-            entity.VariantId.ToString().Contains(normalizedSearch) ||
-            entity.Sku.ToLower().Contains(normalizedSearch) ||
-            entity.Barcode.ToLower().Contains(normalizedSearch) ||
+            entity.Variant.DisplayName.ToLower().Contains(normalizedSearch) ||
+            entity.Variant.ProductId.ToString().Contains(normalizedSearch) ||
+            entity.Variant.VariantId.ToString().Contains(normalizedSearch) ||
+            entity.Variant.Sku.ToLower().Contains(normalizedSearch) ||
+            entity.Variant.Barcode.ToLower().Contains(normalizedSearch) ||
             (entity.SkulabsItem != null &&
                 (entity.SkulabsItem.SkulabsSourceItemId.ToLower().Contains(normalizedSearch) ||
                  entity.SkulabsItem.Title.ToLower().Contains(normalizedSearch) ||
@@ -28,24 +28,29 @@ public static class ItemSyncQueryExtensions
                  entity.SkulabsItem.Barcode.ToLower().Contains(normalizedSearch))));
     }
 
-    public static IQueryable<ShopifyProductVariantEntity> ApplyItemSyncStatusFilter(
-        this IQueryable<ShopifyProductVariantEntity> query,
+    /// <summary>
+    /// <c>missing-in-skulabs</c> covers a variant with no SkuLabs listing at all and one whose only
+    /// listing belongs to an ambiguous item alike: in both cases there is no item we can act on, which
+    /// is what the filter means.
+    /// </summary>
+    public static IQueryable<VariantWithSkulabsItem> ApplyItemSyncStatusFilter(
+        this IQueryable<VariantWithSkulabsItem> query,
         string? status) => status switch
         {
             "pending-sync" => query.Where(entity =>
-                entity.PendingShopifySync ||
+                entity.Variant.PendingShopifySync ||
                 (entity.SkulabsItem != null && entity.SkulabsItem.PendingSkulabsSync)),
             "missing-in-skulabs" => query.Where(entity => entity.SkulabsItem == null),
             "out-of-sync" => query.Where(entity =>
-                !entity.PendingShopifySync &&
+                !entity.Variant.PendingShopifySync &&
                 entity.SkulabsItem != null &&
                 !entity.SkulabsItem.PendingSkulabsSync &&
-                entity.DisplayName != entity.SkulabsItem.Title),
+                entity.Variant.DisplayName != entity.SkulabsItem.Title),
             "in-sync" => query.Where(entity =>
-                !entity.PendingShopifySync &&
+                !entity.Variant.PendingShopifySync &&
                 entity.SkulabsItem != null &&
                 !entity.SkulabsItem.PendingSkulabsSync &&
-                entity.DisplayName == entity.SkulabsItem.Title),
+                entity.Variant.DisplayName == entity.SkulabsItem.Title),
             _ => query
         };
 }

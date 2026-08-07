@@ -177,9 +177,7 @@ public class AppServerTestHost : IAsyncLifetime
     {
         using var scope = Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        // Reference/lookup tables (ambiguity reasons + statuses) are seeded data and must survive.
-        await db.SkulabsAmbiguousItemListings.ExecuteDeleteAsync();
-        await db.SkulabsAmbiguousItems.ExecuteDeleteAsync();
+        await db.SkulabsItemListings.ExecuteDeleteAsync();
         await db.SkulabsItems.ExecuteDeleteAsync();
         await db.ShopifyProductVariantLogEvents.ExecuteDeleteAsync();
         await db.ShopifyProductVariants.ExecuteDeleteAsync();

@@ -22,20 +22,15 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<ShopifyProductVariantLogEventEntity> ShopifyProductVariantLogEvents { get; init; }
 
     /// <summary>
-    /// Gets the set of SkuLabs inventory items linked to Shopify product variants.
+    /// Gets the set of SkuLabs inventory items, whether or not they map cleanly to a Shopify variant.
     /// </summary>
     public DbSet<SkulabsItemEntity> SkulabsItems { get; init; }
 
     /// <summary>
-    /// Gets the set of SkuLabs items quarantined because they could not be cleanly mapped to a
-    /// single Shopify variant. These take no part in the active sync.
+    /// Gets the set of Shopify listings SkuLabs reports for those items. An item's listing count is
+    /// what makes it syncable, ambiguous, or SkuLabs-only.
     /// </summary>
-    public DbSet<SkulabsAmbiguousItemEntity> SkulabsAmbiguousItems { get; init; }
-
-    /// <summary>
-    /// Gets the set of individual listings belonging to quarantined SkuLabs items.
-    /// </summary>
-    public DbSet<SkulabsAmbiguousItemListingEntity> SkulabsAmbiguousItemListings { get; init; }
+    public DbSet<SkulabsItemListingEntity> SkulabsItemListings { get; init; }
 
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)

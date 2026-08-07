@@ -5,7 +5,9 @@ using SharedKernel;
 namespace Web.Api.Features.AmbiguousItems.GetAmbiguousItems;
 
 /// <summary>
-/// A quarantined SkuLabs item and every listing that made it ambiguous, shaped for the dashboard grid.
+/// A SkuLabs item carrying more than one Shopify listing, with every listing that made it ambiguous,
+/// shaped for the dashboard grid. Ambiguity is derived from listing cardinality rather than stored, so
+/// there is no quarantine row behind this — <see cref="Id"/> is the item's own identifier.
 /// </summary>
 public readonly record struct AmbiguousItemListItem(
     Guid Id,
@@ -19,14 +21,14 @@ public readonly record struct AmbiguousItemListItem(
     string SkulabsUrl,
     IReadOnlyList<AmbiguousItemListingDetails> Listings)
 {
-    public static readonly Expression<Func<SkulabsAmbiguousItemEntity, AmbiguousItemListItem>> Projection =
+    public static readonly Expression<Func<SkulabsItemEntity, AmbiguousItemListItem>> Projection =
         entity => new AmbiguousItemListItem(
-            entity.SkulabsAmbiguousItemId,
+            entity.SkulabsItemId,
             entity.SkulabsSourceItemId,
-            entity.Name,
+            entity.Title,
             entity.Sku,
-            entity.Upc,
-            entity.ListingCount,
+            entity.Barcode,
+            entity.Listings.Count,
             entity.FirstSeenUtc,
             entity.LastSeenUtc,
             "",

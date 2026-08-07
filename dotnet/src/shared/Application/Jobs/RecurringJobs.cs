@@ -42,11 +42,11 @@ public class RecurringJobs(
         var result = await skulabsItemSyncService.Sync(cancellationToken);
 
         logger.LogInformation(
-            "SkuLabs item sync: Created: {Created}, Re-linked: {Updated}, Unmatched: {Unmatched}, Skipped: {Skipped}, "
-            + "Ambiguous +{AmbCreated}/~{AmbUpdated}/-{AmbRemoved}.",
+            "SkuLabs item sync: Created: {Created}, Re-linked: {Updated}, Removed: {Removed}, "
+            + "Unresolved listings: {Unresolved}, Skipped: {Skipped}, Ambiguous: {Ambiguous}.",
             result.CreatedSkulabsItemIds.Count, result.UpdatedSkulabsItemIds.Count,
-            result.UnmatchedCount, result.SkippedCount,
-            result.AmbiguousCreatedCount, result.AmbiguousUpdatedCount, result.AmbiguousRemovedCount);
+            result.RemovedCount, result.UnresolvedListingCount, result.SkippedCount,
+            result.AmbiguousCount);
 
         var touched = result.CreatedSkulabsItemIds.Concat(result.UpdatedSkulabsItemIds).ToArray();
         var reconciled = await reconciler.ReconcileSkulabsItems(touched, cancellationToken);

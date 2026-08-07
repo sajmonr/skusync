@@ -246,14 +246,23 @@ public class SkulabsDispatcherTests : IDisposable
         var item = new SkulabsItemEntity
         {
             SkulabsItemId = Guid.NewGuid(),
-            ShopifyProductVariantId = variant.ShopifyProductVariantId,
             SkulabsSourceItemId = sourceItemId,
-            SkulabsSourceListingId = sourceListingId,
             Title = title,
             Sku = "SKU",
             Barcode = "BAR",
             PendingSkulabsSync = pendingSkulabsSync,
-            FailedSkulabsSyncAttempts = failedSkulabsSyncAttempts
+            FailedSkulabsSyncAttempts = failedSkulabsSyncAttempts,
+            Listings =
+            {
+                new SkulabsItemListingEntity
+                {
+                    SkulabsItemListingId = Guid.NewGuid(),
+                    SkulabsSourceListingId = sourceListingId,
+                    RawVariantId = variantId.ToString(),
+                    ShopifyProductId = productId.ToString(),
+                    ShopifyProductVariantId = variant.ShopifyProductVariantId
+                }
+            }
         };
         _dbContext.SkulabsItems.Add(item);
 

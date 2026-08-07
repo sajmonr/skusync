@@ -286,12 +286,20 @@ public class SkulabsTitleSyncTests(AppServerTestHost factory) : IAsyncLifetime
         db.SkulabsItems.Add(new SkulabsItemEntity
         {
             SkulabsItemId = Guid.CreateVersion7(),
-            ShopifyProductVariantId = variant.ShopifyProductVariantId,
             SkulabsSourceItemId = skulabsSourceItemId,
-            SkulabsSourceListingId = $"listing-{skulabsSourceItemId}",
             Title = skulabsTitle,
             Sku = $"sku-{variantId}",
-            Barcode = $"bar-{variantId}"
+            Barcode = $"bar-{variantId}",
+            Listings =
+            {
+                new SkulabsItemListingEntity
+                {
+                    SkulabsSourceListingId = $"listing-{skulabsSourceItemId}",
+                    RawVariantId = variantId.ToString(),
+                    ShopifyProductId = productId.ToString(),
+                    ShopifyProductVariantId = variant.ShopifyProductVariantId
+                }
+            }
         });
 
         await db.SaveChangesAsync();

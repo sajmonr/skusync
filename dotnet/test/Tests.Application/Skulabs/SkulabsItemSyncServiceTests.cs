@@ -30,67 +30,67 @@ public class SkulabsItemSyncServiceTests : IDisposable
     [Fact]
     public async Task Sync_ShouldReturnEmpty_WhenNoItemsFromSkulabs()
     {
-        _skulabsClient.GetAllItems().Returns(Syncable());
+        _skulabsClient.GetAllItems().Returns(Collection());
         var sut = CreateSut();
 
         var result = await sut.Sync();
 
         result.CreatedSkulabsItemIds.ShouldBeEmpty();
         result.UpdatedSkulabsItemIds.ShouldBeEmpty();
-        result.UnmatchedCount.ShouldBe(0);
+        result.UnresolvedListingCount.ShouldBe(0);
         result.SkippedCount.ShouldBe(0);
     }
 
     [Fact]
-    public async Task Sync_ShouldSkip_WhenNoMatchingVariantInDatabase()
+    public async Task Sync_ShouldNotWipeExistingItems_WhenSkulabsReturnsNothing()
     {
-        _skulabsClient.GetAllItems().Returns(Syncable(NewSkulabsItem(variantId: 999)));
-        var sut = CreateSut();
+        // An empty payload means "the call told us nothing", not "SkuLabs has no items".
+        SeedVariant(variantId: 200L);
+        SeedSkulabsItem("src", StoredListing("lst", "200"));
+        await _dbContext.SaveChangesAsync();
 
-        var result = await sut.Sync();
+        _skulabsClient.GetAllItems().Returns(Collection());
 
-        result.UnmatchedCount.ShouldBe(1);
-        result.CreatedSkulabsItemIds.ShouldBeEmpty();
-        (await _dbContext.SkulabsItems.CountAsync()).ShouldBe(0);
+        await CreateSut().Sync();
+
+        (await _dbContext.SkulabsItems.CountAsync()).ShouldBe(1);
     }
 
     [Fact]
-    public async Task Sync_ShouldProcessRemainingItems_WhenOneItemIsUnmatched()
+    public async Task Sync_ShouldStoreItemWithUnresolvedListing_WhenNoMatchingVariantInDatabase()
     {
-        SeedVariant(variantId: 200L);
-        await _dbContext.SaveChangesAsync();
-
-        _skulabsClient.GetAllItems().Returns(Syncable(
-            NewSkulabsItem(variantId: 999),
-            NewSkulabsItem(itemId: "src-good", listingId: "lst-good", variantId: 200)));
+        _skulabsClient.GetAllItems().Returns(Collection(ApiItem("src", Listing("lst", "999"))));
         var sut = CreateSut();
 
         var result = await sut.Sync();
 
-        result.UnmatchedCount.ShouldBe(1);
+        result.UnresolvedListingCount.ShouldBe(1);
         result.CreatedSkulabsItemIds.Count.ShouldBe(1);
-        (await _dbContext.SkulabsItems.CountAsync()).ShouldBe(1);
+
+        var stored = await _dbContext.SkulabsItems.Include(i => i.Listings).SingleAsync();
+        stored.Listings.Single().ShopifyProductVariantId.ShouldBeNull();
+        stored.Listings.Single().RawVariantId.ShouldBe("999");
     }
 
     [Fact]
     public async Task Sync_ShouldUseShopifyVariantIdAndNotSkuOrBarcode_ForMatching()
     {
         // Variant has matching SKU/barcode values but a *different* VariantId.
-        // Must not match — matching is by variant id only.
+        // Must not resolve — resolution is by variant id only.
         SeedVariant(variantId: 999L, sku: "shared-sku", barcode: "shared-barcode");
         await _dbContext.SaveChangesAsync();
 
-        _skulabsClient.GetAllItems().Returns(Syncable(
-            new SkuLabsItem("src", "lst", 200, "shared-sku", "shared-barcode", "Title")));
-        var sut = CreateSut();
+        _skulabsClient.GetAllItems().Returns(Collection(
+            ApiItem("src", "Title", "shared-sku", "shared-barcode", Listing("lst", "200"))));
 
-        var result = await sut.Sync();
+        var result = await CreateSut().Sync();
 
-        result.UnmatchedCount.ShouldBe(1);
-        (await _dbContext.SkulabsItems.CountAsync()).ShouldBe(0);
+        result.UnresolvedListingCount.ShouldBe(1);
+        var stored = await _dbContext.SkulabsItems.Include(i => i.Listings).SingleAsync();
+        stored.Listings.Single().ShopifyProductVariantId.ShouldBeNull();
     }
 
-    // ---------- Case 1: variant has no Skulabs item linked ----------
+    // ---------- Creating a link ----------
 
     [Fact]
     public async Task Sync_ShouldCreateSkulabsItem_WhenMatchingVariantHasNoneInDatabase()
@@ -98,28 +98,28 @@ public class SkulabsItemSyncServiceTests : IDisposable
         var variant = SeedVariant(variantId: 45696210862241L);
         await _dbContext.SaveChangesAsync();
 
-        _skulabsClient.GetAllItems().Returns(Syncable(
-            NewSkulabsItem(
-                itemId: "69b4543c6642ed434a5b1c4a",
-                listingId: "69b454b06642ed434a5bf571",
-                variantId: 45696210862241L,
-                sku: "1 bird",
-                barcode: "10862241",
-                title: "Yellow Vintage Nature Domino Necklace (Goose (1bird))")));
-        var sut = CreateSut();
+        _skulabsClient.GetAllItems().Returns(Collection(
+            ApiItem(
+                "69b4543c6642ed434a5b1c4a",
+                "Yellow Vintage Nature Domino Necklace (Goose (1bird))",
+                "1 bird",
+                "10862241",
+                Listing("69b454b06642ed434a5bf571", "45696210862241"))));
 
-        var result = await sut.Sync();
+        var result = await CreateSut().Sync();
 
         result.CreatedSkulabsItemIds.Count.ShouldBe(1);
         result.UpdatedSkulabsItemIds.ShouldBeEmpty();
 
-        var stored = await _dbContext.SkulabsItems.SingleAsync();
-        stored.ShopifyProductVariantId.ShouldBe(variant.ShopifyProductVariantId);
+        var stored = await _dbContext.SkulabsItems.Include(i => i.Listings).SingleAsync();
         stored.SkulabsSourceItemId.ShouldBe("69b4543c6642ed434a5b1c4a");
-        stored.SkulabsSourceListingId.ShouldBe("69b454b06642ed434a5bf571");
         stored.Sku.ShouldBe("1 bird");
         stored.Barcode.ShouldBe("10862241");
         stored.Title.ShouldBe("Yellow Vintage Nature Domino Necklace (Goose (1bird))");
+
+        var listing = stored.Listings.Single();
+        listing.SkulabsSourceListingId.ShouldBe("69b454b06642ed434a5bf571");
+        listing.ShopifyProductVariantId.ShouldBe(variant.ShopifyProductVariantId);
         result.CreatedSkulabsItemIds.ShouldContain(stored.SkulabsItemId);
     }
 
@@ -129,32 +129,29 @@ public class SkulabsItemSyncServiceTests : IDisposable
         var variant = SeedVariant(variantId: 200L);
         await _dbContext.SaveChangesAsync();
 
-        _skulabsClient.GetAllItems().Returns(Syncable(
-            NewSkulabsItem(itemId: "skulabs-1", variantId: 200)));
+        _skulabsClient.GetAllItems().Returns(Collection(
+            ApiItem("skulabs-1", Listing("lst", "200"))));
 
         await CreateSut().Sync();
 
-        var logs = await _dbContext.ShopifyProductVariantLogEvents
-            .Where(l => l.ShopifyProductVariantId == variant.ShopifyProductVariantId)
-            .ToListAsync();
+        var logs = await LogsForVariant(variant.ShopifyProductVariantId);
         logs.Count.ShouldBe(1);
         logs[0].Message.ShouldBe("Linked to SkuLabs item 'skulabs-1'.");
     }
 
-    // ---------- Case 2: variant has the same Skulabs item linked (no-op) ----------
+    // ---------- Unchanged link is a no-op ----------
 
     [Fact]
     public async Task Sync_ShouldBeNoOp_WhenLinkIsAlreadyIdentical()
     {
         var variant = SeedVariant(variantId: 200L);
-        var existing = SeedSkulabsItem(variant.ShopifyProductVariantId,
-            sourceItemId: "src-1", sourceListingId: "lst-1",
+        var existing = SeedSkulabsItem("src-1", StoredListing("lst-1", "200", variant),
             title: "Same Title", sku: "same-sku", barcode: "same-bar");
         await _dbContext.SaveChangesAsync();
         var originalId = existing.SkulabsItemId;
 
-        _skulabsClient.GetAllItems().Returns(Syncable(
-            new SkuLabsItem("src-1", "lst-1", 200, "same-sku", "same-bar", "Same Title")));
+        _skulabsClient.GetAllItems().Returns(Collection(
+            ApiItem("src-1", "Same Title", "same-sku", "same-bar", Listing("lst-1", "200"))));
 
         var result = await CreateSut().Sync();
 
@@ -167,19 +164,18 @@ public class SkulabsItemSyncServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Sync_ShouldNotRefreshMetadata_WhenLinkIdsMatchButMetadataDiffers()
+    public async Task Sync_ShouldNotRefreshMetadata_WhenLinkIsUnchangedButMetadataDiffers()
     {
-        // Same SkuLabs source id and same variant — only title/sku/barcode differ.
-        // Per the contract, the row is NOT touched.
+        // Same SkuLabs source id, same listing, same variant — only title/sku/barcode differ.
+        // The title is ours to push, so a stale SkuLabs value must not overwrite it here.
         var variant = SeedVariant(variantId: 200L);
-        var existing = SeedSkulabsItem(variant.ShopifyProductVariantId,
-            sourceItemId: "src-1", sourceListingId: "lst-old",
+        var existing = SeedSkulabsItem("src-1", StoredListing("lst-1", "200", variant),
             title: "Old Title", sku: "old-sku", barcode: "old-bar");
         await _dbContext.SaveChangesAsync();
         var originalId = existing.SkulabsItemId;
 
-        _skulabsClient.GetAllItems().Returns(Syncable(
-            new SkuLabsItem("src-1", "lst-new", 200, "new-sku", "new-bar", "New Title")));
+        _skulabsClient.GetAllItems().Returns(Collection(
+            ApiItem("src-1", "New Title", "new-sku", "new-bar", Listing("lst-1", "200"))));
 
         var result = await CreateSut().Sync();
 
@@ -189,170 +185,143 @@ public class SkulabsItemSyncServiceTests : IDisposable
 
         var stored = await _dbContext.SkulabsItems.SingleAsync();
         stored.SkulabsItemId.ShouldBe(originalId);
-        stored.SkulabsSourceListingId.ShouldBe("lst-old");
         stored.Title.ShouldBe("Old Title");
         stored.Sku.ShouldBe("old-sku");
         stored.Barcode.ShouldBe("old-bar");
     }
 
-    // ---------- Case 3a: same SkuLabs item moved to a different variant (re-link) ----------
+    [Fact]
+    public async Task Sync_ShouldRefreshLastSeen_WhenItemIsStillReported()
+    {
+        var variant = SeedVariant(variantId: 200L);
+        var existing = SeedSkulabsItem("src-1", StoredListing("lst-1", "200", variant));
+        existing.LastSeenUtc = DateTime.UtcNow.AddDays(-3);
+        await _dbContext.SaveChangesAsync();
+
+        _skulabsClient.GetAllItems().Returns(Collection(ApiItem("src-1", Listing("lst-1", "200"))));
+
+        await CreateSut().Sync();
+
+        var stored = await _dbContext.SkulabsItems.SingleAsync();
+        stored.LastSeenUtc.ShouldBeGreaterThan(DateTime.UtcNow.AddMinutes(-1));
+    }
+
+    // ---------- Re-linking ----------
 
     [Fact]
     public async Task Sync_ShouldReLink_WhenSkulabsItemMovesToDifferentVariant()
     {
-        // DB: V1 ↔ S2.  API: V3 ↔ S2.  Expected: link V1↔S2 severed, link V3↔S2 created
-        // (as a re-pointed row — PK preserved).
+        // DB: V1 ↔ S2.  API: V3 ↔ S2, same listing id. Expected: the row is re-pointed, PK preserved.
         var variantV1 = SeedVariant(variantId: 1L);
         var variantV3 = SeedVariant(variantId: 3L);
-        var existing = SeedSkulabsItem(variantV1.ShopifyProductVariantId,
-            sourceItemId: "S2", sourceListingId: "L-old",
+        var existing = SeedSkulabsItem("S2", StoredListing("L-1", "1", variantV1),
             title: "Old Title", sku: "old-sku", barcode: "old-bar");
         await _dbContext.SaveChangesAsync();
         var preservedRowId = existing.SkulabsItemId;
 
-        _skulabsClient.GetAllItems().Returns(Syncable(
-            new SkuLabsItem("S2", "L-new", 3, "new-sku", "new-bar", "New Title")));
+        _skulabsClient.GetAllItems().Returns(Collection(
+            ApiItem("S2", "New Title", "new-sku", "new-bar", Listing("L-1", "3"))));
 
         var result = await CreateSut().Sync();
 
         result.UpdatedSkulabsItemIds.ShouldContain(preservedRowId);
         result.CreatedSkulabsItemIds.ShouldBeEmpty();
 
-        // Exactly one row, with the same PK, now pointing at V3, metadata refreshed.
-        var stored = await _dbContext.SkulabsItems.SingleAsync();
+        var stored = await _dbContext.SkulabsItems.Include(i => i.Listings).SingleAsync();
         stored.SkulabsItemId.ShouldBe(preservedRowId);
-        stored.ShopifyProductVariantId.ShouldBe(variantV3.ShopifyProductVariantId);
-        stored.SkulabsSourceListingId.ShouldBe("L-new");
+        stored.Listings.Single().ShopifyProductVariantId.ShouldBe(variantV3.ShopifyProductVariantId);
+        // Metadata refreshed because a new link was written.
         stored.Title.ShouldBe("New Title");
         stored.Sku.ShouldBe("new-sku");
         stored.Barcode.ShouldBe("new-bar");
 
-        // Old variant got "unlinked", new variant got "linked".
-        var v1Logs = await LogsForVariant(variantV1.ShopifyProductVariantId);
-        v1Logs.Count.ShouldBe(1);
-        v1Logs[0].Message.ShouldBe("Unlinked from SkuLabs item 'S2'.");
-
-        var v3Logs = await LogsForVariant(variantV3.ShopifyProductVariantId);
-        v3Logs.Count.ShouldBe(1);
-        v3Logs[0].Message.ShouldBe("Linked to SkuLabs item 'S2'.");
+        (await LogsForVariant(variantV1.ShopifyProductVariantId)).Single()
+            .Message.ShouldBe("Unlinked from SkuLabs item 'S2'.");
+        (await LogsForVariant(variantV3.ShopifyProductVariantId)).Single()
+            .Message.ShouldBe("Linked to SkuLabs item 'S2'.");
     }
-
-    // ---------- Case 3b: variant has a *different* SkuLabs item linked (replace) ----------
 
     [Fact]
     public async Task Sync_ShouldReplaceLink_WhenVariantGetsDifferentSkulabsItem()
     {
-        // DB: V200 ↔ S-old.  API: V200 ↔ S-new.  Expected: old row deleted, new row created.
+        // DB: V200 ↔ S-old.  API: V200 ↔ S-new, and S-old is gone from SkuLabs entirely.
         var variant = SeedVariant(variantId: 200L);
-        SeedSkulabsItem(variant.ShopifyProductVariantId,
-            sourceItemId: "S-old", sourceListingId: "lst-old",
+        SeedSkulabsItem("S-old", StoredListing("lst-old", "200", variant),
             title: "Old", sku: "old-sku", barcode: "old-bar");
         await _dbContext.SaveChangesAsync();
 
-        _skulabsClient.GetAllItems().Returns(Syncable(
-            new SkuLabsItem("S-new", "lst-new", 200, "new-sku", "new-bar", "New")));
+        _skulabsClient.GetAllItems().Returns(Collection(
+            ApiItem("S-new", "New", "new-sku", "new-bar", Listing("lst-new", "200"))));
 
         var result = await CreateSut().Sync();
 
         result.CreatedSkulabsItemIds.Count.ShouldBe(1);
-        result.UpdatedSkulabsItemIds.ShouldBeEmpty();
+        result.RemovedCount.ShouldBe(1);
 
-        var stored = await _dbContext.SkulabsItems.SingleAsync();
+        var stored = await _dbContext.SkulabsItems.Include(i => i.Listings).SingleAsync();
         stored.SkulabsSourceItemId.ShouldBe("S-new");
-        stored.ShopifyProductVariantId.ShouldBe(variant.ShopifyProductVariantId);
+        stored.Listings.Single().ShopifyProductVariantId.ShouldBe(variant.ShopifyProductVariantId);
         stored.Title.ShouldBe("New");
-        stored.Sku.ShouldBe("new-sku");
 
         var logs = await LogsForVariant(variant.ShopifyProductVariantId);
-        // Order matters: sever first, then link.
         logs.Select(l => l.Message).ShouldBe([
-            "Unlinked from SkuLabs item 'S-old'.",
-            "Linked to SkuLabs item 'S-new'."
-        ]);
+            "Linked to SkuLabs item 'S-new'.",
+            "Unlinked from SkuLabs item 'S-old'."
+        ], ignoreOrder: true);
     }
-
-    // ---------- Edge case: two SkuLabs items swap variants in the same batch ----------
 
     [Fact]
     public async Task Sync_ShouldHandleSwap_WhenTwoSkulabsItemsExchangeVariants()
     {
-        // DB:  V1↔SA,  V2↔SB.  API:  V1↔SB,  V2↔SA.
-        //
-        // Note: a single transaction can't re-point both rows in place — the unique index
-        // on ShopifyProductVariantId would be violated mid-transaction. The reconciler will
-        // sever one row and re-create it; the other is re-pointed. The *end state* is what
-        // matters and is asserted here.
+        // DB:  V1↔SA,  V2↔SB.  API:  V1↔SB,  V2↔SA. Nothing blocks re-pointing both rows in
+        // place any more — the link lives on the listing, not on a unique column.
         var v1 = SeedVariant(variantId: 1L);
         var v2 = SeedVariant(variantId: 2L);
-        SeedSkulabsItem(v1.ShopifyProductVariantId,
-            sourceItemId: "SA", sourceListingId: "lA",
-            title: "A", sku: "ska", barcode: "bca");
-        SeedSkulabsItem(v2.ShopifyProductVariantId,
-            sourceItemId: "SB", sourceListingId: "lB",
-            title: "B", sku: "skb", barcode: "bcb");
+        SeedSkulabsItem("SA", StoredListing("lA", "1", v1), title: "A", sku: "ska", barcode: "bca");
+        SeedSkulabsItem("SB", StoredListing("lB", "2", v2), title: "B", sku: "skb", barcode: "bcb");
         await _dbContext.SaveChangesAsync();
 
-        _skulabsClient.GetAllItems().Returns(Syncable(
-            new SkuLabsItem("SB", "lB2", 1, "skb2", "bcb2", "B2"),
-            new SkuLabsItem("SA", "lA2", 2, "ska2", "bca2", "A2")));
+        _skulabsClient.GetAllItems().Returns(Collection(
+            ApiItem("SB", "B2", "skb2", "bcb2", Listing("lB", "1")),
+            ApiItem("SA", "A2", "ska2", "bca2", Listing("lA", "2"))));
 
         var result = await CreateSut().Sync();
 
-        var stored = await _dbContext.SkulabsItems.ToListAsync();
+        var stored = await _dbContext.SkulabsItems.Include(i => i.Listings).ToListAsync();
         stored.Count.ShouldBe(2);
 
         var newA = stored.Single(s => s.SkulabsSourceItemId == "SA");
         var newB = stored.Single(s => s.SkulabsSourceItemId == "SB");
-        newA.ShopifyProductVariantId.ShouldBe(v2.ShopifyProductVariantId);
+        newA.Listings.Single().ShopifyProductVariantId.ShouldBe(v2.ShopifyProductVariantId);
         newA.Title.ShouldBe("A2");
-        newA.Sku.ShouldBe("ska2");
-        newB.ShopifyProductVariantId.ShouldBe(v1.ShopifyProductVariantId);
+        newB.Listings.Single().ShopifyProductVariantId.ShouldBe(v1.ShopifyProductVariantId);
         newB.Title.ShouldBe("B2");
-        newB.Sku.ShouldBe("skb2");
 
-        // Two link writes overall — distributed across Created/Updated depending on which
-        // row was severed first. Total work done == 2.
-        (result.CreatedSkulabsItemIds.Count + result.UpdatedSkulabsItemIds.Count).ShouldBe(2);
+        result.UpdatedSkulabsItemIds.Count.ShouldBe(2);
     }
 
     [Fact]
-    public async Task Sync_ShouldFreeUniqueIndex_WhenSeveringDestinationVariantBeforeReLink()
+    public async Task Sync_ShouldRemoveItem_WhenSkulabsNoLongerReportsIt()
     {
-        // DB: V1↔SA, V2↔SB. API: V1↔SB (just one item, replacing V1's SA, and pulling SB off V2).
-        // Without severing V1's old row first the re-link would conflict on the unique
-        // index on ShopifyProductVariantId. SaveChanges must succeed.
-        var v1 = SeedVariant(variantId: 1L);
-        var v2 = SeedVariant(variantId: 2L);
-        SeedSkulabsItem(v1.ShopifyProductVariantId, sourceItemId: "SA", sourceListingId: "la");
-        var rowB = SeedSkulabsItem(v2.ShopifyProductVariantId, sourceItemId: "SB", sourceListingId: "lb");
+        var variant = SeedVariant(variantId: 200L);
+        SeedSkulabsItem("gone", StoredListing("lst", "200", variant));
+        SeedSkulabsItem("kept", StoredListing("lst-2", "200"));
         await _dbContext.SaveChangesAsync();
 
-        _skulabsClient.GetAllItems().Returns(Syncable(
-            new SkuLabsItem("SB", "lb2", 1, "sku", "bar", "Title")));
+        _skulabsClient.GetAllItems().Returns(Collection(ApiItem("kept", Listing("lst-2", "999"))));
 
         var result = await CreateSut().Sync();
 
-        var stored = await _dbContext.SkulabsItems.ToListAsync();
-        stored.Count.ShouldBe(1);
-        stored[0].SkulabsItemId.ShouldBe(rowB.SkulabsItemId);
-        stored[0].ShopifyProductVariantId.ShouldBe(v1.ShopifyProductVariantId);
-        stored[0].SkulabsSourceItemId.ShouldBe("SB");
-
-        result.UpdatedSkulabsItemIds.ShouldContain(rowB.SkulabsItemId);
-
-        var v1Logs = await LogsForVariant(v1.ShopifyProductVariantId);
-        v1Logs.Select(l => l.Message).ShouldBe([
-            "Unlinked from SkuLabs item 'SA'.",
-            "Linked to SkuLabs item 'SB'."
-        ]);
-        var v2Logs = await LogsForVariant(v2.ShopifyProductVariantId);
-        v2Logs.Single().Message.ShouldBe("Unlinked from SkuLabs item 'SB'.");
+        result.RemovedCount.ShouldBe(1);
+        (await _dbContext.SkulabsItems.SingleAsync()).SkulabsSourceItemId.ShouldBe("kept");
+        (await LogsForVariant(variant.ShopifyProductVariantId)).Single()
+            .Message.ShouldBe("Unlinked from SkuLabs item 'gone'.");
     }
 
-    // ---------- Ambiguous items ----------
+    // ---------- Ambiguity, derived from listing cardinality ----------
 
     [Fact]
-    public async Task Sync_ShouldQuarantineItem_WhenItHasMultipleListings()
+    public async Task Sync_ShouldKeepEveryListing_WhenItemHasMoreThanOne()
     {
         var variantA = SeedVariant(variantId: 10L);
         await _dbContext.SaveChangesAsync();
@@ -362,38 +331,64 @@ public class SkulabsItemSyncServiceTests : IDisposable
 
         var result = await CreateSut().Sync();
 
-        result.AmbiguousCreatedCount.ShouldBe(1);
-        (await _dbContext.SkulabsItems.CountAsync()).ShouldBe(0);
+        result.AmbiguousCount.ShouldBe(1);
 
-        var ambiguous = await _dbContext.SkulabsAmbiguousItems.Include(a => a.Listings).SingleAsync();
-        ambiguous.SkulabsSourceItemId.ShouldBe("multi");
-        ambiguous.ListingCount.ShouldBe(2);
-        ambiguous.Listings.Count.ShouldBe(2);
+        var stored = await _dbContext.SkulabsItems.Include(i => i.Listings).SingleAsync();
+        stored.SkulabsSourceItemId.ShouldBe("multi");
+        stored.Listings.Count.ShouldBe(2);
 
         // The listing whose raw variant matches a known variant is resolved; the other is not.
-        ambiguous.Listings.Single(l => l.RawVariantId == "10").ShopifyProductVariantId
+        stored.Listings.Single(l => l.RawVariantId == "10").ShopifyProductVariantId
             .ShouldBe(variantA.ShopifyProductVariantId);
-        ambiguous.Listings.Single(l => l.RawVariantId == "20").ShopifyProductVariantId
+        stored.Listings.Single(l => l.RawVariantId == "20").ShopifyProductVariantId
             .ShouldBeNull();
+
+        // Nothing about an ambiguous item is syncable, even the listing that did resolve.
+        (await _dbContext.SkulabsItemListings.Where(SkulabsItemLinks.IsSyncable).CountAsync())
+            .ShouldBe(0);
+
+        // The resolved variant is told why it has no SkuLabs item. Claiming it was "linked" would
+        // contradict what every other read path reports for it.
+        var logs = await LogsForVariant(variantA.ShopifyProductVariantId);
+        logs.Single().Message.ShouldBe(
+            "SkuLabs item 'multi' lists 2 Shopify variants, so it was not linked to this one. "
+            + "Resolve the duplicate listings in SkuLabs.");
+        logs.ShouldNotContain(l => l.Message.StartsWith("Linked to SkuLabs item"));
     }
 
     [Fact]
-    public async Task Sync_ShouldLeaveItemAlone_WhenItHasNoShopifyListings()
+    public async Task Sync_ShouldNotRepeatTheAmbiguityNotice_WhenItemStaysAmbiguous()
+    {
+        var variant = SeedVariant(variantId: 10L);
+        SeedSkulabsItem("multi", StoredListing("lst-a", "10", variant), StoredListing("lst-b", "20"));
+        await _dbContext.SaveChangesAsync();
+
+        _skulabsClient.GetAllItems().Returns(Collection(
+            ApiItem("multi", Listing("lst-a", "10"), Listing("lst-b", "20"))));
+
+        await CreateSut().Sync();
+
+        // Already ambiguous before the run, so there is no transition to report.
+        (await LogsForVariant(variant.ShopifyProductVariantId)).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Sync_ShouldStoreItem_WhenItHasNoShopifyListings()
     {
         _skulabsClient.GetAllItems().Returns(Collection(ApiItem("empty")));
 
         var result = await CreateSut().Sync();
 
-        result.AmbiguousCreatedCount.ShouldBe(0);
-        (await _dbContext.SkulabsAmbiguousItems.CountAsync()).ShouldBe(0);
-        (await _dbContext.SkulabsItems.CountAsync()).ShouldBe(0);
+        result.AmbiguousCount.ShouldBe(0);
+        var stored = await _dbContext.SkulabsItems.Include(i => i.Listings).SingleAsync();
+        stored.Listings.ShouldBeEmpty();
     }
 
     [Fact]
-    public async Task Sync_ShouldSeverActiveLink_WhenItemLosesItsLastShopifyListing()
+    public async Task Sync_ShouldDropTheListing_WhenItemLosesItsLastShopifyListing()
     {
         var variant = SeedVariant(variantId: 200L);
-        SeedSkulabsItem(variant.ShopifyProductVariantId, sourceItemId: "gone", sourceListingId: "lst");
+        SeedSkulabsItem("gone", StoredListing("lst", "200", variant));
         await _dbContext.SaveChangesAsync();
 
         // SkuLabs still returns the item, but its only listing is now internal (non-numeric variant),
@@ -403,19 +398,98 @@ public class SkulabsItemSyncServiceTests : IDisposable
 
         await CreateSut().Sync();
 
-        (await _dbContext.SkulabsItems.CountAsync()).ShouldBe(0);
-        (await _dbContext.SkulabsAmbiguousItems.CountAsync()).ShouldBe(0);
+        var stored = await _dbContext.SkulabsItems.Include(i => i.Listings).SingleAsync();
+        stored.Listings.ShouldBeEmpty();
 
-        var logs = await LogsForVariant(variant.ShopifyProductVariantId);
-        logs.Single().Message.ShouldBe("Unlinked from SkuLabs item 'gone'.");
+        (await LogsForVariant(variant.ShopifyProductVariantId)).Single()
+            .Message.ShouldBe("Unlinked from SkuLabs item 'gone'.");
+    }
+
+    [Fact]
+    public async Task Sync_ShouldBecomeSyncable_WhenAmbiguousItemDropsToOneListing()
+    {
+        // The whole point of one table: an item crossing the ambiguity line keeps its identity.
+        var variant = SeedVariant(variantId: 200L);
+        var existing = SeedSkulabsItem("was-ambiguous",
+            StoredListing("lst-a", "200", variant),
+            StoredListing("lst-b", "300"));
+        await _dbContext.SaveChangesAsync();
+        var preservedRowId = existing.SkulabsItemId;
+        var firstSeen = existing.FirstSeenUtc;
+
+        _skulabsClient.GetAllItems().Returns(Collection(
+            ApiItem("was-ambiguous", Listing("lst-a", "200"))));
+
+        var result = await CreateSut().Sync();
+
+        result.AmbiguousCount.ShouldBe(0);
+
+        var stored = await _dbContext.SkulabsItems.Include(i => i.Listings).SingleAsync();
+        stored.SkulabsItemId.ShouldBe(preservedRowId);
+        stored.FirstSeenUtc.ShouldBe(firstSeen);
+        stored.Listings.Single().ShopifyProductVariantId.ShouldBe(variant.ShopifyProductVariantId);
+
+        (await _dbContext.SkulabsItemListings.Where(SkulabsItemLinks.IsSyncable).CountAsync())
+            .ShouldBe(1);
+
+        // Now that the ambiguity is resolved the variant really is linked, and says so.
+        (await LogsForVariant(variant.ShopifyProductVariantId)).Single()
+            .Message.ShouldBe("Linked to SkuLabs item 'was-ambiguous'.");
+    }
+
+    [Fact]
+    public async Task Sync_ShouldStopBeingSyncable_WhenSyncedItemGainsASecondListing()
+    {
+        var variant = SeedVariant(variantId: 200L);
+        SeedSkulabsItem("now-ambiguous", StoredListing("lst-a", "200", variant));
+        await _dbContext.SaveChangesAsync();
+
+        _skulabsClient.GetAllItems().Returns(Collection(
+            ApiItem("now-ambiguous", Listing("lst-a", "200"), Listing("lst-b", "300"))));
+
+        var result = await CreateSut().Sync();
+
+        result.AmbiguousCount.ShouldBe(1);
+
+        var stored = await _dbContext.SkulabsItems.Include(i => i.Listings).SingleAsync();
+        stored.Listings.Count.ShouldBe(2);
+        (await _dbContext.SkulabsItemListings.Where(SkulabsItemLinks.IsSyncable).CountAsync())
+            .ShouldBe(0);
+
+        // The variant genuinely lost a link it had, so it is told both that and why.
+        (await LogsForVariant(variant.ShopifyProductVariantId)).Select(l => l.Message).ShouldBe([
+            "Unlinked from SkuLabs item 'now-ambiguous'.",
+            "SkuLabs item 'now-ambiguous' lists 2 Shopify variants, so it was not linked to this one. "
+            + "Resolve the duplicate listings in SkuLabs."
+        ]);
+    }
+
+    [Fact]
+    public async Task Sync_ShouldNotMakeEitherLinkSyncable_WhenTwoItemsClaimTheSameVariant()
+    {
+        // The variant half of the cardinality guard. Both items have exactly one listing, so each
+        // looks syncable on its own — only the contested variant disqualifies them.
+        SeedVariant(variantId: 200L);
+        await _dbContext.SaveChangesAsync();
+
+        _skulabsClient.GetAllItems().Returns(Collection(
+            ApiItem("first", Listing("lst-1", "200")),
+            ApiItem("second", Listing("lst-2", "200"))));
+
+        await CreateSut().Sync();
+
+        (await _dbContext.SkulabsItems.CountAsync()).ShouldBe(2);
+        (await _dbContext.SkulabsItemListings.CountAsync()).ShouldBe(2);
+        (await _dbContext.SkulabsItemListings.Where(SkulabsItemLinks.IsSyncable).CountAsync())
+            .ShouldBe(0);
     }
 
     [Fact]
     public async Task Sync_ShouldStillResolveDeletedVariant_OnAmbiguousItemListing()
     {
         // A deleted Shopify variant is treated as "gone" for syncing, but a multi-listing item that
-        // still references it must stay ambiguous and surface the deleted variant so it can be fixed
-        // in SkuLabs. The variant lookup deliberately includes deleted variants for this reason.
+        // still references it must surface the deleted variant so it can be fixed in SkuLabs. The
+        // variant lookup deliberately includes deleted variants for this reason.
         var liveVariant = SeedVariant(variantId: 10L);
         var deletedVariant = SeedVariant(variantId: 20L);
         deletedVariant.IsDeleted = true;
@@ -426,11 +500,11 @@ public class SkulabsItemSyncServiceTests : IDisposable
 
         var result = await CreateSut().Sync();
 
-        result.AmbiguousCreatedCount.ShouldBe(1);
-        var ambiguous = await _dbContext.SkulabsAmbiguousItems.Include(a => a.Listings).SingleAsync();
-        ambiguous.Listings.Single(l => l.RawVariantId == "10").ShopifyProductVariantId
+        result.AmbiguousCount.ShouldBe(1);
+        var stored = await _dbContext.SkulabsItems.Include(i => i.Listings).SingleAsync();
+        stored.Listings.Single(l => l.RawVariantId == "10").ShopifyProductVariantId
             .ShouldBe(liveVariant.ShopifyProductVariantId);
-        ambiguous.Listings.Single(l => l.RawVariantId == "20").ShopifyProductVariantId
+        stored.Listings.Single(l => l.RawVariantId == "20").ShopifyProductVariantId
             .ShouldBe(deletedVariant.ShopifyProductVariantId);
     }
 
@@ -441,78 +515,20 @@ public class SkulabsItemSyncServiceTests : IDisposable
         deletedVariant.IsDeleted = true;
         await _dbContext.SaveChangesAsync();
 
-        _skulabsClient.GetAllItems().Returns(Syncable(NewSkulabsItem(itemId: "single", variantId: 200)));
+        _skulabsClient.GetAllItems().Returns(Collection(ApiItem("single", Listing("lst", "200"))));
 
         var result = await CreateSut().Sync();
 
         // Mapped once and then invisible on the item-sync page via that endpoint's IsDeleted filter.
         result.CreatedSkulabsItemIds.Count.ShouldBe(1);
-        (await _dbContext.SkulabsAmbiguousItems.CountAsync()).ShouldBe(0);
-        var stored = await _dbContext.SkulabsItems.SingleAsync();
-        stored.ShopifyProductVariantId.ShouldBe(deletedVariant.ShopifyProductVariantId);
+        var stored = await _dbContext.SkulabsItems.Include(i => i.Listings).SingleAsync();
+        stored.Listings.Single().ShopifyProductVariantId.ShouldBe(deletedVariant.ShopifyProductVariantId);
     }
 
     [Fact]
-    public async Task Sync_ShouldNotQuarantine_WhenItemIsCleanlySyncable()
+    public async Task Sync_ShouldReplaceListings_WhenItemRemainsAmbiguousWithDifferentOnes()
     {
-        SeedVariant(variantId: 200L);
-        await _dbContext.SaveChangesAsync();
-
-        _skulabsClient.GetAllItems().Returns(Syncable(NewSkulabsItem(itemId: "clean", variantId: 200)));
-
-        var result = await CreateSut().Sync();
-
-        result.CreatedSkulabsItemIds.Count.ShouldBe(1);
-        (await _dbContext.SkulabsAmbiguousItems.CountAsync()).ShouldBe(0);
-    }
-
-    [Fact]
-    public async Task Sync_ShouldRemoveFromQuarantine_WhenItemBecomesSyncableAgain()
-    {
-        var variant = SeedVariant(variantId: 200L);
-        SeedAmbiguousItem(sourceItemId: "was-ambiguous");
-        await _dbContext.SaveChangesAsync();
-
-        _skulabsClient.GetAllItems().Returns(Syncable(
-            NewSkulabsItem(itemId: "was-ambiguous", listingId: "lst", variantId: 200)));
-
-        var result = await CreateSut().Sync();
-
-        result.AmbiguousRemovedCount.ShouldBe(1);
-        (await _dbContext.SkulabsAmbiguousItems.CountAsync()).ShouldBe(0);
-
-        // Now cleanly linked in the active table.
-        var stored = await _dbContext.SkulabsItems.SingleAsync();
-        stored.SkulabsSourceItemId.ShouldBe("was-ambiguous");
-        stored.ShopifyProductVariantId.ShouldBe(variant.ShopifyProductVariantId);
-    }
-
-    [Fact]
-    public async Task Sync_ShouldSeverActiveLink_WhenSyncedItemBecomesAmbiguous()
-    {
-        var variant = SeedVariant(variantId: 200L);
-        SeedSkulabsItem(variant.ShopifyProductVariantId, sourceItemId: "now-ambiguous", sourceListingId: "lst");
-        await _dbContext.SaveChangesAsync();
-
-        _skulabsClient.GetAllItems().Returns(Collection(
-            ApiItem("now-ambiguous", Listing("lst-a", "200"), Listing("lst-b", "300"))));
-
-        var result = await CreateSut().Sync();
-
-        result.AmbiguousCreatedCount.ShouldBe(1);
-
-        // Active link severed → an item is never both synced and quarantined.
-        (await _dbContext.SkulabsItems.CountAsync()).ShouldBe(0);
-        (await _dbContext.SkulabsAmbiguousItems.CountAsync()).ShouldBe(1);
-
-        var logs = await LogsForVariant(variant.ShopifyProductVariantId);
-        logs.Single().Message.ShouldBe("Unlinked from SkuLabs item 'now-ambiguous'.");
-    }
-
-    [Fact]
-    public async Task Sync_ShouldRefreshListings_WhenItemRemainsAmbiguous()
-    {
-        SeedAmbiguousItem(sourceItemId: "multi", listingRawVariantIds: ["1", "2"]);
+        SeedSkulabsItem("multi", StoredListing("lst-1", "1"), StoredListing("lst-2", "2"));
         await _dbContext.SaveChangesAsync();
 
         _skulabsClient.GetAllItems().Returns(Collection(
@@ -520,10 +536,9 @@ public class SkulabsItemSyncServiceTests : IDisposable
 
         var result = await CreateSut().Sync();
 
-        result.AmbiguousUpdatedCount.ShouldBe(1);
-        var ambiguous = await _dbContext.SkulabsAmbiguousItems.Include(a => a.Listings).SingleAsync();
-        ambiguous.ListingCount.ShouldBe(3);
-        ambiguous.Listings.Select(l => l.RawVariantId).OrderBy(x => x).ShouldBe(["3", "4", "5"]);
+        result.AmbiguousCount.ShouldBe(1);
+        var stored = await _dbContext.SkulabsItems.Include(i => i.Listings).SingleAsync();
+        stored.Listings.Select(l => l.RawVariantId).OrderBy(x => x).ShouldBe(["3", "4", "5"]);
     }
 
     // ---------- Helpers ----------
@@ -558,82 +573,72 @@ public class SkulabsItemSyncServiceTests : IDisposable
     }
 
     private SkulabsItemEntity SeedSkulabsItem(
-        Guid variantGuid,
-        string sourceItemId = "src",
-        string sourceListingId = "lst",
+        string sourceItemId,
+        params SkulabsItemListingEntity[] listings) =>
+        SeedSkulabsItem(sourceItemId, "Title", "sku", "bar", listings);
+
+    private SkulabsItemEntity SeedSkulabsItem(
+        string sourceItemId,
+        SkulabsItemListingEntity listing,
         string title = "Title",
         string sku = "sku",
-        string barcode = "bar")
+        string barcode = "bar") =>
+        SeedSkulabsItem(sourceItemId, title, sku, barcode, [listing]);
+
+    private SkulabsItemEntity SeedSkulabsItem(
+        string sourceItemId,
+        string title,
+        string sku,
+        string barcode,
+        SkulabsItemListingEntity[] listings)
     {
         var entity = new SkulabsItemEntity
         {
             SkulabsItemId = Guid.NewGuid(),
-            ShopifyProductVariantId = variantGuid,
             SkulabsSourceItemId = sourceItemId,
-            SkulabsSourceListingId = sourceListingId,
             Title = title,
             Sku = sku,
             Barcode = barcode
         };
+
+        foreach (var listing in listings)
+        {
+            entity.Listings.Add(listing);
+        }
+
         _dbContext.SkulabsItems.Add(entity);
         return entity;
     }
 
-    private SkulabsAmbiguousItemEntity SeedAmbiguousItem(
-        string sourceItemId,
-        string[]? listingRawVariantIds = null)
-    {
-        var entity = new SkulabsAmbiguousItemEntity
+    /// <summary>A stored listing row, optionally already resolved to a seeded variant.</summary>
+    private static SkulabsItemListingEntity StoredListing(
+        string listingId,
+        string rawVariantId,
+        ShopifyProductVariantEntity? variant = null) =>
+        new()
         {
-            SkulabsAmbiguousItemId = Guid.NewGuid(),
-            SkulabsSourceItemId = sourceItemId,
-            Name = "Name",
-            Sku = "sku",
-            Upc = "upc",
-            ListingCount = listingRawVariantIds?.Length ?? 0
+            SkulabsItemListingId = Guid.NewGuid(),
+            SkulabsSourceListingId = listingId,
+            RawVariantId = rawVariantId,
+            ShopifyProductId = "prod",
+            ShopifyProductVariantId = variant?.ShopifyProductVariantId
         };
-
-        foreach (var raw in listingRawVariantIds ?? [])
-        {
-            entity.Listings.Add(new SkulabsAmbiguousItemListingEntity
-            {
-                SkulabsAmbiguousItemListingId = Guid.NewGuid(),
-                SkulabsSourceListingId = $"lst-{raw}",
-                RawVariantId = raw,
-                ShopifyProductId = "prod"
-            });
-        }
-
-        _dbContext.SkulabsAmbiguousItems.Add(entity);
-        return entity;
-    }
-
-    private static SkuLabsItem NewSkulabsItem(
-        string itemId = "src",
-        string listingId = "lst",
-        long variantId = 200,
-        string sku = "sku",
-        string barcode = "bar",
-        string title = "Title") => new(itemId, listingId, variantId, sku, barcode, title);
-
-    /// <summary>Wraps cleanly syncable items (one numeric-variant listing each) into a collection.</summary>
-    private static SkulabsItemCollection Syncable(params SkuLabsItem[] items) =>
-        new(items
-            .Select(item => new SkulabsApiItem(
-                item.SkulabsItemId,
-                item.Title,
-                item.Sku,
-                item.Barcode,
-                [new SkulabsApiListing(item.SkulabsListingId, item.ShopifyVariantId.ToString(), "prod")]))
-            .ToArray());
 
     private static SkulabsItemCollection Collection(params SkulabsApiItem[] items) => new(items);
 
     private static SkulabsApiItem ApiItem(string itemId, params SkulabsApiListing[] listings) =>
         new(itemId, "Name", "sku", "upc", listings);
 
-    private static SkulabsApiListing Listing(string listingId, string rawVariantId, string productId = "prod") =>
-        new(listingId, rawVariantId, productId);
+    private static SkulabsApiItem ApiItem(
+        string itemId,
+        string name,
+        string sku,
+        string upc,
+        params SkulabsApiListing[] listings) =>
+        new(itemId, name, sku, upc, listings);
+
+    private static SkulabsApiListing Listing(string listingId, string rawVariantId) =>
+        new(listingId, rawVariantId, "prod");
 
     private sealed class TestLogger<T> : ILogger<T>
     {

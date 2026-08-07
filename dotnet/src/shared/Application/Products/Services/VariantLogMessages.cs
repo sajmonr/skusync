@@ -49,6 +49,16 @@ internal static class VariantLogMessages
     public static string SkulabsUnlinked(string skulabsItemId) =>
         $"Unlinked from SkuLabs item '{skulabsItemId}'.";
 
+    /// <summary>Returns a message indicating that a SkuLabs item names this variant but was not
+    /// linked to it, because the same item also lists other Shopify variants and so cannot be
+    /// resolved to one. Deliberately distinct from <see cref="SkulabsLinked"/>: the variant's
+    /// history would otherwise claim a link the rest of the system does not honour.</summary>
+    /// <param name="skulabsItemId">The SkuLabs source item id naming this variant.</param>
+    /// <param name="listingCount">How many Shopify listings that item carries.</param>
+    public static string SkulabsListedAmbiguously(string skulabsItemId, int listingCount) =>
+        $"SkuLabs item '{skulabsItemId}' lists {listingCount} Shopify variants, so it was not linked "
+        + "to this one. Resolve the duplicate listings in SkuLabs.";
+
     /// <summary>Returns a message indicating that the variant's SKU was corrected in Shopify to
     /// match the authoritative value held by the linked SkuLabs item.</summary>
     /// <param name="oldSku">The drifted Shopify SKU value that was replaced.</param>
