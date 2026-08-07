@@ -11,6 +11,9 @@
     ],
     "name": "Yellow Vintage Nature Domino Necklace (Goose (1bird))",
     "sku": "1 bird",
-    "upc": "10862241"
+    "upc": "10862241",
+    "alias_locations": {
+      "79912a8923657b958806a419": "Z-99-01"
+    }
   }
 ]

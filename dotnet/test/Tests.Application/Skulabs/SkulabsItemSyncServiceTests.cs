@@ -206,6 +206,141 @@ public class SkulabsItemSyncServiceTests : IDisposable
         stored.LastSeenUtc.ShouldBeGreaterThan(DateTime.UtcNow.AddMinutes(-1));
     }
 
+    // ---------- Warehouse location, an inbound-only mirror ----------
+
+    [Fact]
+    public async Task Sync_ShouldStoreLocation_WhenItemIsCreated()
+    {
+        SeedVariant(variantId: 200L);
+        await _dbContext.SaveChangesAsync();
+
+        _skulabsClient.GetAllItems().Returns(Collection(
+            ApiItemAt("src-1", "A-01-06", Listing("lst-1", "200"))));
+
+        await CreateSut().Sync();
+
+        (await _dbContext.SkulabsItems.SingleAsync()).Location.ShouldBe("A-01-06");
+    }
+
+    [Fact]
+    public async Task Sync_ShouldRefreshLocation_WhenLinkIsUnchangedAndLocationMovedUpstream()
+    {
+        // The rule this whole feature turns on. Merchants move bins, so the location follows SkuLabs
+        // on every run — unlike the title, which is ours to push and stays put. And because we never
+        // push a location, moving one owes SkuLabs nothing: the pending flag must stay clear.
+        var variant = SeedVariant(variantId: 200L);
+        var existing = SeedSkulabsItem("src-1", StoredListing("lst-1", "200", variant),
+            title: "Old Title", sku: "old-sku", barcode: "old-bar");
+        existing.Location = "A-01-06";
+        await _dbContext.SaveChangesAsync();
+
+        _skulabsClient.GetAllItems().Returns(Collection(
+            ApiItemAt("src-1", "W-04-18", Listing("lst-1", "200"))));
+
+        var result = await CreateSut().Sync();
+
+        var stored = await _dbContext.SkulabsItems.SingleAsync();
+        stored.Location.ShouldBe("W-04-18");
+        stored.Title.ShouldBe("Old Title");
+        stored.PendingSkulabsSync.ShouldBeFalse();
+
+        // A location move is not a re-link, so it is not reported as one.
+        result.UpdatedSkulabsItemIds.ShouldBeEmpty();
+        (await _dbContext.ShopifyProductVariantLogEvents.CountAsync()).ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Sync_ShouldClearLocation_WhenSkulabsStopsReportingOne()
+    {
+        var variant = SeedVariant(variantId: 200L);
+        var existing = SeedSkulabsItem("src-1", StoredListing("lst-1", "200", variant));
+        existing.Location = "A-01-06";
+        await _dbContext.SaveChangesAsync();
+
+        _skulabsClient.GetAllItems().Returns(Collection(
+            ApiItemAt("src-1", "", Listing("lst-1", "200"))));
+
+        await CreateSut().Sync();
+
+        (await _dbContext.SkulabsItems.SingleAsync()).Location.ShouldBe("");
+    }
+
+    [Fact]
+    public async Task Sync_ShouldPreserveStoredLocation_WhenNoWarehouseIsConfigured()
+    {
+        // Turning the warehouse off means "stop syncing locations", not "erase the ones you have".
+        // The client reports null in that mode, which carries no opinion about the stored value.
+        var variant = SeedVariant(variantId: 200L);
+        var existing = SeedSkulabsItem("src-1", StoredListing("lst-1", "200", variant));
+        existing.Location = "A-01-06";
+        await _dbContext.SaveChangesAsync();
+
+        _skulabsClient.GetAllItems().Returns(Collection(
+            ApiItemAt("src-1", null, Listing("lst-1", "200"))));
+
+        await CreateSut().Sync();
+
+        (await _dbContext.SkulabsItems.SingleAsync()).Location.ShouldBe("A-01-06");
+    }
+
+    [Fact]
+    public async Task Sync_ShouldStoreEmptyLocation_WhenItemIsCreatedWithNoWarehouseConfigured()
+    {
+        // Nothing stored to protect, and the column is non-nullable, so an unknown location lands
+        // as empty rather than propagating null into the entity.
+        SeedVariant(variantId: 200L);
+        await _dbContext.SaveChangesAsync();
+
+        _skulabsClient.GetAllItems().Returns(Collection(
+            ApiItemAt("src-1", null, Listing("lst-1", "200"))));
+
+        await CreateSut().Sync();
+
+        (await _dbContext.SkulabsItems.SingleAsync()).Location.ShouldBe("");
+    }
+
+    [Fact]
+    public async Task Sync_ShouldRefreshLocation_WhenItemIsAmbiguous()
+    {
+        // Ambiguity is about which variant an item links to; the bin it sits in is known regardless.
+        SeedVariant(variantId: 200L);
+        SeedVariant(variantId: 201L);
+        var existing = SeedSkulabsItem("src-1",
+            StoredListing("lst-1", "200"), StoredListing("lst-2", "201"));
+        existing.Location = "A-01-06";
+        await _dbContext.SaveChangesAsync();
+
+        _skulabsClient.GetAllItems().Returns(Collection(
+            ApiItemAt("src-1", "D-03-09", Listing("lst-1", "200"), Listing("lst-2", "201"))));
+
+        await CreateSut().Sync();
+
+        (await _dbContext.SkulabsItems.SingleAsync()).Location.ShouldBe("D-03-09");
+    }
+
+    [Fact]
+    public async Task Sync_ShouldLeavePendingSkulabsSyncSet_WhenLocationChangesOnAnItemAlreadyOwedToSkulabs()
+    {
+        // An undispatched title correction must survive a location refresh — the two directions of
+        // travel are independent.
+        var variant = SeedVariant(variantId: 200L);
+        var existing = SeedSkulabsItem("src-1", StoredListing("lst-1", "200", variant),
+            title: "Locally Corrected Title", sku: "sku", barcode: "bar");
+        existing.Location = "A-01-06";
+        existing.PendingSkulabsSync = true;
+        await _dbContext.SaveChangesAsync();
+
+        _skulabsClient.GetAllItems().Returns(Collection(
+            ApiItemAt("src-1", "W-04-18", Listing("lst-1", "200"))));
+
+        await CreateSut().Sync();
+
+        var stored = await _dbContext.SkulabsItems.SingleAsync();
+        stored.Location.ShouldBe("W-04-18");
+        stored.PendingSkulabsSync.ShouldBeTrue();
+        stored.Title.ShouldBe("Locally Corrected Title");
+    }
+
     // ---------- Re-linking ----------
 
     [Fact]
@@ -627,7 +762,7 @@ public class SkulabsItemSyncServiceTests : IDisposable
     private static SkulabsItemCollection Collection(params SkulabsApiItem[] items) => new(items);
 
     private static SkulabsApiItem ApiItem(string itemId, params SkulabsApiListing[] listings) =>
-        new(itemId, "Name", "sku", "upc", listings);
+        new(itemId, "Name", "sku", "upc", "", listings);
 
     private static SkulabsApiItem ApiItem(
         string itemId,
@@ -635,7 +770,14 @@ public class SkulabsItemSyncServiceTests : IDisposable
         string sku,
         string upc,
         params SkulabsApiListing[] listings) =>
-        new(itemId, name, sku, upc, listings);
+        new(itemId, name, sku, upc, "", listings);
+
+    /// <summary>An item whose location is known ("" for none) or unknown (null, warehouse unset).</summary>
+    private static SkulabsApiItem ApiItemAt(
+        string itemId,
+        string? location,
+        params SkulabsApiListing[] listings) =>
+        new(itemId, "Name", "sku", "upc", location, listings);
 
     private static SkulabsApiListing Listing(string listingId, string rawVariantId) =>
         new(listingId, rawVariantId, "prod");

@@ -41,6 +41,8 @@ public class SkulabsItemSyncTests(AppServerTestHost factory) : IAsyncLifetime
         stored.Sku.ShouldBe("1 bird");
         stored.Barcode.ShouldBe("10862241");
         stored.Title.ShouldBe("Yellow Vintage Nature Domino Necklace (Goose (1bird))");
+        // Resolved out of the fixture's alias_locations map by the configured warehouse id.
+        stored.Location.ShouldBe("A-01-06");
 
         var logs = await db.ShopifyProductVariantLogEvents
             .Where(l => l.ShopifyProductVariantId == variantGuid)
@@ -79,9 +81,39 @@ public class SkulabsItemSyncTests(AppServerTestHost factory) : IAsyncLifetime
         stored.Title.ShouldBe("Old Title");
         stored.Sku.ShouldBe("old-sku");
         stored.Barcode.ShouldBe("old-barcode");
+        // The one field that does not follow the link: SkuLabs owns the location, so it lands here
+        // even on an otherwise no-op run.
+        stored.Location.ShouldBe("A-01-06");
 
         (await db.ShopifyProductVariantLogEvents
             .CountAsync(l => l.ShopifyProductVariantId == variantGuid)).ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task SkulabsSyncJob_RefreshesLocation_WhenItMovesUpstreamOnAnAlreadyLinkedItem()
+    {
+        // Same link, same everything — only the bin moved. The location is SkuLabs' to own, so it is
+        // picked up even though nothing about the link changed, and it leaves the title (ours to
+        // push) and the pending flag alone.
+        var variantGuid = await SeedVariantAsync(MatchingVariantId);
+        await SeedSkulabsItemAsync(
+            variantGuid,
+            sourceItemId: "69b4543c6642ed434a5b1c4a",
+            sourceListingId: "69b454b06642ed434a5bf571",
+            title: "Old Title",
+            sku: "old-sku",
+            barcode: "old-barcode",
+            location: "B-07-14");
+        await StubSkulabsGetAllAsync("Skulabs/Api/items-get-single.json");
+
+        await RunSyncJobAsync();
+
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var stored = await db.SkulabsItems.SingleAsync();
+        stored.Location.ShouldBe("A-01-06");
+        stored.Title.ShouldBe("Old Title");
+        stored.PendingSkulabsSync.ShouldBeFalse();
     }
 
     [Fact]
@@ -120,6 +152,8 @@ public class SkulabsItemSyncTests(AppServerTestHost factory) : IAsyncLifetime
         stored.Title.ShouldBe("Yellow Vintage Nature Domino Necklace (Goose (1bird))");
         stored.Sku.ShouldBe("1 bird");
         stored.Barcode.ShouldBe("10862241");
+        // This fixture's alias_locations names a different warehouse, so we hold no location for it.
+        stored.Location.ShouldBe("");
 
         var oldLogs = await db.ShopifyProductVariantLogEvents
             .Where(l => l.ShopifyProductVariantId == oldVariantGuid)
@@ -165,6 +199,8 @@ public class SkulabsItemSyncTests(AppServerTestHost factory) : IAsyncLifetime
         var stored = await db.SkulabsItems.Include(i => i.Listings).SingleAsync();
         stored.SkulabsSourceItemId.ShouldBe("ambiguous-multi-item");
         stored.Listings.Count.ShouldBe(2);
+        // An item nobody can link to still sits somewhere, and we still mirror where.
+        stored.Location.ShouldBe("D-03-09");
 
         stored.Listings.Single(l => l.RawVariantId == MatchingVariantId.ToString())
             .ShopifyProductVariantId.ShouldBe(variantGuid);
@@ -237,7 +273,8 @@ public class SkulabsItemSyncTests(AppServerTestHost factory) : IAsyncLifetime
         string sourceListingId,
         string title,
         string sku,
-        string barcode)
+        string barcode,
+        string location = "")
     {
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -248,6 +285,7 @@ public class SkulabsItemSyncTests(AppServerTestHost factory) : IAsyncLifetime
             Title = title,
             Sku = sku,
             Barcode = barcode,
+            Location = location,
             Listings =
             {
                 new SkulabsItemListingEntity

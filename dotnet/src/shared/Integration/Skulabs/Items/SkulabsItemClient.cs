@@ -19,6 +19,7 @@ public class SkulabsItemClient : ISkulabsItemClient
     private readonly HttpClient _client;
     private readonly IRateLimitService _rateLimitService;
     private readonly ILogger<SkulabsItemClient> _logger;
+    private readonly string _warehouseId;
 
     public SkulabsItemClient(
         HttpClient httpClient,
@@ -30,6 +31,9 @@ public class SkulabsItemClient : ISkulabsItemClient
         _logger = logger;
         _client = httpClient;
         _rateLimitService = rateLimitService;
+        // Normalised here rather than at each use: WarehouseId is not [Required], so nothing
+        // validates it and a configured null would otherwise reach the alias_locations lookup.
+        _warehouseId = optionsMonitor.CurrentValue.WarehouseId ?? "";
 
         _client.BaseAddress = new Uri(optionsMonitor.CurrentValue.BaseUrl);
         _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
@@ -54,15 +58,20 @@ public class SkulabsItemClient : ISkulabsItemClient
 
     /// <summary>
     /// Fetches every SkuLabs inventory item with all of its channel listings intact. Only the
-    /// <c>name</c>, <c>sku</c>, <c>upc</c>, and <c>listings</c> fields are requested from the API to
-    /// minimise payload size. Deciding which items are syncable is left to the caller.
+    /// <c>name</c>, <c>sku</c>, <c>upc</c>, <c>listings</c> and — when a warehouse is configured —
+    /// <c>alias_locations</c> fields are requested from the API to minimise payload size. Deciding
+    /// which items are syncable is left to the caller.
     /// </summary>
     /// <returns>A <see cref="SkulabsItemCollection"/> wrapping every item SkuLabs returned.</returns>
     public async Task<SkulabsItemCollection> GetAllItems()
     {
-        const string fields = """
-            {"_id": 1, "name": 1, "sku": 1, "upc": 1, "listings": 1}
-            """;
+        var fields = _warehouseId.Length == 0
+            ? """
+              {"_id": 1, "name": 1, "sku": 1, "upc": 1, "listings": 1}
+              """
+            : """
+              {"_id": 1, "name": 1, "sku": 1, "upc": 1, "listings": 1, "alias_locations": 1}
+              """;
         var queryParams = new Dictionary<string, string> { { "fields", fields } };
         var queryString = string.Join(
             "&",
@@ -101,14 +110,14 @@ public class SkulabsItemClient : ISkulabsItemClient
                 $"SkuLabs item response deserialized to null. Body: {Truncate(body)}");
         }
 
-        var items = content.Select(MapItem).ToArray();
+        var items = content.Select(response => MapItem(response, _warehouseId)).ToArray();
 
         _logger.LogInformation("SkuLabs returned {RawCount} item(s).", items.Length);
 
         return new SkulabsItemCollection(items);
     }
 
-    private static SkulabsApiItem MapItem(SkulabsItemResponse response)
+    private static SkulabsApiItem MapItem(SkulabsItemResponse response, string warehouseId)
     {
         // SkuLabs sends explicit `null` for a listing's variant_id / item_id on non-Shopify listings,
         // which System.Text.Json writes over the "" property defaults. Coalesce back to "" to keep the
@@ -121,11 +130,20 @@ public class SkulabsItemClient : ISkulabsItemClient
                 listing.ProductId ?? ""))
             .ToArray();
 
+        // With no warehouse configured we never asked for alias_locations, so we know nothing rather
+        // than "no location" — reporting "" would tell the caller to erase what it already holds.
+        // Otherwise both "no alias_locations at all" and "located in some other warehouse" collapse
+        // to "", the same absent-means-empty treatment the listing ids above get.
+        var location = warehouseId.Length == 0
+            ? null
+            : response.AliasLocations.GetValueOrDefault(warehouseId) ?? "";
+
         return new SkulabsApiItem(
             response.ItemId,
             response.Title,
             response.Sku,
             response.Upc,
+            location,
             listings);
     }
 

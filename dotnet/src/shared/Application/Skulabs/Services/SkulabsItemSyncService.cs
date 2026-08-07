@@ -18,6 +18,11 @@ namespace Application.Skulabs.Services;
 /// title is ours to push to SkuLabs and refreshing it here would clobber a local correction that has
 /// not been dispatched yet.
 /// </para>
+/// <para>
+/// The warehouse location is the exception, because it flows the other way: SkuLabs owns it and we
+/// never push it, so it is refreshed on every run regardless of the link, and a change to it never
+/// marks the item pending.
+/// </para>
 /// </summary>
 public class SkulabsItemSyncService(
     ISkulabsItemClient skulabsClient,
@@ -114,6 +119,7 @@ public class SkulabsItemSyncService(
             var previousVariantId = ResolvedVariantId(entity.Listings);
             var previousListingCount = entity.Listings.Count;
             entity.LastSeenUtc = DateTime.UtcNow;
+            RefreshLocation(entity, apiItem);
             SyncListings(entity, apiItem, variantLookup, accumulator);
             var currentVariantId = ResolvedVariantId(entity.Listings);
             LogLinkTransition(apiItem.SourceItemId, previousVariantId, currentVariantId, previousListingCount, entity);
@@ -152,7 +158,8 @@ public class SkulabsItemSyncService(
             SkulabsSourceItemId = apiItem.SourceItemId,
             Title = apiItem.Name,
             Sku = apiItem.Sku,
-            Barcode = apiItem.Upc
+            Barcode = apiItem.Upc,
+            Location = apiItem.Location ?? ""
         };
 
         foreach (var listing in apiItem.Listings)
@@ -173,6 +180,29 @@ public class SkulabsItemSyncService(
         logger.LogDebug(
             "Creating SkuLabs item {SkulabsItemId} with {ListingCount} Shopify listing(s).",
             apiItem.SourceItemId, entity.Listings.Count);
+    }
+
+    /// <summary>
+    /// Mirrors the warehouse location from the payload. Unconditional by design: merchants move bins,
+    /// so a location frozen at first-link would be worse than no location at all. Nothing is marked
+    /// pending — <see cref="SkulabsItemEntity.PendingSkulabsSync"/> means "we owe SkuLabs a push", and
+    /// a location delta means the opposite.
+    /// <para>
+    /// A null location means no warehouse is configured, so the payload carries no opinion and what
+    /// we already hold stands. Turning the feature off must not erase locations it previously synced.
+    /// </para>
+    /// </summary>
+    private void RefreshLocation(SkulabsItemEntity entity, SkulabsApiItem apiItem)
+    {
+        if (apiItem.Location is null || entity.Location == apiItem.Location)
+        {
+            return;
+        }
+
+        logger.LogInformation(
+            "SkuLabs item {SkulabsItemId} moved location: '{OldLocation}' → '{NewLocation}'.",
+            apiItem.SourceItemId, entity.Location, apiItem.Location);
+        entity.Location = apiItem.Location;
     }
 
     /// <summary>

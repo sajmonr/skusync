@@ -25,6 +25,29 @@ the server's memory; **restart the container to reset to these defaults**
 
 The dummy key `skusync-local-mock-key` matches `Skulabs:Api:ApiKey` in dev appsettings.
 
+Most items in `__files/skulabs-items.json` carry `alias_locations`, the per-warehouse bin
+location map, so locations are visible throughout the dev stack. Bin labels normally look
+like `B-06-06` — a letter, then two two-digit numbers.
+
+Some entries deliberately break that pattern, keeping the absent and messy paths exercised
+locally rather than only in tests:
+
+| Item | `alias_locations` | Mirrors as |
+|---|---|---|
+| `Gift Card ($25)`, both `Phantom Item`s | key absent entirely | `""` |
+| `The Multi-location Snowboard` | present, but only warehouse `7991…a419` | `""` |
+| `The Untracked Snowboard` | `A-01-6` — last part not padded | verbatim |
+| `The Videographer Snowboard` | `c-12-03` — lowercase aisle | verbatim |
+| `The Collection Snowboard: Liquid (Large / Red)` | `B-3-07` — middle part not padded | verbatim |
+| `Ambiguous Multi-Variant Item` | `AA-02-11` — two-letter aisle | verbatim |
+
+The off-format values are real-world noise, not fixtures to clean up. Nothing parses or
+validates a location: SkuLabs owns the value and we mirror it exactly as sent.
+
+The warehouse whose location the app mirrors is `Skulabs:Api:WarehouseId`
+(`69912a8923657b958806a418` in dev appsettings). Blank turns the feature off: the app stops
+requesting `alias_locations` and leaves any locations it already stored untouched.
+
 ## Testing other scenarios at runtime
 
 Edit stubs in the web UI, or drive the admin API. Examples:

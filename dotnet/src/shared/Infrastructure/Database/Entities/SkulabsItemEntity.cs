@@ -21,6 +21,14 @@ public class SkulabsItemEntity
     public string Barcode { get; set; } = string.Empty;
 
     /// <summary>
+    /// The item's bin location in the configured SkuLabs warehouse (e.g. <c>A-01-06</c>), or empty
+    /// when it has none. An inbound-only mirror: SkuLabs owns it, we never push it back, so it is
+    /// refreshed on every sync run and a change to it must never set
+    /// <see cref="PendingSkulabsSync"/>.
+    /// </summary>
+    public string Location { get; set; } = string.Empty;
+
+    /// <summary>
     /// Gets or sets a value indicating whether this item's local mirror diverges from SkuLabs —
     /// the title has been corrected locally but not yet pushed. Set where the divergence is
     /// originated (the reconciler); cleared by the SkuLabs dispatcher on a confirmed push.

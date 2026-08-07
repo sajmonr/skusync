@@ -16,6 +16,7 @@ public class SkulabsItemConfiguration : IEntityTypeConfiguration<SkulabsItemEnti
         builder.Property(x => x.Title).IsRequired().HasMaxLength(1000);
         builder.Property(x => x.Sku).IsRequired().HasMaxLength(100);
         builder.Property(x => x.Barcode).IsRequired().HasMaxLength(100);
+        builder.Property(x => x.Location).IsRequired().HasMaxLength(100).HasDefaultValue("");
 
         builder.Property(x => x.PendingSkulabsSync)
             .IsRequired()

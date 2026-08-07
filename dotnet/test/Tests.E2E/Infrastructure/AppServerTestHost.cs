@@ -35,6 +35,12 @@ namespace Tests.E2E.Infrastructure;
 /// </remarks>
 public class AppServerTestHost : IAsyncLifetime
 {
+    /// <summary>
+    /// The SkuLabs warehouse whose <c>alias_locations</c> key the Skulabs API fixtures use. Tests
+    /// assert against the locations filed under it.
+    /// </summary>
+    public const string E2EWarehouseId = "69912a8923657b958806a418";
+
     private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:18.3")
         .Build();
 
@@ -79,6 +85,7 @@ public class AppServerTestHost : IAsyncLifetime
         SetEnv("Shopify__ApiKey", "test-shopify-token");
         SetEnv("Skulabs__Api__BaseUrl", skulabsBase);
         SetEnv("Skulabs__Api__ApiKey", "test-skulabs-key");
+        SetEnv("Skulabs__Api__WarehouseId", E2EWarehouseId);
         SetEnv("Skulabs__Admin__BaseUrl", skulabsBase);
         SetEnv("Skulabs__Admin__Username", "test");
         SetEnv("Skulabs__Admin__Password", "test");

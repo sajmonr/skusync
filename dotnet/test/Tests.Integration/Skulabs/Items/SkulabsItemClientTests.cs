@@ -16,6 +16,8 @@ public class SkulabsItemClientTests
 {
     private const string BaseUrl = "https://api.skulabs.test/";
     private const string ApiKey = "test-api-key";
+    private const string WarehouseId = "69912a8923657b958806a418";
+    private const string OtherWarehouseId = "79912a8923657b958806a419";
 
     private readonly IOptionsMonitor<SkulabsApiOptions> _options =
         Substitute.For<IOptionsMonitor<SkulabsApiOptions>>();
@@ -26,13 +28,17 @@ public class SkulabsItemClientTests
 
     public SkulabsItemClientTests()
     {
+        UseWarehouse(WarehouseId);
+        _rateLimitService.GetRemainingCooldown(Arg.Any<string>()).Returns((TimeSpan?)null);
+    }
+
+    private void UseWarehouse(string warehouseId) =>
         _options.CurrentValue.Returns(new SkulabsApiOptions
         {
             BaseUrl = BaseUrl,
-            ApiKey = ApiKey
+            ApiKey = ApiKey,
+            WarehouseId = warehouseId
         });
-        _rateLimitService.GetRemainingCooldown(Arg.Any<string>()).Returns((TimeSpan?)null);
-    }
 
     [Fact]
     public void Constructor_ShouldConfigureBaseAddressAndAuthorizationHeader()
@@ -92,7 +98,148 @@ public class SkulabsItemClientTests
         request.RequestUri.AbsoluteUri.ShouldStartWith($"{BaseUrl}item/get?");
         request.RequestUri.Query.ShouldContain("fields=");
         Uri.UnescapeDataString(request.RequestUri.Query)
-            .ShouldContain("\"_id\": 1, \"name\": 1, \"sku\": 1, \"upc\": 1, \"listings\": 1");
+            .ShouldContain(
+                "\"_id\": 1, \"name\": 1, \"sku\": 1, \"upc\": 1, \"listings\": 1, \"alias_locations\": 1");
+    }
+
+    [Fact]
+    public async Task GetAllItems_ShouldNotRequestAliasLocations_WhenNoWarehouseIsConfigured()
+    {
+        // An unset warehouse id is the off-switch: nothing to resolve the map against, so don't
+        // pay for it in the payload either.
+        UseWarehouse("");
+        _handler.SetResponse(JsonResponse("[]"));
+        var sut = CreateSut();
+
+        await sut.GetAllItems();
+
+        Uri.UnescapeDataString(_handler.Requests[0].RequestUri!.Query)
+            .ShouldNotContain("alias_locations");
+    }
+
+    [Fact]
+    public async Task GetAllItems_ShouldReportUnknownLocation_WhenNoWarehouseIsConfigured()
+    {
+        // Null, not "": with the switch off we never asked, so we have no opinion to hand downstream.
+        // Reporting "" would read as "this item has no location" and invite the caller to erase one.
+        UseWarehouse("");
+        _handler.SetResponse(JsonResponse("""
+                                          [
+                                            {
+                                              "_id": "item-1",
+                                              "name": "Item",
+                                              "sku": "SKU",
+                                              "upc": "UPC",
+                                              "listings": [],
+                                              "alias_locations": { "69912a8923657b958806a418": "A-01-06" }
+                                            }
+                                          ]
+                                          """));
+        var sut = CreateSut();
+
+        var result = await sut.GetAllItems();
+
+        result.Items.ShouldHaveSingleItem().Location.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task GetAllItems_ShouldMapLocationVerbatim_WhenItDoesNotMatchTheHouseFormat()
+    {
+        // Bin labels are typed by humans, so the real data has stragglers that miss the usual
+        // LETTER-NN-NN shape. SkuLabs is the source of truth: mirror what it says rather than
+        // normalising or rejecting, which would misreport where the stock actually is.
+        _handler.SetResponse(JsonResponse("""
+                                          [
+                                            {
+                                              "_id": "item-1",
+                                              "name": "Item",
+                                              "sku": "SKU",
+                                              "upc": "UPC",
+                                              "listings": [],
+                                              "alias_locations": { "69912a8923657b958806a418": "c-12-03" }
+                                            }
+                                          ]
+                                          """));
+        var sut = CreateSut();
+
+        var result = await sut.GetAllItems();
+
+        result.Items.ShouldHaveSingleItem().Location.ShouldBe("c-12-03");
+    }
+
+    [Fact]
+    public async Task GetAllItems_ShouldMapWarehouseLocation_ForEveryShapeOfAliasLocations()
+    {
+        const string json = """
+                            [
+                              {
+                                "_id": "item-located",
+                                "name": "Located",
+                                "sku": "SKU-L",
+                                "upc": "UPC-L",
+                                "listings": [],
+                                "alias_locations": { "69912a8923657b958806a418": "A-01-06" }
+                              },
+                              {
+                                "_id": "item-elsewhere",
+                                "name": "Elsewhere",
+                                "sku": "SKU-E",
+                                "upc": "UPC-E",
+                                "listings": [],
+                                "alias_locations": { "79912a8923657b958806a419": "Z-99-01" }
+                              },
+                              {
+                                "_id": "item-no-map",
+                                "name": "No Map",
+                                "sku": "SKU-N",
+                                "upc": "UPC-N",
+                                "listings": []
+                              },
+                              {
+                                "_id": "item-null-location",
+                                "name": "Null Location",
+                                "sku": "SKU-Z",
+                                "upc": "UPC-Z",
+                                "listings": [],
+                                "alias_locations": { "69912a8923657b958806a418": null }
+                              }
+                            ]
+                            """;
+        _handler.SetResponse(JsonResponse(json));
+        var sut = CreateSut();
+
+        var result = await sut.GetAllItems();
+
+        result.Items.Single(item => item.SourceItemId == "item-located").Location.ShouldBe("A-01-06");
+
+        // A map that names only other warehouses, no map at all, and an explicit null all mean the
+        // same thing to us: this item has no location here.
+        result.Items.Single(item => item.SourceItemId == "item-elsewhere").Location.ShouldBe("");
+        result.Items.Single(item => item.SourceItemId == "item-no-map").Location.ShouldBe("");
+        result.Items.Single(item => item.SourceItemId == "item-null-location").Location.ShouldBe("");
+    }
+
+    [Fact]
+    public async Task GetAllItems_ShouldMapNoLocation_WhenWarehouseIsConfiguredButItemIsInAnotherOne()
+    {
+        UseWarehouse(OtherWarehouseId);
+        _handler.SetResponse(JsonResponse("""
+                                          [
+                                            {
+                                              "_id": "item-1",
+                                              "name": "Item",
+                                              "sku": "SKU",
+                                              "upc": "UPC",
+                                              "listings": [],
+                                              "alias_locations": { "69912a8923657b958806a418": "A-01-06" }
+                                            }
+                                          ]
+                                          """));
+        var sut = CreateSut();
+
+        var result = await sut.GetAllItems();
+
+        result.Items.ShouldHaveSingleItem().Location.ShouldBe("");
     }
 
     [Fact]
