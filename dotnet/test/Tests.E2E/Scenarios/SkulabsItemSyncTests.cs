@@ -174,6 +174,14 @@ public class SkulabsItemSyncTests(AppServerTestHost factory) : IAsyncLifetime
         // Ambiguity is derived, not stored: the item is present but no link passes the guard, so
         // nothing about it is syncable.
         (await db.SkulabsItemListings.Where(SkulabsItemLinks.IsSyncable).CountAsync()).ShouldBe(0);
+
+        // The variant's history says it was not linked, and why — never that it was.
+        var logs = await db.ShopifyProductVariantLogEvents
+            .Where(l => l.ShopifyProductVariantId == variantGuid)
+            .ToListAsync();
+        logs.Single().Message.ShouldBe(
+            "SkuLabs item 'ambiguous-multi-item' lists 2 Shopify variants, so it was not linked to "
+            + "this one. Resolve the duplicate listings in SkuLabs.");
     }
 
     private async Task RunSyncJobAsync()

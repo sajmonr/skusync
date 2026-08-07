@@ -112,9 +112,11 @@ public class SkulabsItemSyncService(
             }
 
             var previousVariantId = ResolvedVariantId(entity.Listings);
+            var previousListingCount = entity.Listings.Count;
             entity.LastSeenUtc = DateTime.UtcNow;
             SyncListings(entity, apiItem, variantLookup, accumulator);
             var currentVariantId = ResolvedVariantId(entity.Listings);
+            LogLinkTransition(apiItem.SourceItemId, previousVariantId, currentVariantId, previousListingCount, entity);
 
             // Metadata follows the link, exactly as it did when the syncable and ambiguous tables
             // were separate: seeded on a new link, refreshed when the link moves, never otherwise.
@@ -155,10 +157,15 @@ public class SkulabsItemSyncService(
 
         foreach (var listing in apiItem.Listings)
         {
-            var built = BuildListing(listing, variantLookup, accumulator);
-            entity.Listings.Add(built);
-            LogLinked(built, apiItem.SourceItemId);
+            entity.Listings.Add(BuildListing(listing, variantLookup, accumulator));
         }
+
+        LogLinkTransition(
+            apiItem.SourceItemId,
+            previousVariantId: null,
+            ResolvedVariantId(entity.Listings),
+            previousListingCount: 0,
+            entity);
 
         dbContext.SkulabsItems.Add(entity);
         accumulator.Created.Add(entity.SkulabsItemId);
@@ -170,9 +177,7 @@ public class SkulabsItemSyncService(
 
     /// <summary>
     /// Brings an item's stored listings in line with the payload by diffing on the SkuLabs listing id.
-    /// Diffed rather than replaced wholesale so an unchanged listing does not churn its row — and, more
-    /// importantly, does not emit a spurious unlink/link pair into the variant's audit trail on every
-    /// sync run.
+    /// Diffed rather than replaced wholesale so an unchanged listing does not churn its row.
     /// </summary>
     private void SyncListings(
         SkulabsItemEntity entity,
@@ -187,7 +192,6 @@ public class SkulabsItemSyncService(
         {
             if (!incoming.ContainsKey(listingId))
             {
-                LogUnlinked(storedListing, apiItem.SourceItemId);
                 entity.Listings.Remove(storedListing);
                 dbContext.SkulabsItemListings.Remove(storedListing);
             }
@@ -197,47 +201,75 @@ public class SkulabsItemSyncService(
         {
             if (!stored.TryGetValue(listingId, out var storedListing))
             {
-                var built = BuildListing(incomingListing, variantLookup, accumulator);
-                entity.Listings.Add(built);
-                LogLinked(built, apiItem.SourceItemId);
+                entity.Listings.Add(BuildListing(incomingListing, variantLookup, accumulator));
                 continue;
             }
 
-            RefreshListing(storedListing, incomingListing, variantLookup, apiItem.SourceItemId, accumulator);
+            RefreshListing(storedListing, incomingListing, variantLookup, accumulator);
         }
     }
 
     /// <summary>
     /// Updates a listing we already hold. The variant it resolves to can change between runs — either
     /// because SkuLabs re-pointed the listing, or because a variant we did not have has since been
-    /// ingested — so the resolution is recomputed and the audit trail follows it.
+    /// ingested.
     /// </summary>
-    private void RefreshListing(
+    private static void RefreshListing(
         SkulabsItemListingEntity stored,
         SkulabsApiListing incoming,
         IReadOnlyDictionary<long, Guid> variantLookup,
-        string sourceItemId,
         ReconciliationAccumulator accumulator)
     {
         stored.RawVariantId = incoming.RawVariantId;
         stored.ShopifyProductId = incoming.ShopifyProductId;
+        stored.ShopifyProductVariantId = ResolveVariant(incoming, variantLookup, accumulator);
+    }
 
-        var resolved = ResolveVariant(incoming, variantLookup, accumulator);
-        if (resolved == stored.ShopifyProductVariantId)
+    /// <summary>
+    /// Writes the variant history for one item's run. Events describe the <em>link</em>, not the
+    /// individual listing rows: a variant is only told it was linked or unlinked when the item's
+    /// resolved variant actually changed, so shuffling the listings of an item that was never
+    /// resolvable stays silent.
+    /// <para>
+    /// An item that has just become ambiguous says so on every variant it names. Reporting those as
+    /// "linked" would put a claim in the merchant-facing history that
+    /// <see cref="SkulabsItemLinks.IsSyncable"/> refuses to honour, leaving the variant page and its
+    /// own audit trail contradicting each other.
+    /// </para>
+    /// </summary>
+    private void LogLinkTransition(
+        string sourceItemId,
+        Guid? previousVariantId,
+        Guid? currentVariantId,
+        int previousListingCount,
+        SkulabsItemEntity entity)
+    {
+        if (previousVariantId != currentVariantId)
+        {
+            if (previousVariantId is { } lost)
+            {
+                AddVariantLog(lost, VariantLogMessages.SkulabsUnlinked(sourceItemId));
+            }
+
+            if (currentVariantId is { } gained)
+            {
+                AddVariantLog(gained, VariantLogMessages.SkulabsLinked(sourceItemId));
+            }
+        }
+
+        if (entity.Listings.Count <= 1 || previousListingCount > 1)
         {
             return;
         }
 
-        if (stored.ShopifyProductVariantId is { } previous)
+        foreach (var listing in entity.Listings)
         {
-            AddVariantLog(previous, VariantLogMessages.SkulabsUnlinked(sourceItemId));
-        }
-
-        stored.ShopifyProductVariantId = resolved;
-
-        if (resolved is { } current)
-        {
-            AddVariantLog(current, VariantLogMessages.SkulabsLinked(sourceItemId));
+            if (listing.ShopifyProductVariantId is { } variantGuid)
+            {
+                AddVariantLog(
+                    variantGuid,
+                    VariantLogMessages.SkulabsListedAmbiguously(sourceItemId, entity.Listings.Count));
+            }
         }
     }
 
@@ -270,8 +302,8 @@ public class SkulabsItemSyncService(
 
     /// <summary>
     /// Deletes rows for items SkuLabs no longer reports at all. Their listings go with them by
-    /// cascade, and every variant that still resolved through one gets an unlink event so the history
-    /// records why the link disappeared.
+    /// cascade, and a variant that was actually linked gets an unlink event so the history records
+    /// why the link disappeared. An ambiguous item leaves silently — it never held a link to lose.
     /// </summary>
     private void RemoveItemsNoLongerReported(
         SkulabsItemCollection collection,
@@ -289,30 +321,14 @@ public class SkulabsItemSyncService(
                 continue;
             }
 
-            foreach (var listing in entity.Listings)
+            if (ResolvedVariantId(entity.Listings) is { } variantGuid)
             {
-                LogUnlinked(listing, sourceItemId);
+                AddVariantLog(variantGuid, VariantLogMessages.SkulabsUnlinked(sourceItemId));
             }
 
             dbContext.SkulabsItems.Remove(entity);
             accumulator.Removed++;
             logger.LogDebug("Removing SkuLabs item {SkulabsItemId}; SkuLabs no longer reports it.", sourceItemId);
-        }
-    }
-
-    private void LogLinked(SkulabsItemListingEntity listing, string sourceItemId)
-    {
-        if (listing.ShopifyProductVariantId is { } variantGuid)
-        {
-            AddVariantLog(variantGuid, VariantLogMessages.SkulabsLinked(sourceItemId));
-        }
-    }
-
-    private void LogUnlinked(SkulabsItemListingEntity listing, string sourceItemId)
-    {
-        if (listing.ShopifyProductVariantId is { } variantGuid)
-        {
-            AddVariantLog(variantGuid, VariantLogMessages.SkulabsUnlinked(sourceItemId));
         }
     }
 

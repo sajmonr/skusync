@@ -346,6 +346,30 @@ public class SkulabsItemSyncServiceTests : IDisposable
         // Nothing about an ambiguous item is syncable, even the listing that did resolve.
         (await _dbContext.SkulabsItemListings.Where(SkulabsItemLinks.IsSyncable).CountAsync())
             .ShouldBe(0);
+
+        // The resolved variant is told why it has no SkuLabs item. Claiming it was "linked" would
+        // contradict what every other read path reports for it.
+        var logs = await LogsForVariant(variantA.ShopifyProductVariantId);
+        logs.Single().Message.ShouldBe(
+            "SkuLabs item 'multi' lists 2 Shopify variants, so it was not linked to this one. "
+            + "Resolve the duplicate listings in SkuLabs.");
+        logs.ShouldNotContain(l => l.Message.StartsWith("Linked to SkuLabs item"));
+    }
+
+    [Fact]
+    public async Task Sync_ShouldNotRepeatTheAmbiguityNotice_WhenItemStaysAmbiguous()
+    {
+        var variant = SeedVariant(variantId: 10L);
+        SeedSkulabsItem("multi", StoredListing("lst-a", "10", variant), StoredListing("lst-b", "20"));
+        await _dbContext.SaveChangesAsync();
+
+        _skulabsClient.GetAllItems().Returns(Collection(
+            ApiItem("multi", Listing("lst-a", "10"), Listing("lst-b", "20"))));
+
+        await CreateSut().Sync();
+
+        // Already ambiguous before the run, so there is no transition to report.
+        (await LogsForVariant(variant.ShopifyProductVariantId)).ShouldBeEmpty();
     }
 
     [Fact]
@@ -407,6 +431,10 @@ public class SkulabsItemSyncServiceTests : IDisposable
 
         (await _dbContext.SkulabsItemListings.Where(SkulabsItemLinks.IsSyncable).CountAsync())
             .ShouldBe(1);
+
+        // Now that the ambiguity is resolved the variant really is linked, and says so.
+        (await LogsForVariant(variant.ShopifyProductVariantId)).Single()
+            .Message.ShouldBe("Linked to SkuLabs item 'was-ambiguous'.");
     }
 
     [Fact]
@@ -427,6 +455,13 @@ public class SkulabsItemSyncServiceTests : IDisposable
         stored.Listings.Count.ShouldBe(2);
         (await _dbContext.SkulabsItemListings.Where(SkulabsItemLinks.IsSyncable).CountAsync())
             .ShouldBe(0);
+
+        // The variant genuinely lost a link it had, so it is told both that and why.
+        (await LogsForVariant(variant.ShopifyProductVariantId)).Select(l => l.Message).ShouldBe([
+            "Unlinked from SkuLabs item 'now-ambiguous'.",
+            "SkuLabs item 'now-ambiguous' lists 2 Shopify variants, so it was not linked to this one. "
+            + "Resolve the duplicate listings in SkuLabs."
+        ]);
     }
 
     [Fact]
