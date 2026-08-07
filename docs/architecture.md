@@ -40,7 +40,7 @@ sync, feature flags, retry — hangs off those three stages.
 |---|---|---|
 | Shopify webhook handlers (create / update / delete) | SQS | Mirror Shopify's product/variant state locally: create, update, mark deleted, reactivate. |
 | Shopify product import (`ProductsService.SyncProducts`) | daily job + full sync | Same, full catalogue. |
-| SkuLabs item sync | 10-minute job + full sync | Pull SkuLabs items, link/relink to variants, quarantine ambiguous items. |
+| SkuLabs item sync | 10-minute job + full sync | Pull SkuLabs items and the Shopify listings they report, link/relink to variants. An item with several listings is ambiguous, which follows from its listing count rather than being recorded anywhere. |
 
 Rules:
 

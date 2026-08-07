@@ -11,9 +11,8 @@ public class SkulabsItemConfiguration : IEntityTypeConfiguration<SkulabsItemEnti
         builder.ToTable("SkulabsItems");
 
         builder.HasUuidV7PrimaryKey(x => x.SkulabsItemId);
-        
+
         builder.Property(x => x.SkulabsSourceItemId).IsRequired().HasMaxLength(50);
-        builder.Property(x => x.SkulabsSourceListingId).IsRequired().HasMaxLength(50);
         builder.Property(x => x.Title).IsRequired().HasMaxLength(1000);
         builder.Property(x => x.Sku).IsRequired().HasMaxLength(100);
         builder.Property(x => x.Barcode).IsRequired().HasMaxLength(100);
@@ -26,9 +25,18 @@ public class SkulabsItemConfiguration : IEntityTypeConfiguration<SkulabsItemEnti
             .IsRequired()
             .HasDefaultValue(0);
 
+        builder.Property(x => x.FirstSeenUtc).HasDefaultValueDateTimeNowUtcSql();
+        builder.Property(x => x.LastSeenUtc).HasDefaultValueDateTimeNowUtcSql();
+
+        // The upsert key for the reconciler — one row per SkuLabs source item.
         builder.HasIndex(x => x.SkulabsSourceItemId).IsUnique();
-        builder.HasIndex(x => x.SkulabsSourceListingId).IsUnique();
+
         builder.HasIndex(x => x.PendingSkulabsSync)
             .HasFilter("\"PendingSkulabsSync\" = true");
+
+        builder.HasMany(x => x.Listings)
+            .WithOne(listing => listing.SkulabsItem)
+            .HasForeignKey(listing => listing.SkulabsItemId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }

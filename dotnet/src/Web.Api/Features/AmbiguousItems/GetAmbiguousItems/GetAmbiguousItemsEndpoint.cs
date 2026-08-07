@@ -24,13 +24,13 @@ public class GetAmbiguousItemsEndpoint(ApplicationDbContext dbContext)
         GetAmbiguousItemsRequest request,
         CancellationToken cancellationToken)
     {
-        var query = dbContext.SkulabsAmbiguousItems.AsNoTracking();
+        var query = dbContext.SkulabsItems.AsNoTracking().WhereAmbiguous();
 
         query = query.ApplyAmbiguousItemsSearch(request.Search);
 
         var pagedResponse = await query
             .OrderByDescending(entity => entity.FirstSeenUtc)
-            .ThenBy(entity => entity.SkulabsAmbiguousItemId)
+            .ThenBy(entity => entity.SkulabsItemId)
             .ToPagedResponseAsync(
                 request,
                 AmbiguousItemsGridMapper.Instance,

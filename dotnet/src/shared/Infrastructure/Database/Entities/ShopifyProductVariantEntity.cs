@@ -93,5 +93,11 @@ public class ShopifyProductVariantEntity
     public ICollection<ShopifyProductVariantLogEventEntity> LogEvents { get; set; } =
         new HashSet<ShopifyProductVariantLogEventEntity>();
 
-    public SkulabsItemEntity? SkulabsItem { get; set; }
+    /// <summary>
+    /// Every SkuLabs listing pointing at this variant. Normally zero or one; more than one means two
+    /// SkuLabs items claim the same variant, which makes the link unusable rather than merely
+    /// ambiguous — see <see cref="SkulabsItemLinks.IsSyncable"/>.
+    /// </summary>
+    public ICollection<SkulabsItemListingEntity> SkulabsItemListings { get; set; } =
+        new HashSet<SkulabsItemListingEntity>();
 }

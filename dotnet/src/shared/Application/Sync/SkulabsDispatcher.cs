@@ -19,6 +19,10 @@ namespace Application.Sync;
 /// A rate-limited run is not a failure — rows stay pending, counters untouched, and the run
 /// reports the cooldown. The <see cref="FeatureFlags.SkulabsWriteBack"/> kill switch is checked
 /// here and nowhere else.
+/// <para>
+/// Items are reached through the listing table filtered by <see cref="SkulabsItemLinks.IsSyncable"/>,
+/// so an item sharing its variant with another item is never pushed.
+/// </para>
 /// </summary>
 public class SkulabsDispatcher(
     ApplicationDbContext dbContext,
@@ -33,28 +37,34 @@ public class SkulabsDispatcher(
     private const int MaxFailedSkulabsSyncAttempts = 3;
 
     public Task<DispatchResult> DispatchAll(CancellationToken cancellationToken = default) =>
-        Dispatch(item => true, cancellationToken);
+        Dispatch(listing => true, cancellationToken);
 
     public Task<DispatchResult> DispatchVariants(
         IReadOnlyCollection<Guid> variantIds,
         CancellationToken cancellationToken = default) =>
         variantIds.Count == 0
             ? Task.FromResult(DispatchResult.Empty)
-            : Dispatch(item => variantIds.Contains(item.ShopifyProductVariantId), cancellationToken);
+            : Dispatch(
+                listing => listing.ShopifyProductVariantId.HasValue
+                           && variantIds.Contains(listing.ShopifyProductVariantId.Value),
+                cancellationToken);
 
     private async Task<DispatchResult> Dispatch(
-        Expression<Func<SkulabsItemEntity, bool>> scope,
+        Expression<Func<SkulabsItemListingEntity, bool>> scope,
         CancellationToken cancellationToken)
     {
-        var pending = await dbContext.SkulabsItems
-            .Include(item => item.ShopifyProductVariant)
+        var pendingLinks = await dbContext.SkulabsItemListings
+            .Include(listing => listing.SkulabsItem)
+            .Include(listing => listing.ShopifyProductVariant)
+            .Where(SkulabsItemLinks.IsSyncable)
             .Where(scope)
-            .Where(item => item.PendingSkulabsSync
-                           && item.FailedSkulabsSyncAttempts < MaxFailedSkulabsSyncAttempts
-                           && item.ShopifyProductVariant != null
-                           && item.ShopifyProductVariant.IsActive
-                           && !item.ShopifyProductVariant.IsDeleted)
+            .Where(listing => listing.SkulabsItem!.PendingSkulabsSync
+                              && listing.SkulabsItem.FailedSkulabsSyncAttempts < MaxFailedSkulabsSyncAttempts
+                              && listing.ShopifyProductVariant!.IsActive
+                              && !listing.ShopifyProductVariant.IsDeleted)
             .ToListAsync(cancellationToken);
+
+        var pending = pendingLinks.Select(listing => listing.SkulabsItem!).ToList();
 
         if (pending.Count == 0)
         {
@@ -96,7 +106,7 @@ public class SkulabsDispatcher(
                 exception,
                 "SkuLabs bulk_upsert threw for {Count} pending item(s). Items stay pending and will be retried.",
                 updates.Length);
-            RecordFailedAttempt(pending);
+            RecordFailedAttempt(pendingLinks);
             await dbContext.SaveChangesAsync(cancellationToken);
             return new DispatchResult(Pending: pending.Count, Pushed: 0, Failed: pending.Count);
         }
@@ -119,10 +129,11 @@ public class SkulabsDispatcher(
     /// event for any item crossing <see cref="MaxFailedSkulabsSyncAttempts"/> — it is excluded
     /// from future runs by the pending query's counter bound.
     /// </summary>
-    private void RecordFailedAttempt(IReadOnlyList<SkulabsItemEntity> items)
+    private void RecordFailedAttempt(IReadOnlyList<SkulabsItemListingEntity> links)
     {
-        foreach (var item in items)
+        foreach (var link in links)
         {
+            var item = link.SkulabsItem!;
             item.FailedSkulabsSyncAttempts++;
 
             if (item.FailedSkulabsSyncAttempts >= MaxFailedSkulabsSyncAttempts)
@@ -132,7 +143,7 @@ public class SkulabsDispatcher(
                     item.SkulabsItemId, item.FailedSkulabsSyncAttempts);
                 dbContext.ShopifyProductVariantLogEvents.Add(new ShopifyProductVariantLogEventEntity
                 {
-                    ShopifyProductVariantId = item.ShopifyProductVariantId,
+                    ShopifyProductVariantId = link.ShopifyProductVariantId!.Value,
                     Message = VariantLogMessages.SkulabsItemExcludedAfterFailedSyncs(item.FailedSkulabsSyncAttempts)
                 });
             }

@@ -96,7 +96,7 @@ public class SkulabsItemClientTests
     }
 
     [Fact]
-    public async Task GetAllItems_ShouldClassifyItemsByShopifyListingCount()
+    public async Task GetAllItems_ShouldReturnEveryItem_WithOnlyItsShopifyListings()
     {
         const string json = """
                             [
@@ -132,14 +132,19 @@ public class SkulabsItemClientTests
 
         var result = await sut.GetAllItems();
 
-        var syncable = result.GetSyncable();
-        syncable.Count.ShouldBe(2);
-        syncable[0].ShouldBe(new SkuLabsItem("item-1", "listing-1", 1, "SKU-1", "UPC-1", "Item One"));
-        syncable[1].ShouldBe(new SkuLabsItem("item-3", "listing-3", 3, "SKU-3", "UPC-3", "Item Three"));
+        result.Items.Count.ShouldBe(3);
 
-        // An item with no Shopify listing is neither syncable nor ambiguous — it is left alone.
-        result.GetAmbiguous().ShouldBeEmpty();
-        result.GetSourceItemIdsWithoutShopifyListings().ShouldBe(["item-2"]);
+        var itemOne = result.Items.Single(item => item.SourceItemId == "item-1");
+        itemOne.Name.ShouldBe("Item One");
+        itemOne.Sku.ShouldBe("SKU-1");
+        itemOne.Upc.ShouldBe("UPC-1");
+        itemOne.Listings.Single().ShouldBe(new SkulabsApiListing("listing-1", "1", "prod-1"));
+
+        result.Items.Single(item => item.SourceItemId == "item-3")
+            .Listings.Single().ShouldBe(new SkulabsApiListing("listing-3", "3", "prod-3"));
+
+        // An item with no Shopify listing is kept, with nothing to link it by.
+        result.Items.Single(item => item.SourceItemId == "item-2").Listings.ShouldBeEmpty();
     }
 
     [Fact]
@@ -215,7 +220,7 @@ public class SkulabsItemClientTests
     }
 
     [Fact]
-    public async Task GetAllItems_ShouldClassifyMultiListingItemsAsAmbiguous()
+    public async Task GetAllItems_ShouldPreserveEveryListing_WhenItemHasMultiple()
     {
         const string json = """
                             [
@@ -255,13 +260,14 @@ public class SkulabsItemClientTests
 
         var result = await sut.GetAllItems();
 
-        var syncable = result.GetSyncable();
-        syncable.Count.ShouldBe(1);
-        syncable[0].ShouldBe(new SkuLabsItem("item-single", "l-s", 30, "SKU-S", "UPC-S", "Single"));
+        result.Items.Single(item => item.SourceItemId == "item-single")
+            .Listings.Single().ShouldBe(new SkulabsApiListing("l-s", "30", "prod-s"));
 
-        var ambiguous = result.GetAmbiguous();
-        ambiguous.Select(a => a.SourceItemId).ShouldBe(["item-multi-1", "item-multi-2"], ignoreOrder: true);
-        ambiguous.Single(a => a.SourceItemId == "item-multi-1").Listings.Count.ShouldBe(2);
+        result.Items
+            .Where(item => item.Listings.Count > 1)
+            .Select(item => item.SourceItemId)
+            .ShouldBe(["item-multi-1", "item-multi-2"], ignoreOrder: true);
+        result.Items.Single(item => item.SourceItemId == "item-multi-1").Listings.Count.ShouldBe(2);
     }
 
     [Fact]
@@ -303,13 +309,13 @@ public class SkulabsItemClientTests
 
         var result = await sut.GetAllItems();
 
-        var syncable = result.GetSyncable();
-        syncable.Count.ShouldBe(1);
-        syncable[0].ShouldBe(new SkuLabsItem("item-good", "l-g", 42, "SKU-G", "UPC-G", "Good"));
+        result.Items.Single(item => item.SourceItemId == "item-good")
+            .Listings.Single().ShouldBe(new SkulabsApiListing("l-g", "42", "prod-g"));
 
         // The non-numeric listings are dropped, leaving those items with no Shopify listing at all.
-        result.GetAmbiguous().ShouldBeEmpty();
-        result.GetSourceItemIdsWithoutShopifyListings()
+        result.Items
+            .Where(item => item.Listings.Count == 0)
+            .Select(item => item.SourceItemId)
             .ShouldBe(["item-bad-1", "item-bad-2"], ignoreOrder: true);
     }
 
@@ -336,10 +342,9 @@ public class SkulabsItemClientTests
 
         var result = await sut.GetAllItems();
 
-        result.GetSyncable().ShouldBeEmpty();
-        result.GetAmbiguous().ShouldBeEmpty();
-        result.GetSourceItemIdsWithoutShopifyListings().ShouldBe(["item-null"]);
-        result.Items.ShouldHaveSingleItem().Listings.ShouldBeEmpty();
+        var stored = result.Items.ShouldHaveSingleItem();
+        stored.SourceItemId.ShouldBe("item-null");
+        stored.Listings.ShouldBeEmpty();
     }
 
     [Fact]

@@ -1,5 +1,6 @@
 using FastEndpoints;
 using Infrastructure.Database;
+using Infrastructure.Database.Entities;
 using Microsoft.EntityFrameworkCore;
 using SharedKernel;
 
@@ -69,6 +70,7 @@ public class GetVariantInformationEndpoint(
         dbContext.ShopifyProductVariants
             .AsNoTracking()
             .Where(entity => entity.VariantId == variantId && !entity.IsDeleted)
+            .WithResolvedSkulabsItem()
             .Select(entity => entity.SkulabsItem == null
                 ? null
                 : entity.SkulabsItem.SkulabsSourceItemId)

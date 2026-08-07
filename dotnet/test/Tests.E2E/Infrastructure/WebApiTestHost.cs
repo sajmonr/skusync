@@ -105,20 +105,96 @@ public class WebApiTestHost : WebApplicationFactory<Program>, IAsyncLifetime
 
         if (skulabsSourceItemId is not null)
         {
-            variant.SkulabsItem = new SkulabsItemEntity
+            variant.SkulabsItemListings.Add(new SkulabsItemListingEntity
             {
-                SkulabsSourceItemId = skulabsSourceItemId,
                 SkulabsSourceListingId = $"listing-{skulabsSourceItemId}",
-                Title = $"SkuLabs {skulabsSourceItemId}",
-                Sku = variant.Sku,
-                Barcode = variant.Barcode
-            };
+                RawVariantId = variantId.ToString(),
+                ShopifyProductId = owningProductId.ToString(),
+                SkulabsItem = new SkulabsItemEntity
+                {
+                    SkulabsSourceItemId = skulabsSourceItemId,
+                    Title = $"SkuLabs {skulabsSourceItemId}",
+                    Sku = variant.Sku,
+                    Barcode = variant.Barcode
+                }
+            });
         }
 
         dbContext.ShopifyProductVariants.Add(variant);
         await dbContext.SaveChangesAsync();
 
         return variantId;
+    }
+
+    /// <summary>
+    /// Adds a second SkuLabs item whose only listing points at an already-linked variant, leaving two
+    /// items contesting one variant. Neither link is usable, which is the state the cardinality guard
+    /// exists to catch.
+    /// </summary>
+    public async Task SeedCompetingSkulabsItem(long variantId, string skulabsSourceItemId)
+    {
+        using var scope = Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var variant = await dbContext.ShopifyProductVariants
+            .SingleAsync(entity => entity.VariantId == variantId);
+
+        dbContext.SkulabsItems.Add(new SkulabsItemEntity
+        {
+            SkulabsSourceItemId = skulabsSourceItemId,
+            Title = $"SkuLabs {skulabsSourceItemId}",
+            Sku = variant.Sku,
+            Barcode = variant.Barcode,
+            Listings =
+            {
+                new SkulabsItemListingEntity
+                {
+                    SkulabsSourceListingId = $"listing-{skulabsSourceItemId}",
+                    RawVariantId = variantId.ToString(),
+                    ShopifyProductId = variant.ProductId.ToString(),
+                    ShopifyProductVariantId = variant.ShopifyProductVariantId
+                }
+            }
+        });
+
+        await dbContext.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Seeds one SkuLabs item carrying a listing per supplied raw variant id. Each listing resolves to
+    /// a seeded variant where one exists and stays unresolved otherwise. More than one listing makes
+    /// the item ambiguous — a property of its listing count, not a flag.
+    /// </summary>
+    public async Task SeedSkulabsItemWithListings(string skulabsSourceItemId, params long[] rawVariantIds)
+    {
+        using var scope = Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var variantsById = await dbContext.ShopifyProductVariants
+            .Where(entity => rawVariantIds.Contains(entity.VariantId))
+            .ToDictionaryAsync(entity => entity.VariantId, entity => entity.ShopifyProductVariantId);
+
+        var item = new SkulabsItemEntity
+        {
+            SkulabsSourceItemId = skulabsSourceItemId,
+            Title = $"SkuLabs {skulabsSourceItemId}",
+            Sku = $"SKU-{skulabsSourceItemId}",
+            Barcode = $"BAR-{skulabsSourceItemId}"
+        };
+
+        foreach (var rawVariantId in rawVariantIds)
+        {
+            item.Listings.Add(new SkulabsItemListingEntity
+            {
+                SkulabsSourceListingId = $"listing-{skulabsSourceItemId}-{rawVariantId}",
+                RawVariantId = rawVariantId.ToString(),
+                ShopifyProductId = (rawVariantId * 100).ToString(),
+                ShopifyProductVariantId = variantsById.TryGetValue(rawVariantId, out var guid) ? guid : null
+            });
+        }
+
+        dbContext.SkulabsItems.Add(item);
+        await dbContext.SaveChangesAsync();
     }
 
     /// <summary>Removes every seeded variant and its linked SkuLabs item.</summary>

@@ -77,8 +77,9 @@ public class GetItemSyncItemsTests
         var result = await dbContext.ShopifyProductVariants
             .AsNoTracking()
             .Where(entity => entity.IsActive && !entity.IsDeleted)
-            .OrderBy(entity => entity.DisplayName)
-            .ThenBy(entity => entity.ShopifyProductVariantId)
+            .WithResolvedSkulabsItem()
+            .OrderBy(entity => entity.Variant.DisplayName)
+            .ThenBy(entity => entity.Variant.ShopifyProductVariantId)
             .ToPagedResponseAsync(
                 new GetItemSyncItemsRequest(),
                 ItemSyncGridMapper.Instance,
@@ -102,8 +103,9 @@ public class GetItemSyncItemsTests
         var result = await dbContext.ShopifyProductVariants
             .AsNoTracking()
             .Where(entity => entity.IsActive && !entity.IsDeleted)
-            .OrderBy(entity => entity.DisplayName)
-            .ThenBy(entity => entity.ShopifyProductVariantId)
+            .WithResolvedSkulabsItem()
+            .OrderBy(entity => entity.Variant.DisplayName)
+            .ThenBy(entity => entity.Variant.ShopifyProductVariantId)
             .ToPagedResponseAsync(
                 new GetItemSyncItemsRequest(),
                 ItemSyncGridMapper.Instance,
@@ -154,13 +156,13 @@ public class GetItemSyncItemsTests
         ApplicationDbContext dbContext,
         GetItemSyncItemsRequest request)
     {
-        var source = dbContext.ShopifyProductVariants.AsNoTracking().AsQueryable();
+        var source = dbContext.ShopifyProductVariants.AsNoTracking().WithResolvedSkulabsItem();
         source = source.ApplyItemSyncSearch(request.Search);
         source = source.ApplyItemSyncStatusFilter(request.Status);
 
         return source
-            .OrderBy(entity => entity.DisplayName)
-            .ThenBy(entity => entity.ShopifyProductVariantId)
+            .OrderBy(entity => entity.Variant.DisplayName)
+            .ThenBy(entity => entity.Variant.ShopifyProductVariantId)
             .ToPagedResponseAsync(request, ItemSyncGridMapper.Instance, ItemSyncListItem.Projection);
     }
 
@@ -189,11 +191,19 @@ public class GetItemSyncItemsTests
         string title,
         string sourceItemId = "SL-100") => new()
     {
-        ShopifyProductVariantId = variant.ShopifyProductVariantId,
         SkulabsSourceItemId = sourceItemId,
-        SkulabsSourceListingId = $"LISTING-{Guid.NewGuid()}",
         Title = title,
         Sku = "SKULABS-SKU",
-        Barcode = "SKULABS-BARCODE"
+        Barcode = "SKULABS-BARCODE",
+        Listings =
+        {
+            new SkulabsItemListingEntity
+            {
+                SkulabsSourceListingId = $"LISTING-{Guid.NewGuid()}",
+                RawVariantId = variant.VariantId.ToString(),
+                ShopifyProductId = variant.ProductId.ToString(),
+                ShopifyProductVariantId = variant.ShopifyProductVariantId
+            }
+        }
     };
 }

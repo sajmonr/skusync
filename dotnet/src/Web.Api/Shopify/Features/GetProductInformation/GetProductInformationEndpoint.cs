@@ -1,5 +1,6 @@
 using FastEndpoints;
 using Infrastructure.Database;
+using Infrastructure.Database.Entities;
 using Microsoft.EntityFrameworkCore;
 using SharedKernel;
 
@@ -75,11 +76,12 @@ public class GetProductInformationEndpoint(
             .Where(entity => entity.ProductId == productId && !entity.IsDeleted)
             .OrderBy(entity => entity.Sku)
             .ThenBy(entity => entity.VariantId)
+            .WithResolvedSkulabsItem()
             .Select(entity => new
             {
-                entity.VariantId,
-                entity.Sku,
-                entity.DisplayName,
+                entity.Variant.VariantId,
+                entity.Variant.Sku,
+                entity.Variant.DisplayName,
                 SkulabsItemId = entity.SkulabsItem == null
                     ? null
                     : entity.SkulabsItem.SkulabsSourceItemId

@@ -34,10 +34,10 @@ public class SkulabsItemSyncTests(AppServerTestHost factory) : IAsyncLifetime
 
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var stored = await db.SkulabsItems.SingleAsync();
-        stored.ShopifyProductVariantId.ShouldBe(variantGuid);
+        var stored = await db.SkulabsItems.Include(i => i.Listings).SingleAsync();
         stored.SkulabsSourceItemId.ShouldBe("69b4543c6642ed434a5b1c4a");
-        stored.SkulabsSourceListingId.ShouldBe("69b454b06642ed434a5bf571");
+        stored.Listings.Single().ShopifyProductVariantId.ShouldBe(variantGuid);
+        stored.Listings.Single().SkulabsSourceListingId.ShouldBe("69b454b06642ed434a5bf571");
         stored.Sku.ShouldBe("1 bird");
         stored.Barcode.ShouldBe("10862241");
         stored.Title.ShouldBe("Yellow Vintage Nature Domino Necklace (Goose (1bird))");
@@ -72,10 +72,10 @@ public class SkulabsItemSyncTests(AppServerTestHost factory) : IAsyncLifetime
 
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var stored = await db.SkulabsItems.SingleAsync();
+        var stored = await db.SkulabsItems.Include(i => i.Listings).SingleAsync();
         // Same row, untouched — PK preserved, metadata still the original seed values.
         stored.SkulabsItemId.ShouldBe(existingItemId);
-        stored.ShopifyProductVariantId.ShouldBe(variantGuid);
+        stored.Listings.Single().ShopifyProductVariantId.ShouldBe(variantGuid);
         stored.Title.ShouldBe("Old Title");
         stored.Sku.ShouldBe("old-sku");
         stored.Barcode.ShouldBe("old-barcode");
@@ -112,10 +112,10 @@ public class SkulabsItemSyncTests(AppServerTestHost factory) : IAsyncLifetime
 
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var stored = await db.SkulabsItems.SingleAsync();
+        var stored = await db.SkulabsItems.Include(i => i.Listings).SingleAsync();
         // Same PK — the row was re-pointed, not deleted + recreated.
         stored.SkulabsItemId.ShouldBe(rowId);
-        stored.ShopifyProductVariantId.ShouldBe(newVariantGuid);
+        stored.Listings.Single().ShopifyProductVariantId.ShouldBe(newVariantGuid);
         // Metadata refreshed from the API payload because a new link was written.
         stored.Title.ShouldBe("Yellow Vintage Nature Domino Necklace (Goose (1bird))");
         stored.Sku.ShouldBe("1 bird");
@@ -133,20 +133,24 @@ public class SkulabsItemSyncTests(AppServerTestHost factory) : IAsyncLifetime
     }
 
     [Fact]
-    public async Task SkulabsSyncJob_DoesNothing_WhenNoMatchingVariantExists()
+    public async Task SkulabsSyncJob_StoresItemWithUnresolvedListing_WhenNoMatchingVariantExists()
     {
-        // No variant seeded with VariantId 45696210862241.
+        // No variant seeded with VariantId 45696210862241. The item is still mirrored — the listing
+        // simply resolves to nothing, which is what makes the gap visible.
         await StubSkulabsGetAllAsync("Skulabs/Api/items-get-single.json");
 
         await RunSyncJobAsync();
 
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        (await db.SkulabsItems.CountAsync()).ShouldBe(0);
+        var stored = await db.SkulabsItems.Include(i => i.Listings).SingleAsync();
+        var listing = stored.Listings.Single();
+        listing.ShopifyProductVariantId.ShouldBeNull();
+        listing.RawVariantId.ShouldBe(MatchingVariantId.ToString());
     }
 
     [Fact]
-    public async Task SkulabsSyncJob_QuarantinesItem_WhenItHasMultipleListings()
+    public async Task SkulabsSyncJob_StoresItemAsAmbiguous_WhenItHasMultipleListings()
     {
         // The item has two listings — one pointing at our seeded variant, one that isn't ours.
         var variantGuid = await SeedVariantAsync(MatchingVariantId);
@@ -157,18 +161,19 @@ public class SkulabsItemSyncTests(AppServerTestHost factory) : IAsyncLifetime
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-        // Not synced into the active table.
-        (await db.SkulabsItems.CountAsync()).ShouldBe(0);
+        // One item row carrying both listings; the matching listing resolves to our variant.
+        var stored = await db.SkulabsItems.Include(i => i.Listings).SingleAsync();
+        stored.SkulabsSourceItemId.ShouldBe("ambiguous-multi-item");
+        stored.Listings.Count.ShouldBe(2);
 
-        // Surfaced as ambiguous, carrying both listings; the matching listing resolves to our variant.
-        var ambiguous = await db.SkulabsAmbiguousItems.Include(a => a.Listings).SingleAsync();
-        ambiguous.SkulabsSourceItemId.ShouldBe("ambiguous-multi-item");
-        ambiguous.ListingCount.ShouldBe(2);
-
-        ambiguous.Listings.Single(l => l.RawVariantId == MatchingVariantId.ToString())
+        stored.Listings.Single(l => l.RawVariantId == MatchingVariantId.ToString())
             .ShopifyProductVariantId.ShouldBe(variantGuid);
-        ambiguous.Listings.Single(l => l.RawVariantId != MatchingVariantId.ToString())
+        stored.Listings.Single(l => l.RawVariantId != MatchingVariantId.ToString())
             .ShopifyProductVariantId.ShouldBeNull();
+
+        // Ambiguity is derived, not stored: the item is present but no link passes the guard, so
+        // nothing about it is syncable.
+        (await db.SkulabsItemListings.Where(SkulabsItemLinks.IsSyncable).CountAsync()).ShouldBe(0);
     }
 
     private async Task RunSyncJobAsync()
@@ -231,12 +236,20 @@ public class SkulabsItemSyncTests(AppServerTestHost factory) : IAsyncLifetime
         var entity = new SkulabsItemEntity
         {
             SkulabsItemId = Guid.CreateVersion7(),
-            ShopifyProductVariantId = variantGuid,
             SkulabsSourceItemId = sourceItemId,
-            SkulabsSourceListingId = sourceListingId,
             Title = title,
             Sku = sku,
-            Barcode = barcode
+            Barcode = barcode,
+            Listings =
+            {
+                new SkulabsItemListingEntity
+                {
+                    SkulabsSourceListingId = sourceListingId,
+                    RawVariantId = MatchingVariantId.ToString(),
+                    ShopifyProductId = "8407892623521",
+                    ShopifyProductVariantId = variantGuid
+                }
+            }
         };
         db.SkulabsItems.Add(entity);
         await db.SaveChangesAsync();

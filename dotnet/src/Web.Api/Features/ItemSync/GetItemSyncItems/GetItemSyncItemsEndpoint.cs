@@ -1,5 +1,6 @@
 using FastEndpoints;
 using Infrastructure.Database;
+using Infrastructure.Database.Entities;
 using Microsoft.EntityFrameworkCore;
 using Web.Api.Common.Paging;
 
@@ -25,14 +26,14 @@ public class GetItemSyncItemsEndpoint(ApplicationDbContext dbContext)
         var query = dbContext.ShopifyProductVariants
             .AsNoTracking()
             .Where(entity => entity.IsActive && !entity.IsDeleted)
-            .AsQueryable();
+            .WithResolvedSkulabsItem();
 
         query = query.ApplyItemSyncSearch(request.Search);
         query = query.ApplyItemSyncStatusFilter(request.Status);
 
         var pagedResponse = await query
-            .OrderBy(entity => entity.DisplayName)
-            .ThenBy(entity => entity.ShopifyProductVariantId)
+            .OrderBy(entity => entity.Variant.DisplayName)
+            .ThenBy(entity => entity.Variant.ShopifyProductVariantId)
             .ToPagedResponseAsync(
                 request,
                 ItemSyncGridMapper.Instance,

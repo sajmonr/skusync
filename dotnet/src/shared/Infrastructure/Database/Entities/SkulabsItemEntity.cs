@@ -1,20 +1,23 @@
 namespace Infrastructure.Database.Entities;
 
+/// <summary>
+/// A SkuLabs inventory item, mirrored locally. One row per SkuLabs <c>_id</c> regardless of how many
+/// Shopify listings it has — whether an item takes part in the active sync is <em>derived</em> from
+/// <see cref="Listings"/> (see <see cref="SkulabsItemLinks.IsSyncable"/>), never from which table it
+/// sits in. An item with several listings is ambiguous and simply fails that predicate.
+/// </summary>
 public class SkulabsItemEntity
 {
+    public Guid SkulabsItemId { get; set; } = Guid.CreateVersion7();
 
-    public Guid SkulabsItemId { get; set; }  = Guid.CreateVersion7();
-
-    public Guid ShopifyProductVariantId { get; set; } = Guid.Empty;
-    
+    /// <summary>The SkuLabs <c>_id</c> of the item. Unique — one row per source item.</summary>
     public string SkulabsSourceItemId { get; set; } = string.Empty;
-
-    public string SkulabsSourceListingId { get; set; } = string.Empty;
 
     public string Title { get; set; } = string.Empty;
 
     public string Sku { get; set; } = string.Empty;
 
+    /// <summary>The item's UPC/EAN as SkuLabs reports it under <c>upc</c>.</summary>
     public string Barcode { get; set; } = string.Empty;
 
     /// <summary>
@@ -33,6 +36,20 @@ public class SkulabsItemEntity
     /// </summary>
     public int FailedSkulabsSyncAttempts { get; set; }
 
-    public ShopifyProductVariantEntity? ShopifyProductVariant { get; set; }
+    /// <summary>UTC timestamp this item was first seen in a SkuLabs payload.</summary>
+    public DateTime FirstSeenUtc { get; set; } = DateTime.UtcNow;
 
+    /// <summary>
+    /// UTC timestamp of the most recent sync run that still found this item. Together with
+    /// <see cref="FirstSeenUtc"/> this is how long an ambiguous item has been ambiguous, which
+    /// cannot be recovered from listing cardinality alone.
+    /// </summary>
+    public DateTime LastSeenUtc { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// Every Shopify listing SkuLabs reports for this item. Zero means SkuLabs-only, one means a
+    /// candidate for the active sync, more than one means ambiguous.
+    /// </summary>
+    public ICollection<SkulabsItemListingEntity> Listings { get; set; } =
+        new HashSet<SkulabsItemListingEntity>();
 }

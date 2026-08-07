@@ -12,41 +12,53 @@ namespace Application.Sync;
 /// local rows per the field-authority rules, marking each corrected row pending a push. Every
 /// correction writes a <see cref="VariantLogMessages"/> audit event so the change is visible in
 /// the variant history.
+/// <para>
+/// Pairs come from the listing table filtered by <see cref="SkulabsItemLinks.IsSyncable"/>: a listing
+/// only counts when it is the sole listing on its item and the sole listing on its variant. Without
+/// the variant half of that check two SkuLabs items could both claim one variant and take turns
+/// rewriting its SKU on every pass.
+/// </para>
 /// </summary>
 public class Reconciler(
     ApplicationDbContext dbContext,
     ILogger<Reconciler> logger) : IReconciler
 {
     public Task<ReconcileResult> ReconcileAll(CancellationToken cancellationToken = default) =>
-        Reconcile(item => true, cancellationToken);
+        Reconcile(listing => true, cancellationToken);
 
     public Task<ReconcileResult> ReconcileVariants(
         IReadOnlyCollection<Guid> variantIds,
         CancellationToken cancellationToken = default) =>
         variantIds.Count == 0
             ? Task.FromResult(ReconcileResult.Empty)
-            : Reconcile(item => variantIds.Contains(item.ShopifyProductVariantId), cancellationToken);
+            : Reconcile(
+                listing => listing.ShopifyProductVariantId.HasValue
+                           && variantIds.Contains(listing.ShopifyProductVariantId.Value),
+                cancellationToken);
 
     public Task<ReconcileResult> ReconcileSkulabsItems(
         IReadOnlyCollection<Guid> skulabsItemIds,
         CancellationToken cancellationToken = default) =>
         skulabsItemIds.Count == 0
             ? Task.FromResult(ReconcileResult.Empty)
-            : Reconcile(item => skulabsItemIds.Contains(item.SkulabsItemId), cancellationToken);
+            : Reconcile(listing => skulabsItemIds.Contains(listing.SkulabsItemId), cancellationToken);
 
     private async Task<ReconcileResult> Reconcile(
-        Expression<Func<SkulabsItemEntity, bool>> scope,
+        Expression<Func<SkulabsItemListingEntity, bool>> scope,
         CancellationToken cancellationToken)
     {
-        var candidates = await dbContext.SkulabsItems
-            .Include(item => item.ShopifyProductVariant)
+        var candidates = await dbContext.SkulabsItemListings
+            .Include(listing => listing.SkulabsItem)
+            .Include(listing => listing.ShopifyProductVariant)
+            .Where(SkulabsItemLinks.IsSyncable)
             .Where(scope)
-            .Where(item => item.ShopifyProductVariant != null
-                           && item.ShopifyProductVariant.IsActive
-                           && !item.ShopifyProductVariant.IsDeleted
-                           && ((item.Sku != "" && item.ShopifyProductVariant.Sku != item.Sku)
-                               || (item.Barcode != "" && item.ShopifyProductVariant.Barcode != item.Barcode)
-                               || item.ShopifyProductVariant.DisplayName != item.Title))
+            .Where(listing => listing.ShopifyProductVariant!.IsActive
+                              && !listing.ShopifyProductVariant.IsDeleted
+                              && ((listing.SkulabsItem!.Sku != ""
+                                   && listing.ShopifyProductVariant.Sku != listing.SkulabsItem.Sku)
+                                  || (listing.SkulabsItem.Barcode != ""
+                                      && listing.ShopifyProductVariant.Barcode != listing.SkulabsItem.Barcode)
+                                  || listing.ShopifyProductVariant.DisplayName != listing.SkulabsItem.Title))
             .ToListAsync(cancellationToken);
 
         if (candidates.Count == 0)
@@ -57,15 +69,18 @@ public class Reconciler(
         var variantsMarked = 0;
         var itemsMarked = 0;
 
-        foreach (var item in candidates)
+        foreach (var listing in candidates)
         {
-            if (MirrorSkuAndBarcode(item))
+            var item = listing.SkulabsItem!;
+            var variant = listing.ShopifyProductVariant!;
+
+            if (MirrorSkuAndBarcode(item, variant))
             {
-                item.ShopifyProductVariant!.PendingShopifySync = true;
+                variant.PendingShopifySync = true;
                 variantsMarked++;
             }
 
-            if (MirrorTitle(item))
+            if (MirrorTitle(item, variant))
             {
                 item.PendingSkulabsSync = true;
                 itemsMarked++;
@@ -88,9 +103,8 @@ public class Reconciler(
     /// SkuLabs value is never authoritative — SkuLabs simply has no value on record — so it never
     /// counts as drift and never erases a good variant value.
     /// </summary>
-    private bool MirrorSkuAndBarcode(SkulabsItemEntity item)
+    private bool MirrorSkuAndBarcode(SkulabsItemEntity item, ShopifyProductVariantEntity variant)
     {
-        var variant = item.ShopifyProductVariant!;
         var changed = false;
 
         if (!string.IsNullOrEmpty(item.Sku)
@@ -123,10 +137,8 @@ public class Reconciler(
     /// Mirrors the authoritative variant <c>DisplayName</c> into the SkuLabs item title when they
     /// drift.
     /// </summary>
-    private bool MirrorTitle(SkulabsItemEntity item)
+    private bool MirrorTitle(SkulabsItemEntity item, ShopifyProductVariantEntity variant)
     {
-        var variant = item.ShopifyProductVariant!;
-
         if (string.Equals(variant.DisplayName, item.Title, StringComparison.Ordinal))
         {
             return false;

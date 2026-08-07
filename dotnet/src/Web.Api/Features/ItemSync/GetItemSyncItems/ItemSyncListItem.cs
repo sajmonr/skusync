@@ -16,15 +16,15 @@ public readonly record struct ItemSyncListItem(
     string ShopifyUrl,
     SkulabsItemSyncDetails? Skulabs)
 {
-    public static readonly Expression<Func<ShopifyProductVariantEntity, ItemSyncListItem>> Projection =
+    public static readonly Expression<Func<VariantWithSkulabsItem, ItemSyncListItem>> Projection =
         entity => new ItemSyncListItem(
-            entity.ShopifyProductVariantId,
-            entity.DisplayName,
-            entity.ProductId,
-            entity.VariantId,
-            entity.Sku,
-            entity.Barcode,
-            entity.PendingShopifySync,
+            entity.Variant.ShopifyProductVariantId,
+            entity.Variant.DisplayName,
+            entity.Variant.ProductId,
+            entity.Variant.VariantId,
+            entity.Variant.Sku,
+            entity.Variant.Barcode,
+            entity.Variant.PendingShopifySync,
             "",
             entity.SkulabsItem == null
                 ? null

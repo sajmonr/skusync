@@ -117,12 +117,20 @@ public class SkuAndBarcodeSyncTests(AppServerTestHost factory) : IAsyncLifetime
         db.SkulabsItems.Add(new SkulabsItemEntity
         {
             SkulabsItemId = Guid.CreateVersion7(),
-            ShopifyProductVariantId = variant.ShopifyProductVariantId,
             SkulabsSourceItemId = $"src-{variantId}",
-            SkulabsSourceListingId = $"lst-{variantId}",
             Title = "Drifted Variant",
             Sku = "skulabs-authoritative",
-            Barcode = "skulabs-authoritative-bar"
+            Barcode = "skulabs-authoritative-bar",
+            Listings =
+            {
+                new SkulabsItemListingEntity
+                {
+                    SkulabsSourceListingId = $"lst-{variantId}",
+                    RawVariantId = variantId.ToString(),
+                    ShopifyProductId = productId.ToString(),
+                    ShopifyProductVariantId = variant.ShopifyProductVariantId
+                }
+            }
         });
 
         await db.SaveChangesAsync();
