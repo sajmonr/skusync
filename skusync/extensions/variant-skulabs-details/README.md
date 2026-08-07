@@ -221,7 +221,7 @@ Shopify-side projects resolve it the same way. It maps an environment to an orig
 | `NODE_ENV` | API base URL |
 | --- | --- |
 | `development` | `https://shopify-skusync.ngrok.app` (the fixed tunnel; must match `ngrok.yaml`) |
-| `production` | `https://skusync.darkflux.app` |
+| `production` | `https://api.skusync.darkflux.app` |
 
 It is resolved at **build** time, not runtime: the Shopify CLI substitutes `process.env.NODE_ENV` into
 the bundle via esbuild's `define`, and Shopify's CDN serves that bundle verbatim — there is no runtime
@@ -233,8 +233,8 @@ next deploy. Only named members are substituted; reading `process.env` as an obj
 ```sh
 pnpm dev                # NODE_ENV=development -> tunnel URL
 pnpm build              # NODE_ENV=development -> tunnel URL
-pnpm build:production    # NODE_ENV=production  -> skusync.darkflux.app
-pnpm deploy             # NODE_ENV=production  -> skusync.darkflux.app
+pnpm build:production    # NODE_ENV=production  -> api.skusync.darkflux.app
+pnpm deploy             # NODE_ENV=production  -> api.skusync.darkflux.app
 ```
 
 The reason nothing relies on the default: **the CLI sets `NODE_ENV=production` itself when the variable
