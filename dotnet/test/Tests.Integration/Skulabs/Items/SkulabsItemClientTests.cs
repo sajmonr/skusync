@@ -338,7 +338,7 @@ public class SkulabsItemClientTests
         });
         var sut = CreateSut();
 
-        await Should.ThrowAsync<HttpRequestException>(() => sut.GetAllItems());
+        await Should.ThrowAsync<SkulabsRequestFailedException>(() => sut.GetAllItems());
 
         var errorEntry = _logger.Entries.SingleOrDefault(e => e.LogLevel == LogLevel.Error);
         errorEntry.ShouldNotBeNull();
@@ -359,7 +359,7 @@ public class SkulabsItemClientTests
         });
         var sut = CreateSut();
 
-        await Should.ThrowAsync<HttpRequestException>(() => sut.GetAllItems());
+        await Should.ThrowAsync<SkulabsRequestFailedException>(() => sut.GetAllItems());
 
         var errorEntry = _logger.Entries.SingleOrDefault(e => e.LogLevel == LogLevel.Error);
         errorEntry.ShouldNotBeNull();
@@ -500,13 +500,13 @@ public class SkulabsItemClientTests
         _handler.SetResponse(new HttpResponseMessage(HttpStatusCode.InternalServerError));
         var sut = CreateSut();
 
-        await Should.ThrowAsync<HttpRequestException>(() => sut.GetAllItems());
+        await Should.ThrowAsync<SkulabsRequestFailedException>(() => sut.GetAllItems());
     }
 
     [Fact]
     public async Task UpdateItems_ShouldSendPutRequestToBulkUpsertEndpoint_WithItemsArrayInBody()
     {
-        _handler.SetResponse(JsonResponse("{}"));
+        _handler.SetResponse(JsonResponse("""{"success":true}"""));
         var sut = CreateSut();
 
         await sut.UpdateItems([
@@ -535,7 +535,7 @@ public class SkulabsItemClientTests
     [Fact]
     public async Task UpdateItems_ShouldSendEmptyItemsArray_WhenInputIsEmpty()
     {
-        _handler.SetResponse(JsonResponse("{}"));
+        _handler.SetResponse(JsonResponse("""{"success":true}"""));
         var sut = CreateSut();
 
         await sut.UpdateItems([]);
@@ -551,7 +551,7 @@ public class SkulabsItemClientTests
         _handler.SetResponse(new HttpResponseMessage(HttpStatusCode.InternalServerError));
         var sut = CreateSut();
 
-        await Should.ThrowAsync<HttpRequestException>(() =>
+        await Should.ThrowAsync<SkulabsRequestFailedException>(() =>
             sut.UpdateItems([new SkulabsItemUpdateWithId("item-1", "Name")]));
     }
 
@@ -577,7 +577,7 @@ public class SkulabsItemClientTests
         });
         var sut = CreateSut();
 
-        await Should.ThrowAsync<HttpRequestException>(() =>
+        await Should.ThrowAsync<SkulabsRequestFailedException>(() =>
             sut.UpdateItems([new SkulabsItemUpdateWithId("item-1", "Name")]));
 
         var errorEntry = _logger.Entries.SingleOrDefault(e => e.LogLevel == LogLevel.Error);
@@ -592,7 +592,7 @@ public class SkulabsItemClientTests
     [Fact]
     public async Task UpdateItems_ShouldLogInformation_OnSuccess()
     {
-        _handler.SetResponse(JsonResponse("{}"));
+        _handler.SetResponse(JsonResponse("""{"success":true}"""));
         var sut = CreateSut();
 
         await sut.UpdateItems([
@@ -608,7 +608,7 @@ public class SkulabsItemClientTests
     [Fact]
     public async Task UpdateItem_Extension_ShouldDelegateToUpdateItems_WithSingletonArray()
     {
-        _handler.SetResponse(JsonResponse("{}"));
+        _handler.SetResponse(JsonResponse("""{"success":true}"""));
         var sut = CreateSut();
 
         await sut.UpdateItem("item-42", new SkulabsItemUpdate("New Name"));
@@ -645,10 +645,7 @@ public class SkulabsItemClientTests
     {
         public List<HttpRequestMessage> Requests { get; } = [];
         public List<string> RequestBodies { get; } = [];
-        private HttpResponseMessage _response = new(HttpStatusCode.OK)
-        {
-            Content = new StringContent("[]", Encoding.UTF8, "application/json")
-        };
+        private HttpResponseMessage? _response;
 
         public void SetResponse(HttpResponseMessage response)
         {
@@ -662,8 +659,22 @@ public class SkulabsItemClientTests
             RequestBodies.Add(request.Content is null
                 ? string.Empty
                 : await request.Content.ReadAsStringAsync(cancellationToken));
-            return _response;
+            return _response ?? SuccessFor(request);
         }
+
+        /// <summary>
+        /// Reads and writes succeed with different shapes — an item array versus an
+        /// acknowledgement — so one fixed default would make every test of the other kind fail.
+        /// Tests that care about the body set their own response.
+        /// </summary>
+        private static HttpResponseMessage SuccessFor(HttpRequestMessage request) =>
+            new(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    request.Method == HttpMethod.Put ? """{"success":true}""" : "[]",
+                    Encoding.UTF8,
+                    "application/json")
+            };
     }
 
     private sealed class TestLogger<T> : ILogger<T>

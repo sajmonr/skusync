@@ -218,7 +218,7 @@ public class SkulabsTitleSyncTests(AppServerTestHost factory) : IAsyncLifetime
             .RespondWith(Response.Create()
                 .WithStatusCode(200)
                 .WithHeader("Content-Type", "application/json")
-                .WithBody("""{"items":[]}"""));
+                .WithBody("""{"success":true}"""));
 
     private void StubSkulabsItemGet(string fixtureRelativePath)
     {

@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -86,20 +87,13 @@ public class SkulabsItemClient : ISkulabsItemClient
         var response = await _client.GetAsync(requestPath);
         stopwatch.Stop();
 
-        if (!response.IsSuccessStatusCode)
-        {
-            await LogErrorResponse(response, requestPath, stopwatch.ElapsedMilliseconds);
-        }
-        else
-        {
-            _logger.LogDebug(
-                "SkuLabs items request completed with status {StatusCode} in {ElapsedMs}ms.",
-                (int)response.StatusCode,
-                stopwatch.ElapsedMilliseconds
-            );
-        }
+        await EnsureSuccessful(response, requestPath, stopwatch.ElapsedMilliseconds);
 
-        response.EnsureSuccessStatusCode();
+        _logger.LogDebug(
+            "SkuLabs items request completed with status {StatusCode} in {ElapsedMs}ms.",
+            (int)response.StatusCode,
+            stopwatch.ElapsedMilliseconds
+        );
 
         var content = await response.Content.ReadFromJsonAsync<SkulabsItemResponse[]>();
 
@@ -167,21 +161,86 @@ public class SkulabsItemClient : ISkulabsItemClient
         var response = await _client.PutAsJsonAsync(requestPath, payload);
         stopwatch.Stop();
 
-        if (!response.IsSuccessStatusCode)
+        await EnsureSuccessful(response, requestPath, stopwatch.ElapsedMilliseconds);
+        await EnsureAcknowledged(response, requestPath, items.Length);
+
+        _logger.LogInformation(
+            "SkuLabs bulk-upsert of {Count} item(s) completed with status {StatusCode} in {ElapsedMs}ms.",
+            items.Length,
+            (int)response.StatusCode,
+            stopwatch.ElapsedMilliseconds);
+    }
+
+    /// <summary>
+    /// A 200 from <c>bulk_upsert</c> is not on its own a success: the body carries a
+    /// <c>success</c> flag, and the API documents no guarantee about when it goes false. Treating
+    /// the status code alone as confirmation would clear the pending flags on writes SkuLabs
+    /// declined, losing the change with nothing left to retry from.
+    /// </summary>
+    private async Task EnsureAcknowledged(HttpResponseMessage response, string requestPath, int itemCount)
+    {
+        SkulabsAcknowledgement? acknowledgement = null;
+        try
         {
-            await LogErrorResponse(response, requestPath, stopwatch.ElapsedMilliseconds);
+            acknowledgement = await response.Content.ReadFromJsonAsync<SkulabsAcknowledgement>();
         }
-        else
+        catch (JsonException exception)
         {
-            _logger.LogInformation(
-                "SkuLabs bulk-upsert of {Count} item(s) completed with status {StatusCode} in {ElapsedMs}ms.",
-                items.Length,
-                (int)response.StatusCode,
-                stopwatch.ElapsedMilliseconds);
+            _logger.LogError(
+                exception,
+                "SkuLabs returned 200 for {RequestPath} with a body that is not the expected acknowledgement.",
+                requestPath);
         }
 
-        response.EnsureSuccessStatusCode();
+        if (acknowledgement?.Success == true)
+        {
+            return;
+        }
+
+        throw new SkulabsRequestFailedException(
+            requestPath,
+            response.StatusCode,
+            $"Responded 200 but did not acknowledge success for {itemCount} item(s).",
+            userError: false,
+            skulabsTraceId: null);
     }
+
+    /// <summary>
+    /// Turns a failure response into the right exception for the caller to act on: rate limiting
+    /// becomes <see cref="RateLimitedException"/> so it is never mistaken for a broken request,
+    /// everything else becomes <see cref="SkulabsRequestFailedException"/> carrying the error
+    /// envelope. Successful responses pass through untouched.
+    /// </summary>
+    private async Task EnsureSuccessful(HttpResponseMessage response, string requestPath, long elapsedMs)
+    {
+        if (response.IsSuccessStatusCode)
+        {
+            return;
+        }
+
+        var error = await LogErrorResponse(response, requestPath, elapsedMs);
+
+        if (response.StatusCode == HttpStatusCode.TooManyRequests)
+        {
+            // The rate-limit handler above us has already recorded the cooldown from the body;
+            // read it back rather than re-parsing, and fall back only if it somehow did not.
+            var cooldown = _rateLimitService.GetRemainingCooldown(SkulabsRateLimitHandler.RateLimitKey)
+                           ?? InMemoryRateLimitService.DefaultCooldown;
+
+            throw new RateLimitedException(SkulabsRateLimitHandler.RateLimitKey, cooldown);
+        }
+
+        throw new SkulabsRequestFailedException(
+            requestPath,
+            response.StatusCode,
+            error?.Message,
+            error?.UserError ?? false,
+            error?.SkulabsTraceId);
+    }
+
+    /// <summary>Acknowledgement envelope returned by the write endpoints.</summary>
+    private readonly record struct SkulabsAcknowledgement(
+        [property: JsonPropertyName("success")] bool Success);
 
     private readonly record struct BulkUpsertPayload(
         [property: JsonPropertyName("items")] BulkUpsertItem[] Items);
@@ -190,7 +249,14 @@ public class SkulabsItemClient : ISkulabsItemClient
         [property: JsonPropertyName("_id")] string Id,
         [property: JsonPropertyName("name")] string Name);
 
-    private async Task LogErrorResponse(HttpResponseMessage response, string requestPath, long elapsedMs)
+    /// <summary>
+    /// Logs a failure response and hands back the parsed envelope, or <c>null</c> when the body was
+    /// not the standardized shape.
+    /// </summary>
+    private async Task<SkulabsErrorPayload?> LogErrorResponse(
+        HttpResponseMessage response,
+        string requestPath,
+        long elapsedMs)
     {
         var body = await response.Content.ReadAsStringAsync();
         SkulabsErrorPayload? error = null;
@@ -230,6 +296,8 @@ public class SkulabsItemClient : ISkulabsItemClient
                 elapsedMs,
                 Truncate(body));
         }
+
+        return error;
     }
 
     private static string Truncate(string value, int max = 2048) =>

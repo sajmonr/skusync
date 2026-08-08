@@ -100,6 +100,20 @@ public class SkulabsDispatcher(
                 Failed: 0,
                 RetryAfter: rateLimited.RetryAfter);
         }
+        catch (SkulabsRequestFailedException failure) when (failure.IsCredentialFailure)
+        {
+            // Our credentials, not these items. Every batch would fail identically, so counting
+            // strikes here would exclude the whole catalogue within a few cycles over a problem one
+            // credential fix resolves — and an operator would then have to unpick the exclusions by
+            // hand. Leave the rows pending and make the real cause loud instead.
+            logger.LogError(
+                failure,
+                "SkuLabs rejected the push for {Count} item(s) with {StatusCode} — a credentials or "
+                + "permissions problem, not a problem with these items. They stay pending with their "
+                + "failure counters untouched. TraceId: {SkulabsTraceId}.",
+                updates.Length, (int)failure.StatusCode, failure.SkulabsTraceId);
+            return new DispatchResult(Pending: pending.Count, Pushed: 0, Failed: pending.Count);
+        }
         catch (Exception exception)
         {
             logger.LogError(

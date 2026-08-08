@@ -62,7 +62,10 @@ public class SkulabsItemClientResilienceTests
 
         var client = BuildClient(transport);
 
-        await Should.ThrowAsync<HttpRequestException>(() => client.GetAllItems());
+        // Surfaces as a rate limit rather than a generic request failure so callers can tell
+        // "come back later" apart from "this request is broken" — the dispatcher leaves failure
+        // counters untouched for the former and increments them for the latter.
+        await Should.ThrowAsync<RateLimitedException>(() => client.GetAllItems());
         transport.RequestCount.ShouldBe(4, "1 initial attempt + 3 retries");
     }
 
@@ -97,7 +100,7 @@ public class SkulabsItemClientResilienceTests
     {
         var transport = new ScriptedHttpMessageHandler(
             JsonResponse(HttpStatusCode.TooManyRequests, "{}"),
-            JsonResponse(HttpStatusCode.OK, "{}")
+            JsonResponse(HttpStatusCode.OK, """{"success":true}""")
         );
 
         var client = BuildClient(transport);
@@ -117,7 +120,7 @@ public class SkulabsItemClientResilienceTests
 
         var client = BuildClient(transport);
 
-        await Should.ThrowAsync<HttpRequestException>(() => client.GetAllItems());
+        await Should.ThrowAsync<SkulabsRequestFailedException>(() => client.GetAllItems());
         transport.RequestCount.ShouldBe(1, "401 is not a transient failure; no retries expected");
     }
 

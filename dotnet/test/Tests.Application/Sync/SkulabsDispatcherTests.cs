@@ -1,3 +1,4 @@
+using System.Net;
 using Application;
 using Application.Sync;
 using Infrastructure.Database;
@@ -119,6 +120,57 @@ public class SkulabsDispatcherTests : IDisposable
         stored.PendingSkulabsSync.ShouldBeTrue();
         // Rate limiting means "later", not "broken" — the counter must not move.
         stored.FailedSkulabsSyncAttempts.ShouldBe(1);
+    }
+
+    /// <summary>
+    /// A revoked scope or expired token fails every batch identically. Counting that against items
+    /// would walk the whole catalogue to the exclusion threshold within a few cycles over a problem
+    /// one credential fix resolves — and leave an operator to unpick the exclusions by hand.
+    /// </summary>
+    [Theory]
+    [InlineData(HttpStatusCode.Unauthorized)]
+    [InlineData(HttpStatusCode.Forbidden)]
+    public async Task DispatchAll_ShouldLeaveCountersUntouched_WhenSkulabsRejectsOurCredentials(
+        HttpStatusCode statusCode)
+    {
+        SeedPair(pendingSkulabsSync: true, failedSkulabsSyncAttempts: 2);
+        await _dbContext.SaveChangesAsync();
+
+        _skulabsItemClient
+            .UpdateItems(Arg.Any<IEnumerable<SkulabsItemUpdateWithId>>())
+            .ThrowsAsync(new SkulabsRequestFailedException(
+                "item/bulk_upsert", statusCode, "Missing required scopes userManager",
+                userError: true, skulabsTraceId: "trace-1"));
+
+        var result = await CreateSut().DispatchAll();
+
+        result.Pushed.ShouldBe(0);
+
+        var stored = await _dbContext.SkulabsItems.SingleAsync();
+        stored.PendingSkulabsSync.ShouldBeTrue();
+        stored.FailedSkulabsSyncAttempts.ShouldBe(2);
+    }
+
+    /// <summary>
+    /// A 400 is about the payload we sent, so it stays attributable to the batch and keeps its
+    /// strikes — otherwise a permanently malformed item would be retried forever.
+    /// </summary>
+    [Fact]
+    public async Task DispatchAll_ShouldIncrementCounters_WhenSkulabsRejectsThePayload()
+    {
+        SeedPair(pendingSkulabsSync: true, failedSkulabsSyncAttempts: 1);
+        await _dbContext.SaveChangesAsync();
+
+        _skulabsItemClient
+            .UpdateItems(Arg.Any<IEnumerable<SkulabsItemUpdateWithId>>())
+            .ThrowsAsync(new SkulabsRequestFailedException(
+                "item/bulk_upsert", HttpStatusCode.BadRequest, "Malformed item",
+                userError: true, skulabsTraceId: "trace-2"));
+
+        var result = await CreateSut().DispatchAll();
+
+        result.Failed.ShouldBe(1);
+        (await _dbContext.SkulabsItems.SingleAsync()).FailedSkulabsSyncAttempts.ShouldBe(2);
     }
 
     [Fact]
