@@ -17,4 +17,21 @@ public sealed record SkulabsErrorPayload(
     [property: JsonPropertyName("overview")] string? Overview,
     [property: JsonPropertyName("origin")] string? Origin,
     [property: JsonPropertyName("skulabsTraceId")] string? SkulabsTraceId,
-    [property: JsonPropertyName("user_error")] bool? UserError);
+    [property: JsonPropertyName("user_error")] bool? UserError,
+    [property: JsonPropertyName("data")] SkulabsErrorData? Data = null);
+
+/// <summary>
+/// The <c>data</c> object SkuLabs attaches to an error. Only the rate-limit fields are mapped —
+/// they are the ones we act on, because <b>SkuLabs sends no <c>Retry-After</c> header</b> and the
+/// wait is available nowhere else.
+/// </summary>
+/// <param name="WaitSeconds">
+/// How long until the quota admits another request. Measured at ~1508s against a 3600s window, so
+/// it is far larger than any header-derived retry delay elsewhere in this client.
+/// </param>
+/// <param name="Limit">Requests permitted per <paramref name="IntervalSeconds"/>, per account.</param>
+/// <param name="IntervalSeconds">Width of the quota window.</param>
+public sealed record SkulabsErrorData(
+    [property: JsonPropertyName("wait_seconds")] double? WaitSeconds,
+    [property: JsonPropertyName("limit")] int? Limit,
+    [property: JsonPropertyName("interval_seconds")] int? IntervalSeconds);

@@ -53,11 +53,22 @@ requesting `alias_locations` and leaves any locations it already stored untouche
 Edit stubs in the web UI, or drive the admin API. Examples:
 
 ```bash
-# Force the rate-limit path (429 + Retry-After) — the app records a cooldown and defers
+# Force the rate-limit path — the app records a cooldown and defers.
+# The real API sends NO Retry-After header: the wait is in the body at error.data.wait_seconds,
+# and the limit is 104/hour per account. Stubbing a header here would exercise a branch that
+# cannot fire in production.
 curl -sX POST localhost:5675/__admin/mappings -d '{
   "priority": 0,
   "request":  { "method": "GET", "urlPath": "/item/get" },
-  "response": { "status": 429, "headers": { "Retry-After": "120" } }
+  "response": {
+    "status": 429,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": { "error": {
+      "message": "Rate limited. You are allowed 104/hour requests for \"your billing plan basic_2025\".",
+      "code": "", "statusCode": 429, "user_error": true,
+      "data": { "interval_seconds": 3600, "limit": 104, "remaining": "0", "wait_seconds": 1508 }
+    } }
+  }
 }'
 
 # Inspect what the app actually sent SkuLabs (the request journal)
