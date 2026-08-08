@@ -32,6 +32,13 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     /// </summary>
     public DbSet<SkulabsItemListingEntity> SkulabsItemListings { get; init; }
 
+    /// <summary>
+    /// Gets the reconciled truth for each variant — what both systems <em>should</em> hold. The
+    /// variant and item sets are mirrors of what each external system currently holds; the
+    /// difference between the two is what the dispatchers push.
+    /// </summary>
+    public DbSet<DesiredItemStateEntity> DesiredItemStates { get; init; }
+
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

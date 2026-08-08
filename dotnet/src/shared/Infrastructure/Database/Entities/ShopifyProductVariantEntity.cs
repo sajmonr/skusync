@@ -100,4 +100,15 @@ public class ShopifyProductVariantEntity
     /// </summary>
     public ICollection<SkulabsItemListingEntity> SkulabsItemListings { get; set; } =
         new HashSet<SkulabsItemListingEntity>();
+
+    /// <summary>
+    /// What this variant and its linked SkuLabs item should hold, as decided by the reconciler.
+    /// The columns on this entity are the Shopify <em>mirror</em> — what Shopify last told us — so
+    /// a difference between the two is precisely what "pending a push" means.
+    /// <para>
+    /// Null only in the window between a variant being ingested and the next reconcile pass
+    /// creating its state; every read path must tolerate that rather than assume it away.
+    /// </para>
+    /// </summary>
+    public DesiredItemStateEntity? DesiredState { get; set; }
 }
