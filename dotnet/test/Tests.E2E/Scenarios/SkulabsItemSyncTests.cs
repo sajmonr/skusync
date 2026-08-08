@@ -47,8 +47,11 @@ public class SkulabsItemSyncTests(AppServerTestHost factory) : IAsyncLifetime
         var logs = await db.ShopifyProductVariantLogEvents
             .Where(l => l.ShopifyProductVariantId == variantGuid)
             .ToListAsync();
-        logs.Count.ShouldBe(1);
-        logs[0].Message.ShouldBe("Linked to SkuLabs item '69b4543c6642ed434a5b1c4a'.");
+        // Two: the link itself, and the bin location the item reports — which is now a decided
+        // field rather than a passively mirrored one, so acquiring it is a recorded change.
+        logs.Count.ShouldBe(2);
+        logs.Select(l => l.Message).ShouldContain("Linked to SkuLabs item '69b4543c6642ed434a5b1c4a'.");
+        logs.Select(l => l.Message).ShouldContain("Location changed from '' to 'A-01-06'.");
 
         // Nothing drifted, so the inline reconcile marked nothing pending.
         (await db.ShopifyProductVariants.SingleAsync()).PendingShopifySync.ShouldBeFalse();
@@ -263,6 +266,15 @@ public class SkulabsItemSyncTests(AppServerTestHost factory) : IAsyncLifetime
             Barcode = barcode
         };
         db.ShopifyProductVariants.Add(entity);
+        // Post-migration every variant carries one, seeded from its own values. Without it the
+        // reconciler treats the variant as never decided and re-derives its codes from scratch.
+        db.DesiredItemStates.Add(new DesiredItemStateEntity
+        {
+            ShopifyProductVariantId = entity.ShopifyProductVariantId,
+            Sku = entity.Sku,
+            Barcode = entity.Barcode,
+            Title = entity.DisplayName
+        });
         await db.SaveChangesAsync();
         return entity.ShopifyProductVariantId;
     }

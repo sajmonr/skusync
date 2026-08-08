@@ -57,7 +57,10 @@ public class SkulabsTitleSyncTests(AppServerTestHost factory) : IAsyncLifetime
         {
             var db = afterIngest.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             var item = await db.SkulabsItems.SingleAsync();
-            item.Title.ShouldBe("Testprod1");
+            // The decision has moved, but SkuLabs has not been told yet, so its mirror still holds
+            // the old value — that gap is exactly what "pending" means.
+            (await db.DesiredItemStates.SingleAsync()).Title.ShouldBe("Testprod1");
+            item.Title.ShouldBe("Stale Title");
             item.PendingSkulabsSync.ShouldBeTrue();
         }
         CapturedBulkUpsertBodies().ShouldBeEmpty();
@@ -105,7 +108,8 @@ public class SkulabsTitleSyncTests(AppServerTestHost factory) : IAsyncLifetime
         {
             var db = afterIngest.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             var item = await db.SkulabsItems.SingleAsync();
-            item.Title.ShouldBe("Authoritative Display Name");
+            (await db.DesiredItemStates.SingleAsync()).Title.ShouldBe("Authoritative Display Name");
+            item.Title.ShouldBe("Yellow Vintage Nature Domino Necklace (Goose (1bird))");
             item.PendingSkulabsSync.ShouldBeTrue();
         }
         CapturedBulkUpsertBodies().ShouldBeEmpty();
@@ -257,6 +261,15 @@ public class SkulabsTitleSyncTests(AppServerTestHost factory) : IAsyncLifetime
             Barcode = "seed-barcode"
         };
         db.ShopifyProductVariants.Add(entity);
+        // Post-migration every variant carries one, seeded from its own values. Without it the
+        // reconciler treats the variant as never decided and re-derives its codes from scratch.
+        db.DesiredItemStates.Add(new DesiredItemStateEntity
+        {
+            ShopifyProductVariantId = entity.ShopifyProductVariantId,
+            Sku = entity.Sku,
+            Barcode = entity.Barcode,
+            Title = entity.DisplayName
+        });
         await db.SaveChangesAsync();
         return entity.ShopifyProductVariantId;
     }
@@ -282,6 +295,16 @@ public class SkulabsTitleSyncTests(AppServerTestHost factory) : IAsyncLifetime
             Barcode = $"bar-{variantId}"
         };
         db.ShopifyProductVariants.Add(variant);
+        // Post-migration every variant carries one, seeded from its own values — without it the
+        // variant reads as never decided and the first reconcile is an initialisation rather than
+        // a correction.
+        db.DesiredItemStates.Add(new DesiredItemStateEntity
+        {
+            ShopifyProductVariantId = variant.ShopifyProductVariantId,
+            Sku = variant.Sku,
+            Barcode = variant.Barcode,
+            Title = variant.DisplayName
+        });
 
         db.SkulabsItems.Add(new SkulabsItemEntity
         {

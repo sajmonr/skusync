@@ -143,7 +143,7 @@ public class ProductUpdateWebhookTests(AppServerTestHost factory) : IAsyncLifeti
         using (var seedScope = factory.Services.CreateScope())
         {
             var seedDb = seedScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            seedDb.ShopifyProductVariants.Add(new ShopifyProductVariantEntity
+            var seeded = new ShopifyProductVariantEntity
             {
                 GlobalProductId = "gid://shopify/Product/8521775284385",
                 ProductId = productId,
@@ -153,8 +153,20 @@ public class ProductUpdateWebhookTests(AppServerTestHost factory) : IAsyncLifeti
                 // (product title "Testprod1" + variant title "Default Title" → "Testprod1"),
                 // so the diff path fires solely on the SKU/barcode mismatch.
                 DisplayName = "Testprod1",
+                ProductTitle = "Testprod1",
+                // The mirror holds what Shopify last said, which the fixture reports as blank.
+                Sku = "",
+                Barcode = ""
+            };
+            seedDb.ShopifyProductVariants.Add(seeded);
+            // Our values are a decision, so they live here — that is what makes Shopify's blanks
+            // drift rather than the truth.
+            seedDb.DesiredItemStates.Add(new DesiredItemStateEntity
+            {
+                ShopifyProductVariantId = seeded.ShopifyProductVariantId,
                 Sku = ourSku,
-                Barcode = ourBarcode
+                Barcode = ourBarcode,
+                Title = "Testprod1"
             });
             await seedDb.SaveChangesAsync();
         }

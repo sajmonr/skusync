@@ -1,5 +1,5 @@
-using Application.Skus;
 using Application.Sync;
+using Application.Sync.Merge;
 using Infrastructure.Database;
 using Infrastructure.Database.Entities;
 using Integration.Shopify.Products;
@@ -12,8 +12,8 @@ public class ProductsService(
     IShopifyProductService shopifyProductService,
     ApplicationDbContext dbContext,
     ILogger<ProductsService> logger,
-    IShopifyDispatchTrigger dispatchTrigger,
-    ISkuGenerator skuGenerator) : IProductsService
+    IReconciler reconciler,
+    IShopifyDispatchTrigger dispatchTrigger) : IProductsService
 {
     public async Task SyncProducts(CancellationToken cancellationToken = default)
     {
@@ -55,11 +55,12 @@ public class ProductsService(
 
         List<ShopifyProductVariantEntity> createdEntities;
         List<ShopifyProductVariantEntity> updatedEntities;
+        List<ShopifyProductVariantEntity> seenEntities;
         int deletedCount;
         try
         {
-            (createdEntities, updatedEntities, deletedCount) =
-                await ReconcileVariants(shopifyVariants, dbVariantsByGlobalId);
+            (createdEntities, updatedEntities, seenEntities, deletedCount) =
+                MirrorVariants(shopifyVariants, dbVariantsByGlobalId);
         }
         catch (Exception exception)
         {
@@ -87,14 +88,43 @@ public class ProductsService(
         // Variants a concurrent writer beat us to were dropped from the insert; don't count or
         // dispatch them here — the writer that won the race handles its own rows.
         createdEntities.RemoveAll(droppedInserts.Contains);
+        seenEntities.RemoveAll(droppedInserts.Contains);
 
-        // Push whatever this import marked pending (generated SKUs, Shopify-side drift) toward
-        // Shopify right away instead of waiting for the scheduled dispatch run. The dispatcher
-        // batches per product and skips rows that aren't pending.
-        await dispatchTrigger.TryDispatch(createdEntities
-            .Concat(updatedEntities)
+        var touchedVariantIds = seenEntities
             .Select(e => e.ShopifyProductVariantId)
-            .ToArray());
+            .ToArray();
+
+        try
+        {
+            // Import, not WebhookCreate: a payload SKU seen here is honoured rather than replaced,
+            // because a SKU regenerated now would not match the one generated when the variant was
+            // first created — the product may since have been renamed, and the SKU derives from the
+            // name. See the SKU merge rule.
+            await reconciler.ReconcileVariants(touchedVariantIds, MergeOrigin.Import);
+        }
+        catch (Exception exception)
+        {
+            // SKU generation runs here now rather than while mirroring, so its failures — a database
+            // error during the uniqueness check, an unfittable length configuration — surface at
+            // this point. The mirrors are already committed and correct; only the decisions are
+            // missing, and the next reconcile will make them. Report a failure rather than letting
+            // it escape and poison the job.
+            logger.LogError(exception, "An exception occurred while reconciling imported variants.");
+            return ProductImportResult.Failure(
+                "Imported the product variants but could not reconcile them.");
+        }
+
+        // Push whatever the reconcile left pending toward Shopify right away rather than waiting
+        // for the scheduled run. Asked for by name rather than handing over everything seen: an
+        // import that changed nothing should not look like a dispatch, and on a full catalogue the
+        // difference is thousands of ids the dispatcher would only filter back out.
+        var pendingVariantIds = await dbContext.ShopifyProductVariants
+            .Where(variant => touchedVariantIds.Contains(variant.ShopifyProductVariantId)
+                              && variant.PendingShopifySync)
+            .Select(variant => variant.ShopifyProductVariantId)
+            .ToArrayAsync();
+
+        await dispatchTrigger.TryDispatch(pendingVariantIds);
 
         logger.LogDebug("Synchronization complete. Created: {Created}, Updated: {Updated}, Deleted: {Deleted}.",
             createdEntities.Count, updatedEntities.Count, deletedCount);
@@ -107,16 +137,19 @@ public class ProductsService(
     /// tracking entities in the DbContext as a side effect but not yet calling SaveChanges.
     /// Local variants absent from the (authoritative, complete) Shopify set are marked deleted.
     /// </summary>
-    private async Task<(List<ShopifyProductVariantEntity> Created, List<ShopifyProductVariantEntity> Updated, int Deleted)>
-        ReconcileVariants(
+    private (List<ShopifyProductVariantEntity> Created, List<ShopifyProductVariantEntity> Updated,
+        List<ShopifyProductVariantEntity> Seen, int Deleted)
+        MirrorVariants(
             ShopifyProductVariant[] shopifyVariants,
             IReadOnlyDictionary<string, ShopifyProductVariantEntity> dbVariantsByGlobalId)
     {
         var createdEntities = new List<ShopifyProductVariantEntity>();
         var updatedEntities = new List<ShopifyProductVariantEntity>();
-        // SKUs generated in this batch but not yet persisted — kept so two variants in
-        // the same import cannot be issued the same generated SKU.
-        var reservedSkus = new HashSet<string>(StringComparer.Ordinal);
+        // Every variant this run matched or created, changed or not. Reconcile needs all of them:
+        // a variant whose mirror already agrees with Shopify reports no change, yet may still have
+        // nothing decided for it — a blank SKU that needs generating, say. Reconciling only the
+        // changed ones would leave it waiting for the nightly sweep.
+        var seenEntities = new List<ShopifyProductVariantEntity>();
         // Variants created earlier in this same batch, keyed by GlobalVariantId. Shopify can
         // return the same variant more than once in a single payload; without this guard each
         // repeat would queue another insert and violate the unique index on GlobalVariantId.
@@ -141,7 +174,8 @@ public class ProductsService(
                     continue;
                 }
 
-                if (await TryApplyVariantUpdate(existing, shopifyVariant, reservedSkus))
+                seenEntities.Add(existing);
+                if (TryApplyVariantUpdate(existing, shopifyVariant))
                 {
                     updatedEntities.Add(existing);
                 }
@@ -153,12 +187,13 @@ public class ProductsService(
                 logger.LogDebug(
                     "Shopify returned GlobalVariantId {GlobalVariantId} more than once in this batch; merging into the pending insert.",
                     shopifyVariant.GlobalVariantId);
-                await TryApplyVariantUpdate(alreadyCreated, shopifyVariant, reservedSkus);
+                TryApplyVariantUpdate(alreadyCreated, shopifyVariant);
             }
             else
             {
-                var created = await CreateNewVariant(shopifyVariant, reservedSkus);
+                var created = CreateNewVariant(shopifyVariant);
                 createdEntities.Add(created);
+                seenEntities.Add(created);
                 createdByGlobalId[shopifyVariant.GlobalVariantId] = created;
             }
         }
@@ -166,7 +201,7 @@ public class ProductsService(
         var deletedCount = MarkVariantsRemovedFromShopify(
             shopifyVariants, dbVariantsByGlobalId, seenGlobalVariantIds);
 
-        return (createdEntities, updatedEntities, deletedCount);
+        return (createdEntities, updatedEntities, seenEntities, deletedCount);
     }
 
     /// <summary>
@@ -230,18 +265,15 @@ public class ProductsService(
     /// when something actually changed.
     /// </summary>
     /// <returns><c>true</c> when the entity was modified; <c>false</c> when no fields changed.</returns>
-    private async Task<bool> TryApplyVariantUpdate(
+    private bool TryApplyVariantUpdate(
         ShopifyProductVariantEntity existing,
-        ShopifyProductVariant shopifyVariant,
-        ISet<string> reservedSkus)
+        ShopifyProductVariant shopifyVariant)
     {
-        var changed = await UpdateVariant(existing, shopifyVariant, reservedSkus);
-        if (!changed)
+        if (!UpdateVariant(existing, shopifyVariant))
         {
             return false;
         }
 
-        existing.UpdatedOnUtc = DateTime.UtcNow;
         logger.LogDebug("Updating variant with GlobalVariantId {GlobalVariantId}.",
             shopifyVariant.GlobalVariantId);
         return true;
@@ -253,12 +285,8 @@ public class ProductsService(
     /// The matching <c>VariantCreated</c> (and optional <c>SkuSet</c>) log events are
     /// attached to the entity.
     /// </summary>
-    private async Task<ShopifyProductVariantEntity> CreateNewVariant(
-        ShopifyProductVariant shopifyVariant,
-        ISet<string> reservedSkus)
+    private ShopifyProductVariantEntity CreateNewVariant(ShopifyProductVariant shopifyVariant)
     {
-        var (sku, skuWasGenerated) = await ResolveSkuForNewVariant(shopifyVariant, reservedSkus);
-
         var newVariant = new ShopifyProductVariantEntity
         {
             ShopifyProductVariantId = Guid.CreateVersion7(),
@@ -267,24 +295,19 @@ public class ProductsService(
             GlobalVariantId = shopifyVariant.GlobalVariantId,
             VariantId = shopifyVariant.VariantId,
             DisplayName = shopifyVariant.DisplayName,
-            Sku = sku,
-            Barcode = shopifyVariant.Barcode,
-            // A generated SKU is a divergence we originated — Shopify doesn't have it yet. A SKU
-            // taken from the Shopify payload matches Shopify, so nothing is pending.
-            PendingShopifySync = skuWasGenerated
+            ProductTitle = shopifyVariant.ProductTitle ?? "",
+            VariantTitle = shopifyVariant.VariantTitle ?? "",
+            // Verbatim, including blanks. A generated SKU written here would make the row claim
+            // Shopify holds one when it does not, and the reconciler reads exactly this row to
+            // decide what Shopify is owed. Generation happens in the merge rules instead.
+            Sku = shopifyVariant.Sku ?? "",
+            Barcode = shopifyVariant.Barcode ?? ""
         };
 
         newVariant.LogEvents.Add(new ShopifyProductVariantLogEventEntity
         {
             Message = VariantLogMessages.VariantCreated()
         });
-        if (skuWasGenerated)
-        {
-            newVariant.LogEvents.Add(new ShopifyProductVariantLogEventEntity
-            {
-                Message = VariantLogMessages.SkuSet(sku)
-            });
-        }
 
         dbContext.ShopifyProductVariants.Add(newVariant);
         logger.LogDebug("Creating new variant with GlobalVariantId {GlobalVariantId}.",
@@ -293,52 +316,31 @@ public class ProductsService(
         return newVariant;
     }
 
-    /// <summary>
-    /// Returns the SKU to use for a brand-new variant: Shopify's own SKU when present,
-    /// otherwise one synthesised by <see cref="ISkuGenerator"/>. The returned flag tells
-    /// callers whether a <c>SkuSet</c> log event should be emitted (only when generated).
-    /// </summary>
-    private async Task<(string Sku, bool WasGenerated)> ResolveSkuForNewVariant(
-        ShopifyProductVariant shopifyVariant,
-        ISet<string> reservedSkus)
-    {
-        if (!string.IsNullOrWhiteSpace(shopifyVariant.Sku))
-        {
-            return (shopifyVariant.Sku, WasGenerated: false);
-        }
-
-        var sku = await skuGenerator.Generate(
-            shopifyVariant.ProductTitle, shopifyVariant.VariantTitle, reservedSkus,
-            fallbackSegment: shopifyVariant.VariantId.ToString());
-        reservedSkus.Add(sku);
-        logger.LogInformation(
-            "Shopify variant {GlobalVariantId} had no SKU; assigning generated SKU '{Sku}'.",
-            shopifyVariant.GlobalVariantId, sku);
-        return (sku, WasGenerated: true);
-    }
-
     public async Task<ProductDeduplicationResult> DeduplicateProducts()
     {
         logger.LogInformation("Starting product deduplication.");
 
-        // Find which SKU and barcode values are shared by more than one variant — entirely in the database.
+        // Collisions are looked for among the values we intend to push, not the ones the mirrors
+        // currently hold. Two variants whose desired SKUs match will collide the moment both are
+        // dispatched, whereas a clash between stale mirror values may already be on its way out.
         HashSet<string> duplicateSkus;
         HashSet<string> duplicateBarcodes;
         try
         {
             // Deleted rows are excluded: a dead variant's SKU/barcode must not be counted as a
             // collision that would force a live variant to be renamed, and deleted rows are frozen.
-            duplicateSkus = (await dbContext.ShopifyProductVariants
-                .Where(v => !v.IsDeleted)
-                .GroupBy(v => v.Sku)
+            var desired = dbContext.DesiredItemStates
+                .Where(state => !state.ShopifyProductVariant!.IsDeleted);
+
+            duplicateSkus = (await desired
+                .GroupBy(state => state.Sku)
                 .Where(g => g.Count() > 1)
                 .Select(g => g.Key)
                 .ToListAsync())
                 .ToHashSet();
 
-            duplicateBarcodes = (await dbContext.ShopifyProductVariants
-                .Where(v => !v.IsDeleted)
-                .GroupBy(v => v.Barcode)
+            duplicateBarcodes = (await desired
+                .GroupBy(state => state.Barcode)
                 .Where(g => g.Count() > 1)
                 .Select(g => g.Key)
                 .ToListAsync())
@@ -360,13 +362,15 @@ public class ProductsService(
             return ProductDeduplicationResult.Success([]);
         }
 
-        // Load only the affected rows — variants whose SKU or barcode is one of the duplicated values.
-        List<ShopifyProductVariantEntity> variants;
+        // Load only the affected rows — variants whose desired SKU or barcode is a duplicated value.
+        List<DesiredItemStateEntity> affected;
         try
         {
-            variants = await dbContext.ShopifyProductVariants
-                .Where(v => !v.IsDeleted
-                            && (duplicateSkus.Contains(v.Sku) || duplicateBarcodes.Contains(v.Barcode)))
+            affected = await dbContext.DesiredItemStates
+                .Include(state => state.ShopifyProductVariant)
+                .Where(state => !state.ShopifyProductVariant!.IsDeleted
+                                && (duplicateSkus.Contains(state.Sku)
+                                    || duplicateBarcodes.Contains(state.Barcode)))
                 .ToListAsync();
         }
         catch (Exception exception)
@@ -376,10 +380,10 @@ public class ProductsService(
                 "Could not deduplicate products because the duplicate variants could not be fetched from the database.");
         }
 
-        logger.LogInformation("Deduplicating {Count} variant(s).", variants.Count);
-        ApplyDeduplication(variants, duplicateSkus, duplicateBarcodes);
+        logger.LogInformation("Deduplicating {Count} variant(s).", affected.Count);
+        ApplyDeduplication(affected, duplicateSkus, duplicateBarcodes);
 
-        var affectedVariantIds = variants.Select(v => v.VariantId).ToArray();
+        var affectedVariantIds = affected.Select(state => state.ShopifyProductVariant!.VariantId).ToArray();
 
         try
         {
@@ -395,20 +399,33 @@ public class ProductsService(
         logger.LogInformation("Deduplication complete. Modified {Count} variant(s).", affectedVariantIds.Length);
 
         // The rewritten SKUs/barcodes are divergences we originated; push them right away.
-        await dispatchTrigger.TryDispatch(variants.Select(v => v.ShopifyProductVariantId).ToArray());
+        await dispatchTrigger.TryDispatch(
+            affected.Select(state => state.ShopifyProductVariantId).ToArray());
 
         return ProductDeduplicationResult.Success(affectedVariantIds);
     }
 
+    /// <summary>
+    /// Rewrites colliding codes to the Shopify variant id — unique by construction, and stable, so
+    /// re-running deduplication cannot keep churning the same rows.
+    /// <para>
+    /// Writes to the desired state rather than the mirrors. A collision is a decision about what the
+    /// variants ought to hold, and the merge rules then leave it alone: a value already decided
+    /// stands unless SkuLabs asserts one of its own, which outranks a mere uniqueness fix because it
+    /// may already be printed on a label.
+    /// </para>
+    /// </summary>
     private void ApplyDeduplication(
-        List<ShopifyProductVariantEntity> variants,
+        List<DesiredItemStateEntity> affected,
         HashSet<string> duplicateSkus,
         HashSet<string> duplicateBarcodes)
     {
-        foreach (var variant in variants)
+        foreach (var desired in affected)
         {
-            var hasDupeSku = duplicateSkus.Contains(variant.Sku);
-            var hasDupeBarcode = duplicateBarcodes.Contains(variant.Barcode);
+            var variant = desired.ShopifyProductVariant!;
+            var replacement = variant.VariantId.ToString();
+            var hasDupeSku = duplicateSkus.Contains(desired.Sku);
+            var hasDupeBarcode = duplicateBarcodes.Contains(desired.Barcode);
 
             logger.LogDebug(
                 "Deduplicating variant {VariantId}: overwriting {Fields} with variant ID.",
@@ -417,40 +434,42 @@ public class ProductsService(
 
             if (hasDupeSku)
             {
-                var oldSku = variant.Sku;
-                variant.Sku = variant.VariantId.ToString();
                 dbContext.ShopifyProductVariantLogEvents.Add(new ShopifyProductVariantLogEventEntity
                 {
                     ShopifyProductVariantId = variant.ShopifyProductVariantId,
-                    Message = VariantLogMessages.SkuUpdated(oldSku, variant.VariantId.ToString())
+                    Message = VariantLogMessages.SkuUpdated(desired.Sku, replacement)
                 });
+                desired.Sku = replacement;
             }
 
             if (hasDupeBarcode)
             {
-                var oldBarcode = variant.Barcode;
-                variant.Barcode = variant.VariantId.ToString();
                 dbContext.ShopifyProductVariantLogEvents.Add(new ShopifyProductVariantLogEventEntity
                 {
                     ShopifyProductVariantId = variant.ShopifyProductVariantId,
-                    Message = VariantLogMessages.BarcodeUpdated(oldBarcode, variant.VariantId.ToString())
+                    Message = VariantLogMessages.BarcodeUpdated(desired.Barcode, replacement)
                 });
+                desired.Barcode = replacement;
             }
 
             // The rewritten value is a divergence we originated — Shopify still has the duplicate.
             variant.PendingShopifySync = true;
             variant.UpdatedOnUtc = DateTime.UtcNow;
+            desired.UpdatedOnUtc = DateTime.UtcNow;
         }
     }
 
-    private async Task<bool> UpdateVariant(
+    /// <summary>
+    /// Refreshes the mirror from the Shopify payload. A straight copy of all three fields — what
+    /// they <em>should</em> be is decided later, by the merge rules, against this row.
+    /// </summary>
+    private bool UpdateVariant(
         ShopifyProductVariantEntity existing,
-        ShopifyProductVariant shopifyVariant,
-        ISet<string> reservedSkus)
+        ShopifyProductVariant shopifyVariant)
     {
         var changed = false;
 
-        if(existing.DisplayName != shopifyVariant.DisplayName)
+        if (existing.DisplayName != shopifyVariant.DisplayName)
         {
             var oldDisplayName = existing.DisplayName;
             existing.DisplayName = shopifyVariant.DisplayName;
@@ -462,50 +481,23 @@ public class ProductsService(
             });
         }
 
-        if (string.IsNullOrWhiteSpace(existing.Sku))
+        var incomingSku = shopifyVariant.Sku ?? "";
+        if (!string.Equals(existing.Sku, incomingSku, StringComparison.Ordinal))
         {
-            // Prefer the Shopify-provided SKU when present; otherwise synthesize one
-            // so the variant doesn't sit in the database without an identifier.
-            string newSku;
-            if (!string.IsNullOrWhiteSpace(shopifyVariant.Sku))
-            {
-                newSku = shopifyVariant.Sku;
-            }
-            else
-            {
-                newSku = await skuGenerator.Generate(
-                    shopifyVariant.ProductTitle, shopifyVariant.VariantTitle, reservedSkus,
-                    fallbackSegment: shopifyVariant.VariantId.ToString());
-                reservedSkus.Add(newSku);
-            }
-
-            existing.Sku = newSku;
+            existing.Sku = incomingSku;
             changed = true;
-            dbContext.ShopifyProductVariantLogEvents.Add(new ShopifyProductVariantLogEventEntity
-            {
-                ShopifyProductVariantId = existing.ShopifyProductVariantId,
-                Message = VariantLogMessages.SkuSet(newSku)
-            });
         }
 
-        if (string.IsNullOrWhiteSpace(existing.Barcode) && !string.IsNullOrWhiteSpace(shopifyVariant.Barcode))
+        var incomingBarcode = shopifyVariant.Barcode ?? "";
+        if (!string.Equals(existing.Barcode, incomingBarcode, StringComparison.Ordinal))
         {
-            existing.Barcode = shopifyVariant.Barcode;
+            existing.Barcode = incomingBarcode;
             changed = true;
-            dbContext.ShopifyProductVariantLogEvents.Add(new ShopifyProductVariantLogEventEntity
-            {
-                ShopifyProductVariantId = existing.ShopifyProductVariantId,
-                Message = VariantLogMessages.BarcodeSet(shopifyVariant.Barcode)
-            });
         }
 
-        // Shopify's SKU/barcode differs from our authoritative local values — covers both a SKU
-        // we just generated (Shopify sent none) and Shopify-side drift. Either way the variant
-        // needs a push to bring Shopify back in line.
-        if (existing.Sku != shopifyVariant.Sku || existing.Barcode != shopifyVariant.Barcode)
+        if (changed)
         {
-            existing.PendingShopifySync = true;
-            changed = true;
+            existing.UpdatedOnUtc = DateTime.UtcNow;
         }
 
         return changed;

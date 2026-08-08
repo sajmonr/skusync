@@ -56,12 +56,14 @@ public class SkulabsDispatcher(
         var pendingLinks = await dbContext.SkulabsItemListings
             .Include(listing => listing.SkulabsItem)
             .Include(listing => listing.ShopifyProductVariant)
+            .ThenInclude(variant => variant!.DesiredState)
             .Where(SkulabsItemLinks.IsSyncable)
             .Where(scope)
             .Where(listing => listing.SkulabsItem!.PendingSkulabsSync
                               && listing.SkulabsItem.FailedSkulabsSyncAttempts < MaxFailedSkulabsSyncAttempts
                               && listing.ShopifyProductVariant!.IsActive
-                              && !listing.ShopifyProductVariant.IsDeleted)
+                              && !listing.ShopifyProductVariant.IsDeleted
+                              && listing.ShopifyProductVariant.DesiredState != null)
             .ToListAsync(cancellationToken);
 
         var pending = pendingLinks.Select(listing => listing.SkulabsItem!).ToList();
@@ -79,8 +81,12 @@ public class SkulabsDispatcher(
             return new DispatchResult(Pending: pending.Count, Pushed: 0, Failed: 0);
         }
 
-        var updates = pending
-            .Select(item => new SkulabsItemUpdateWithId(item.SkulabsSourceItemId, item.Title))
+        // Keyed off the link rather than the item so each update carries the desired state decided
+        // for that link's variant, which is where the values live.
+        var updates = pendingLinks
+            .Select(link => new SkulabsItemUpdateWithId(
+                link.SkulabsItem!.SkulabsSourceItemId,
+                link.ShopifyProductVariant!.DesiredState!.Title))
             .ToArray();
 
         try
@@ -125,8 +131,16 @@ public class SkulabsDispatcher(
             return new DispatchResult(Pending: pending.Count, Pushed: 0, Failed: pending.Count);
         }
 
-        foreach (var item in pending)
+        foreach (var link in pendingLinks)
         {
+            var item = link.SkulabsItem!;
+
+            // SkuLabs acknowledges without echoing state, so the mirror advances to what we sent
+            // rather than to what it reported. That makes the write provisional: the next item sync
+            // replaces it with a real observation, and any normalisation SkuLabs applied shows up
+            // then. Not advancing it at all would leave the item permanently unequal to its desired
+            // state and re-push on every cycle until that sync arrived.
+            item.Title = link.ShopifyProductVariant!.DesiredState!.Title;
             item.PendingSkulabsSync = false;
             item.FailedSkulabsSyncAttempts = 0;
         }

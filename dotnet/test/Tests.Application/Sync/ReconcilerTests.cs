@@ -1,15 +1,26 @@
+using Application.Skus;
 using Application.Sync;
+using Application.Sync.Merge;
 using Infrastructure.Database;
 using Infrastructure.Database.Entities;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging.Abstractions;
+using NSubstitute;
 using Shouldly;
 
 namespace Tests.Application.Sync;
 
+/// <summary>
+/// The reconciler decides what each variant should hold and records who is owed a push.
+/// <para>
+/// Assertions read the <em>desired state</em>, not the mirrors. A mirror only changes when its own
+/// system says so — via ingest, or via a dispatcher confirming a push — so a reconcile that altered
+/// one would be claiming Shopify or SkuLabs had said something it never did.
+/// </para>
+/// </summary>
 public class ReconcilerTests : IDisposable
 {
     private readonly ApplicationDbContext _dbContext;
+    private readonly ISkuGenerator _skuGenerator = Substitute.For<ISkuGenerator>();
 
     public ReconcilerTests()
     {
@@ -17,14 +28,17 @@ public class ReconcilerTests : IDisposable
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
         _dbContext = new ApplicationDbContext(options);
+
+        _skuGenerator.Generate(
+                Arg.Any<string>(), Arg.Any<string?>(),
+                Arg.Any<ISet<string>?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult("GENERATED"));
     }
 
     public void Dispose() => _dbContext.Dispose();
 
-    // ---------- SKU/barcode rule (SkuLabs authoritative) ----------
-
     [Fact]
-    public async Task ReconcileAll_ShouldReturnEmpty_WhenNoLinkedItemsExist()
+    public async Task ReconcileAll_ShouldReturnEmpty_WhenNothingExists()
     {
         var result = await CreateSut().ReconcileAll();
 
@@ -32,183 +46,249 @@ public class ReconcilerTests : IDisposable
     }
 
     [Fact]
-    public async Task ReconcileAll_ShouldDoNothing_WhenPairsAreInSync()
+    public async Task ReconcileAll_ShouldCreateDesiredState_ForAVariantThatHasNone()
+    {
+        var variant = SeedVariant(sku: "SKU-A", barcode: "BAR-A", displayName: "Widget");
+        await _dbContext.SaveChangesAsync();
+
+        await CreateSut().ReconcileAll();
+
+        var desired = await _dbContext.DesiredItemStates.SingleAsync();
+        desired.ShopifyProductVariantId.ShouldBe(variant.ShopifyProductVariantId);
+        desired.Sku.ShouldBe("SKU-A");
+        desired.Title.ShouldBe("Widget");
+    }
+
+    [Fact]
+    public async Task ReconcileAll_ShouldLeaveNothingPending_WhenEverythingAlreadyAgrees()
     {
         var variant = SeedVariant(displayName: "Same", sku: "matching-sku", barcode: "matching-bar");
-        SeedSkulabsItem(variant.ShopifyProductVariantId, title: "Same", sku: "matching-sku", barcode: "matching-bar");
+        SeedDesiredState(variant, sku: "matching-sku", barcode: "matching-bar", title: "Same");
+        SeedSkulabsItem(variant.ShopifyProductVariantId,
+            title: "Same", sku: "matching-sku", barcode: "matching-bar");
         await _dbContext.SaveChangesAsync();
 
         var result = await CreateSut().ReconcileAll();
 
         result.ShouldBe(ReconcileResult.Empty);
-        var stored = await _dbContext.ShopifyProductVariants.SingleAsync();
-        stored.PendingShopifySync.ShouldBeFalse();
+        (await _dbContext.ShopifyProductVariants.SingleAsync()).PendingShopifySync.ShouldBeFalse();
+        (await _dbContext.SkulabsItems.SingleAsync()).PendingSkulabsSync.ShouldBeFalse();
         (await _dbContext.ShopifyProductVariantLogEvents.CountAsync()).ShouldBe(0);
     }
 
+    // ---------- SkuLabs codes outrank ours: they may already be on a printed label ----------
+
     [Fact]
-    public async Task ReconcileAll_ShouldMirrorSkuAndMarkVariantPending_WhenSkuDrifts()
+    public async Task ReconcileAll_ShouldAdoptSkulabsSku_AndOweShopifyAPush()
     {
-        var variant = SeedVariant(sku: "shopify-old", barcode: "matching-bar");
-        SeedSkulabsItem(variant.ShopifyProductVariantId, sku: "skulabs-authoritative", barcode: "matching-bar");
+        var variant = SeedVariant(sku: "shopify-has-this", barcode: "matching-bar");
+        SeedDesiredState(variant, sku: "shopify-has-this", barcode: "matching-bar");
+        SeedSkulabsItem(variant.ShopifyProductVariantId,
+            sku: "skulabs-authoritative", barcode: "matching-bar");
         await _dbContext.SaveChangesAsync();
 
         var result = await CreateSut().ReconcileAll();
 
         result.VariantsMarked.ShouldBe(1);
-        result.ItemsMarked.ShouldBe(0);
-
-        var stored = await _dbContext.ShopifyProductVariants.SingleAsync();
-        stored.Sku.ShouldBe("skulabs-authoritative");
-        stored.PendingShopifySync.ShouldBeTrue();
-
-        var logs = await LogsForVariant(variant.ShopifyProductVariantId);
-        logs.Select(l => l.Message).ShouldBe([
-            "SKU corrected to match SkuLabs: 'shopify-old' → 'skulabs-authoritative'."
-        ]);
+        (await _dbContext.DesiredItemStates.SingleAsync()).Sku.ShouldBe("skulabs-authoritative");
+        (await _dbContext.ShopifyProductVariants.SingleAsync()).PendingShopifySync.ShouldBeTrue();
     }
 
+    /// <summary>The mirror is Shopify's to change, and Shopify has not been told yet.</summary>
     [Fact]
-    public async Task ReconcileAll_ShouldEmitTwoLogs_WhenBothSkuAndBarcodeDrift()
+    public async Task ReconcileAll_ShouldNotTouchTheShopifyMirror_WhenAdoptingASkulabsSku()
     {
-        var variant = SeedVariant(sku: "old-sku", barcode: "old-bar");
-        SeedSkulabsItem(variant.ShopifyProductVariantId, sku: "new-sku", barcode: "new-bar");
+        var variant = SeedVariant(sku: "shopify-has-this");
+        SeedDesiredState(variant, sku: "shopify-has-this");
+        SeedSkulabsItem(variant.ShopifyProductVariantId, sku: "skulabs-authoritative");
         await _dbContext.SaveChangesAsync();
 
         await CreateSut().ReconcileAll();
 
-        var logs = await LogsForVariant(variant.ShopifyProductVariantId);
-        logs.Select(l => l.Message).ShouldBe([
-            "SKU corrected to match SkuLabs: 'old-sku' → 'new-sku'.",
-            "Barcode corrected to match SkuLabs: 'old-bar' → 'new-bar'."
-        ]);
+        (await _dbContext.ShopifyProductVariants.SingleAsync()).Sku.ShouldBe("shopify-has-this");
     }
 
-    [Fact]
-    public async Task ReconcileAll_ShouldNotTreatBlankSkulabsSku_AsDrift()
+    [Theory]
+    [InlineData("")]
+    [InlineData(null)]
+    public async Task ReconcileAll_ShouldIgnoreABlankSkulabsSku_RatherThanErasingOurs(string? skulabsSku)
     {
-        var variant = SeedVariant(sku: "good-sku", barcode: "matching-bar");
-        SeedSkulabsItem(variant.ShopifyProductVariantId, sku: "", barcode: "matching-bar");
-        await _dbContext.SaveChangesAsync();
-
-        var result = await CreateSut().ReconcileAll();
-
-        result.ShouldBe(ReconcileResult.Empty);
-        (await _dbContext.ShopifyProductVariants.SingleAsync()).Sku.ShouldBe("good-sku");
-    }
-
-    [Fact]
-    public async Task ReconcileAll_ShouldNotOverwriteVariantSku_WhenSkulabsSkuIsBlank()
-    {
-        // Barcode drifts (legitimate candidate) but the SkuLabs SKU is blank — the good variant
-        // SKU must be preserved while the barcode is corrected.
-        var variant = SeedVariant(sku: "good-sku", barcode: "old-bar");
-        SeedSkulabsItem(variant.ShopifyProductVariantId, sku: "", barcode: "new-bar");
-        await _dbContext.SaveChangesAsync();
-
-        await CreateSut().ReconcileAll();
-
-        var stored = await _dbContext.ShopifyProductVariants.SingleAsync();
-        stored.Sku.ShouldBe("good-sku");
-        stored.Barcode.ShouldBe("new-bar");
-        stored.PendingShopifySync.ShouldBeTrue();
-    }
-
-    [Fact]
-    public async Task ReconcileAll_ShouldNotTreatBlankSkulabsBarcode_AsDrift()
-    {
-        var variant = SeedVariant(sku: "matching-sku", barcode: "good-bar");
-        SeedSkulabsItem(variant.ShopifyProductVariantId, sku: "matching-sku", barcode: "");
-        await _dbContext.SaveChangesAsync();
-
-        var result = await CreateSut().ReconcileAll();
-
-        result.ShouldBe(ReconcileResult.Empty);
-        (await _dbContext.ShopifyProductVariants.SingleAsync()).Barcode.ShouldBe("good-bar");
-    }
-
-    // ---------- Title rule (variant DisplayName authoritative) ----------
-
-    [Fact]
-    public async Task ReconcileAll_ShouldMirrorTitleAndMarkItemPending_WhenTitleDrifts()
-    {
-        var variant = SeedVariant(displayName: "New Variant Title");
-        SeedSkulabsItem(variant.ShopifyProductVariantId, title: "Stale Title");
+        var variant = SeedVariant(sku: "keep-me");
+        SeedDesiredState(variant, sku: "keep-me");
+        SeedSkulabsItem(variant.ShopifyProductVariantId, sku: skulabsSku ?? "");
         await _dbContext.SaveChangesAsync();
 
         var result = await CreateSut().ReconcileAll();
 
         result.VariantsMarked.ShouldBe(0);
-        result.ItemsMarked.ShouldBe(1);
-
-        var storedItem = await _dbContext.SkulabsItems.SingleAsync();
-        storedItem.Title.ShouldBe("New Variant Title");
-        storedItem.PendingSkulabsSync.ShouldBeTrue();
-
-        var logs = await LogsForVariant(variant.ShopifyProductVariantId);
-        logs.Select(l => l.Message).ShouldBe([
-            "SkuLabs item title corrected to match variant: 'Stale Title' → 'New Variant Title'."
-        ]);
+        (await _dbContext.DesiredItemStates.SingleAsync()).Sku.ShouldBe("keep-me");
     }
 
     [Fact]
-    public async Task ReconcileAll_ShouldMarkBothSides_WhenSkuAndTitleDrift()
+    public async Task ReconcileAll_ShouldAdoptSkulabsBarcode_WhenItHasOne()
     {
-        var variant = SeedVariant(displayName: "Authoritative Title", sku: "old-sku");
-        SeedSkulabsItem(variant.ShopifyProductVariantId, title: "Old Title", sku: "new-sku");
+        var variant = SeedVariant(barcode: "shopify-bar");
+        SeedDesiredState(variant, barcode: "shopify-bar");
+        SeedSkulabsItem(variant.ShopifyProductVariantId, barcode: "skulabs-bar");
+        await _dbContext.SaveChangesAsync();
+
+        await CreateSut().ReconcileAll();
+
+        (await _dbContext.DesiredItemStates.SingleAsync()).Barcode.ShouldBe("skulabs-bar");
+    }
+
+    // ---------- Titles and locations go the other way ----------
+
+    [Fact]
+    public async Task ReconcileAll_ShouldTakeTitleFromShopify_AndOweSkulabsAPush()
+    {
+        var variant = SeedVariant(displayName: "Shopify Name");
+        SeedDesiredState(variant, title: "Shopify Name");
+        SeedSkulabsItem(variant.ShopifyProductVariantId, title: "Stale SkuLabs Name");
+        await _dbContext.SaveChangesAsync();
+
+        var result = await CreateSut().ReconcileAll();
+
+        result.ItemsMarked.ShouldBe(1);
+        (await _dbContext.SkulabsItems.SingleAsync()).PendingSkulabsSync.ShouldBeTrue();
+        (await _dbContext.DesiredItemStates.SingleAsync()).Title.ShouldBe("Shopify Name");
+    }
+
+    [Fact]
+    public async Task ReconcileAll_ShouldAdoptSkulabsLocation()
+    {
+        var variant = SeedVariant();
+        SeedDesiredState(variant);
+        SeedSkulabsItem(variant.ShopifyProductVariantId, location: "A-01-06");
+        await _dbContext.SaveChangesAsync();
+
+        var result = await CreateSut().ReconcileAll();
+
+        (await _dbContext.DesiredItemStates.SingleAsync()).Location.ShouldBe("A-01-06");
+        result.ItemsMarked.ShouldBe(0, "the item already holds that location, so nothing is owed");
+    }
+
+    [Fact]
+    public async Task ReconcileAll_ShouldMarkBothSides_WhenCodesAndTitleBothDisagree()
+    {
+        var variant = SeedVariant(displayName: "Shopify Name", sku: "shopify-sku");
+        SeedDesiredState(variant, sku: "shopify-sku", title: "Shopify Name");
+        SeedSkulabsItem(variant.ShopifyProductVariantId, title: "Old Name", sku: "skulabs-sku");
         await _dbContext.SaveChangesAsync();
 
         var result = await CreateSut().ReconcileAll();
 
         result.VariantsMarked.ShouldBe(1);
         result.ItemsMarked.ShouldBe(1);
-
-        var storedVariant = await _dbContext.ShopifyProductVariants.SingleAsync();
-        storedVariant.Sku.ShouldBe("new-sku");
-        storedVariant.PendingShopifySync.ShouldBeTrue();
-
-        var storedItem = await _dbContext.SkulabsItems.SingleAsync();
-        storedItem.Title.ShouldBe("Authoritative Title");
-        storedItem.PendingSkulabsSync.ShouldBeTrue();
     }
 
-    // ---------- Exclusions ----------
+    // ---------- Origin decides whether a payload code is trusted ----------
+
+    /// <summary>
+    /// The common way a variant is first seen on a webhook is a merchant duplicating a product
+    /// without clearing its codes, so the payload SKU is presumed to be someone else's.
+    /// </summary>
+    [Fact]
+    public async Task ReconcileVariants_ShouldReplaceThePayloadSku_OnAFirstSighting()
+    {
+        var variant = SeedVariant(sku: "COPIED-FROM-ORIGINAL");
+        await _dbContext.SaveChangesAsync();
+
+        await CreateSut().ReconcileVariants(
+            [variant.ShopifyProductVariantId], MergeOrigin.WebhookCreate);
+
+        (await _dbContext.DesiredItemStates.SingleAsync()).Sku.ShouldBe("GENERATED");
+    }
+
+    /// <summary>
+    /// The import cannot make the same call: a SKU regenerated now would not match the one
+    /// generated when the variant was created, because the SKU derives from a since-renameable
+    /// product title.
+    /// </summary>
+    [Fact]
+    public async Task ReconcileVariants_ShouldHonourThePayloadSku_OnImport()
+    {
+        var variant = SeedVariant(sku: "MERCHANT-SUPPLIED");
+        await _dbContext.SaveChangesAsync();
+
+        await CreateSut().ReconcileVariants(
+            [variant.ShopifyProductVariantId], MergeOrigin.Import);
+
+        (await _dbContext.DesiredItemStates.SingleAsync()).Sku.ShouldBe("MERCHANT-SUPPLIED");
+    }
 
     [Fact]
-    public async Task ReconcileAll_ShouldExcludeInactiveAndDeletedVariants()
+    public async Task ReconcileVariants_ShouldGenerate_OnImport_WhenShopifySentNoSku()
     {
-        var inactive = SeedVariant(productId: 1, variantId: 1, sku: "old-a", isActive: false);
-        SeedSkulabsItem(inactive.ShopifyProductVariantId, sourceItemId: "src-a", sourceListingId: "lst-a", sku: "new-a");
-        var deleted = SeedVariant(productId: 2, variantId: 2, sku: "old-b", isDeleted: true);
-        SeedSkulabsItem(deleted.ShopifyProductVariantId, sourceItemId: "src-b", sourceListingId: "lst-b", sku: "new-b");
+        var variant = SeedVariant(sku: "");
+        await _dbContext.SaveChangesAsync();
+
+        await CreateSut().ReconcileVariants(
+            [variant.ShopifyProductVariantId], MergeOrigin.Import);
+
+        (await _dbContext.DesiredItemStates.SingleAsync()).Sku.ShouldBe("GENERATED");
+    }
+
+    [Fact]
+    public async Task ReconcileVariants_ShouldFallBackToTheVariantId_ForABarcodeOnAFirstSighting()
+    {
+        var variant = SeedVariant(variantId: 4242, barcode: "");
+        await _dbContext.SaveChangesAsync();
+
+        await CreateSut().ReconcileVariants(
+            [variant.ShopifyProductVariantId], MergeOrigin.WebhookCreate);
+
+        (await _dbContext.DesiredItemStates.SingleAsync()).Barcode.ShouldBe("4242");
+    }
+
+    /// <summary>
+    /// Shopify drifting away from a decided SKU is the divergence the dispatcher exists to correct,
+    /// so adopting Shopify's value here would settle the disagreement by surrendering.
+    /// </summary>
+    [Fact]
+    public async Task ReconcileAll_ShouldKeepADecidedSku_WhenShopifyDrifts()
+    {
+        var variant = SeedVariant(sku: "someone-edited-this-in-shopify");
+        SeedDesiredState(variant, sku: "ours");
+        await _dbContext.SaveChangesAsync();
+
+        var result = await CreateSut().ReconcileAll();
+
+        (await _dbContext.DesiredItemStates.SingleAsync()).Sku.ShouldBe("ours");
+        result.VariantsMarked.ShouldBe(1);
+        (await _dbContext.ShopifyProductVariants.SingleAsync()).PendingShopifySync.ShouldBeTrue();
+    }
+
+    // ---------- Scope ----------
+
+    [Fact]
+    public async Task ReconcileAll_ShouldSkipInactiveAndDeletedVariants()
+    {
+        SeedVariant(productId: 1, variantId: 1, sku: "a", isActive: false);
+        SeedVariant(productId: 2, variantId: 2, sku: "b", isDeleted: true);
         await _dbContext.SaveChangesAsync();
 
         var result = await CreateSut().ReconcileAll();
 
         result.ShouldBe(ReconcileResult.Empty);
+        (await _dbContext.DesiredItemStates.CountAsync()).ShouldBe(0);
     }
-
-    // ---------- Scoped entry points ----------
 
     [Fact]
     public async Task ReconcileVariants_ShouldOnlyTouchTheGivenVariants()
     {
-        var target = SeedVariant(productId: 1, variantId: 1, sku: "old-1");
-        SeedSkulabsItem(target.ShopifyProductVariantId, sourceItemId: "src-1", sourceListingId: "lst-1", sku: "new-1");
-        var other = SeedVariant(productId: 2, variantId: 2, sku: "old-2");
-        SeedSkulabsItem(other.ShopifyProductVariantId, sourceItemId: "src-2", sourceListingId: "lst-2", sku: "new-2");
+        var target = SeedVariant(productId: 1, variantId: 1, sku: "");
+        SeedVariant(productId: 2, variantId: 2, sku: "");
         await _dbContext.SaveChangesAsync();
 
-        var result = await CreateSut().ReconcileVariants([target.ShopifyProductVariantId]);
+        await CreateSut().ReconcileVariants([target.ShopifyProductVariantId], MergeOrigin.Import);
 
-        result.VariantsMarked.ShouldBe(1);
-        (await _dbContext.ShopifyProductVariants
-            .SingleAsync(v => v.ShopifyProductVariantId == other.ShopifyProductVariantId))
-            .PendingShopifySync.ShouldBeFalse();
+        var desired = await _dbContext.DesiredItemStates.SingleAsync();
+        desired.ShopifyProductVariantId.ShouldBe(target.ShopifyProductVariantId);
     }
 
     [Fact]
-    public async Task ReconcileVariants_ShouldReturnEmpty_ForEmptyScope()
+    public async Task ReconcileVariants_ShouldReturnEmpty_ForAnEmptyScope()
     {
         var result = await CreateSut().ReconcileVariants([]);
 
@@ -216,21 +296,43 @@ public class ReconcilerTests : IDisposable
     }
 
     [Fact]
-    public async Task ReconcileSkulabsItems_ShouldReconcileTheLinkedPair()
+    public async Task ReconcileSkulabsItems_ShouldReachTheLinkedVariant()
     {
-        var variant = SeedVariant(displayName: "Variant Title", sku: "old-sku");
-        var item = SeedSkulabsItem(variant.ShopifyProductVariantId, title: "Item Title", sku: "new-sku");
+        var variant = SeedVariant(sku: "shopify-sku");
+        SeedDesiredState(variant, sku: "shopify-sku");
+        var item = SeedSkulabsItem(variant.ShopifyProductVariantId, sku: "skulabs-sku");
         await _dbContext.SaveChangesAsync();
 
         var result = await CreateSut().ReconcileSkulabsItems([item.SkulabsItemId]);
 
         result.VariantsMarked.ShouldBe(1);
-        result.ItemsMarked.ShouldBe(1);
+        (await _dbContext.DesiredItemStates.SingleAsync()).Sku.ShouldBe("skulabs-sku");
+    }
+
+    // ---------- Audit trail ----------
+
+    [Fact]
+    public async Task ReconcileAll_ShouldWriteOneAuditEvent_PerFieldThatMoved()
+    {
+        var variant = SeedVariant(sku: "old-sku", barcode: "old-bar", displayName: "Name");
+        SeedDesiredState(variant, sku: "old-sku", barcode: "old-bar", title: "Name");
+        SeedSkulabsItem(variant.ShopifyProductVariantId,
+            title: "Name", sku: "new-sku", barcode: "new-bar");
+        await _dbContext.SaveChangesAsync();
+
+        await CreateSut().ReconcileAll();
+
+        var messages = (await LogsForVariant(variant.ShopifyProductVariantId))
+            .Select(log => log.Message)
+            .ToArray();
+        messages.ShouldContain("SKU changed from 'old-sku' to 'new-sku'.");
+        messages.ShouldContain("Barcode changed from 'old-bar' to 'new-bar'.");
+        messages.Length.ShouldBe(2, "the title already agreed, so it should not be logged");
     }
 
     // ---------- Helpers ----------
 
-    private Reconciler CreateSut() => new(_dbContext, NullLogger<Reconciler>.Instance);
+    private Reconciler CreateSut() => MergeTestFactory.CreateReconciler(_dbContext, _skuGenerator);
 
     private async Task<List<ShopifyProductVariantLogEventEntity>> LogsForVariant(Guid variantGuid) =>
         await _dbContext.ShopifyProductVariantLogEvents
@@ -265,13 +367,34 @@ public class ReconcilerTests : IDisposable
         return entity;
     }
 
+    private DesiredItemStateEntity SeedDesiredState(
+        ShopifyProductVariantEntity variant,
+        string sku = "SKU",
+        string barcode = "BAR",
+        string title = "Title",
+        string location = "")
+    {
+        var entity = new DesiredItemStateEntity
+        {
+            DesiredItemStateId = Guid.NewGuid(),
+            ShopifyProductVariantId = variant.ShopifyProductVariantId,
+            Sku = sku,
+            Barcode = barcode,
+            Title = title,
+            Location = location
+        };
+        _dbContext.DesiredItemStates.Add(entity);
+        return entity;
+    }
+
     private SkulabsItemEntity SeedSkulabsItem(
         Guid variantGuid,
         string sourceItemId = "src",
         string sourceListingId = "lst",
         string title = "Title",
         string sku = "SKU",
-        string barcode = "BAR")
+        string barcode = "BAR",
+        string location = "")
     {
         var entity = new SkulabsItemEntity
         {
@@ -280,6 +403,7 @@ public class ReconcilerTests : IDisposable
             Title = title,
             Sku = sku,
             Barcode = barcode,
+            Location = location,
             Listings =
             {
                 new SkulabsItemListingEntity

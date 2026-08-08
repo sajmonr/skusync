@@ -1,6 +1,6 @@
 using Application.Products.Services;
-using Application.Skus;
 using Application.Sync;
+using Application.Sync.Merge;
 using Infrastructure.Database;
 using Infrastructure.Database.Entities;
 using Integration.Aws.Sqs;
@@ -12,19 +12,22 @@ using Microsoft.FeatureManagement;
 namespace Application.Products.Webhook;
 
 /// <summary>
-/// Handles the <c>products/update</c> Shopify webhook topic. Absorbs incoming variant data into
-/// the local database — creating new variant records (with generated SKUs marked pending) for any
-/// variants not yet tracked, updating titles for existing ones, and re-marking variants pending
-/// when Shopify's SKU/barcode has drifted from our authoritative values — then reconciles the
-/// touched pairs and triggers an immediate dispatch of whatever became pending.
+/// Handles the <c>products/update</c> Shopify webhook topic: mirrors the incoming variant data
+/// locally — creating rows for variants not yet tracked, refreshing those we hold, marking absent
+/// ones deleted — then reconciles the touched variants and dispatches whatever became pending.
+/// <para>
+/// Mirroring is unconditional and includes SKU and barcode, which this handler used to refuse to
+/// copy. It could not, while the variant row was also the authoritative value; now that decided
+/// values live in the desired state, recording what Shopify actually holds is what tells the
+/// reconciler whether Shopify is owed anything.
+/// </para>
 /// </summary>
 public class ShopifyProductUpdateWebhookHandler(
     ApplicationDbContext dbContext,
     ILogger<ShopifyProductUpdateWebhookHandler> logger,
     IReconciler reconciler,
     IShopifyDispatchTrigger dispatchTrigger,
-    IFeatureManager featureManager,
-    ISkuGenerator skuGenerator)
+    IFeatureManager featureManager)
     : ShopifyWebhookBase, IShopifyWebhookHandler
 {
     /// <inheritdoc/>
@@ -59,10 +62,11 @@ public class ShopifyProductUpdateWebhookHandler(
 
         // Collect events before SaveChangesAsync so we only publish for persisted changes.
         var createdEntities = new List<ShopifyProductVariantEntity>();
-        var updatedEntities = new List<ShopifyProductVariantEntity>();
-        // Track SKUs assigned within this batch so two new variants of the same product
-        // can't be issued the same generated SKU before they hit the database.
-        var reservedSkus = new HashSet<string>(StringComparer.Ordinal);
+        // Every variant the payload named that we already track, whether or not mirroring changed
+        // anything. A payload that matches the mirror exactly still names variants whose decisions
+        // may be stale — one marked pending by an earlier pass, say — and skipping those would let
+        // a webhook that "changed nothing" leave a push unmade until the next sweep.
+        var matchedEntities = new List<ShopifyProductVariantEntity>();
 
         // update entities
         foreach (var variant in product.Variants)
@@ -71,26 +75,14 @@ public class ShopifyProductUpdateWebhookHandler(
 
             if (entity is null)
             {
-                var generatedSku = await skuGenerator.Generate(
-                    product.Title, variant.Title, reservedSkus,
-                    fallbackSegment: variant.Id.ToString());
-                reservedSkus.Add(generatedSku);
-
                 logger.LogInformation(
-                    "Assigning generated SKU '{Sku}' to newly-seen variant {VariantId} of product {ProductId}.",
-                    generatedSku, variant.Id, product.Id);
+                    "Newly-seen variant {VariantId} of product {ProductId} on a products/update webhook.",
+                    variant.Id, product.Id);
 
-                var newEntity = ConstructEntity(product, variant, generatedSku);
-                // The generated SKU is a divergence we originated — Shopify doesn't have it yet.
-                newEntity.PendingShopifySync = true;
-
+                var newEntity = ConstructEntity(product, variant);
                 newEntity.LogEvents.Add(new ShopifyProductVariantLogEventEntity
                 {
                     Message = VariantLogMessages.VariantCreated()
-                });
-                newEntity.LogEvents.Add(new ShopifyProductVariantLogEventEntity
-                {
-                    Message = VariantLogMessages.SkuSet(generatedSku)
                 });
 
                 dbContext.ShopifyProductVariants.Add(newEntity);
@@ -113,24 +105,8 @@ public class ShopifyProductUpdateWebhookHandler(
                 // A products/update for a variant we'd previously deactivated means it's live in
                 // Shopify again — revive it so it re-enters the drift sweep.
                 ReactivateIfDormant(entity);
-
-                // Update it
-                var didChange = UpdateEntity(entity, product, variant);
-                var didBarcodeOrSkuChange = DidBarcodeOrSkuChange(entity, variant);
-
-                if (didBarcodeOrSkuChange)
-                {
-                    // Shopify's SKU/barcode has drifted from our authoritative values — the
-                    // variant needs a re-push to bring Shopify back in line.
-                    entity.PendingShopifySync = true;
-                }
-
-                if (!didChange && !didBarcodeOrSkuChange)
-                {
-                    continue;
-                }
-
-                updatedEntities.Add(entity);
+                UpdateEntity(entity, product, variant);
+                matchedEntities.Add(entity);
             }
         }
 
@@ -140,17 +116,40 @@ public class ShopifyProductUpdateWebhookHandler(
 
         // Reconcile and dispatch only after a successful save, skipping any newly-seen variant a
         // concurrent writer had already committed under us — the writer that won the race handles
-        // its own row. Reconcile runs first so a title change is mirrored to the linked SkuLabs
-        // item (marked pending for the SkuLabs dispatch cadence); the immediate dispatch then
-        // pushes whatever became pending toward Shopify within seconds.
-        var touchedVariantIds = updatedEntities
-            .Concat(createdEntities.Where(e => !droppedInserts.Contains(e)))
+        // its own row. Reconcile runs first so a title change reaches the linked SkuLabs item; the
+        // immediate dispatch then pushes whatever became pending toward Shopify within seconds.
+        //
+        // The two groups reconcile separately because their origins differ, and the origin is what
+        // the SKU and barcode rules key off: a first sighting has its payload codes replaced, an
+        // existing variant keeps what was already decided for it.
+        var createdVariantIds = createdEntities
+            .Where(e => !droppedInserts.Contains(e))
+            .Select(e => e.ShopifyProductVariantId)
+            .ToArray();
+        var matchedVariantIds = matchedEntities
             .Select(e => e.ShopifyProductVariantId)
             .ToArray();
 
-        await reconciler.ReconcileVariants(touchedVariantIds);
-        await dispatchTrigger.TryDispatch(touchedVariantIds);
+        await reconciler.ReconcileVariants(createdVariantIds, MergeOrigin.WebhookCreate);
+        await reconciler.ReconcileVariants(matchedVariantIds, MergeOrigin.Routine);
+
+        await dispatchTrigger.TryDispatch(
+            await PendingAmong([.. createdVariantIds, .. matchedVariantIds]));
     }
+
+    /// <summary>
+    /// Narrows a set of touched variants to those the reconcile actually left owing Shopify a push.
+    /// Mirroring a payload touches rows without necessarily changing what they should hold, so
+    /// handing the dispatcher everything would report a push for webhooks that decided nothing.
+    /// </summary>
+    private async Task<Guid[]> PendingAmong(IReadOnlyCollection<Guid> variantIds) =>
+        variantIds.Count == 0
+            ? []
+            : await dbContext.ShopifyProductVariants
+                .Where(variant => variantIds.Contains(variant.ShopifyProductVariantId)
+                                  && variant.PendingShopifySync)
+                .Select(variant => variant.ShopifyProductVariantId)
+                .ToArrayAsync();
 
     /// <summary>
     /// Marks any locally-tracked variant of this product that is absent from the incoming
@@ -216,6 +215,17 @@ public class ShopifyProductUpdateWebhookHandler(
             entity.VariantId);
     }
 
+    /// <summary>
+    /// Refreshes the mirror from the payload — a straight copy, including SKU and barcode.
+    /// <para>
+    /// Copying the codes is the change that makes this a mirror. It previously refused to, because
+    /// the row doubled as the authoritative value and overwriting it would have destroyed a
+    /// correction that had not been pushed yet; instead it flagged the divergence and left the row
+    /// alone. With the decided values living in the desired state, recording what Shopify actually
+    /// holds is both safe and necessary — it is the other half of the comparison that determines
+    /// what Shopify is owed.
+    /// </para>
+    /// </summary>
     private bool UpdateEntity(ShopifyProductVariantEntity entity, SqsShopEventProduct product,
         SqsShopEventVariant variant)
     {
@@ -235,27 +245,29 @@ public class ShopifyProductUpdateWebhookHandler(
             changed = true;
         }
 
+        var incomingSku = variant.Sku ?? "";
+        if (!string.Equals(entity.Sku, incomingSku, StringComparison.Ordinal))
+        {
+            logger.LogDebug("Shopify reports SKU '{Sku}' for variant {VariantId}; mirroring it.",
+                incomingSku, variant.Id);
+            entity.Sku = incomingSku;
+            changed = true;
+        }
+
+        var incomingBarcode = variant.Barcode ?? "";
+        if (!string.Equals(entity.Barcode, incomingBarcode, StringComparison.Ordinal))
+        {
+            logger.LogDebug("Shopify reports barcode '{Barcode}' for variant {VariantId}; mirroring it.",
+                incomingBarcode, variant.Id);
+            entity.Barcode = incomingBarcode;
+            changed = true;
+        }
+
+        if (changed)
+        {
+            entity.UpdatedOnUtc = DateTime.UtcNow;
+        }
+
         return changed;
-    }
-
-    private bool DidBarcodeOrSkuChange(ShopifyProductVariantEntity entity, SqsShopEventVariant variant)
-    {
-        if (!string.IsNullOrEmpty(entity.Barcode) && entity.Barcode != variant.Barcode)
-        {
-            logger.LogDebug("Barcode for variant {VariantId} does not match in Shopify. Updating it.",
-                variant.Id);
-
-            return true;
-        }
-
-        if (!string.IsNullOrEmpty(entity.Sku) && entity.Sku != variant.Sku)
-        {
-            logger.LogDebug("SKU for variant {VariantId} does not match in Shopify. Updating it.",
-                variant.Id);
-
-            return true;
-        }
-
-        return false;
     }
 }

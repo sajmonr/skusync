@@ -38,7 +38,7 @@ public class TriggerItemSyncEndpoint(
         var variantId = Route<Guid>("id", isRequired: true);
         Guid[] scope = [variantId];
 
-        await reconciler.ReconcileVariants(scope, cancellationToken);
+        await reconciler.ReconcileVariants(scope, cancellationToken: cancellationToken);
         var shopify = await shopifyDispatcher.DispatchVariants(scope, cancellationToken);
         var skulabs = await skulabsDispatcher.DispatchVariants(scope, cancellationToken);
 

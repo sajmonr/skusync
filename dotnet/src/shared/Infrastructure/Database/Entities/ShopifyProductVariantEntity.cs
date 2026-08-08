@@ -36,6 +36,23 @@ public class ShopifyProductVariantEntity
     public string DisplayName { get; set; } = "";
 
     /// <summary>
+    /// The product's own title, as Shopify sent it.
+    /// </summary>
+    /// <remarks>
+    /// Kept alongside <see cref="DisplayName"/> rather than derived from it. SKU generation reads
+    /// the product and variant titles separately — it abbreviates each — and a composed
+    /// "Product (Variant)" string cannot be split back apart reliably, since either part may itself
+    /// contain brackets. Storing the raw values keeps generated SKUs the shape merchants recognise.
+    /// </remarks>
+    public string ProductTitle { get; set; } = "";
+
+    /// <summary>
+    /// The variant's own title, as Shopify sent it (e.g. <c>Large / Black</c>), or empty for a
+    /// product with no options.
+    /// </summary>
+    public string VariantTitle { get; set; } = "";
+
+    /// <summary>
     /// Gets or sets a value indicating whether this variant has been locally corrected to
     /// match its linked SkuLabs item but the corresponding Shopify mutation hasn't yet
     /// succeeded — either because the <c>ShopifyWriteBack</c> feature flag was disabled at

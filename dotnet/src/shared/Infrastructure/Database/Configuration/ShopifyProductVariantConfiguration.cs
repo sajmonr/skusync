@@ -18,6 +18,8 @@ public class ShopifyProductVariantConfiguration : IEntityTypeConfiguration<Shopi
         builder.Property(x => x.GlobalVariantId).IsRequired().HasMaxLength(255);
         
         builder.Property(x => x.DisplayName).IsRequired().HasMaxLength(1000);
+        builder.Property(x => x.ProductTitle).IsRequired().HasMaxLength(1000).HasDefaultValue("");
+        builder.Property(x => x.VariantTitle).IsRequired().HasMaxLength(1000).HasDefaultValue("");
 
         builder.Property(x => x.ProductId).IsRequired();
         builder.Property(x => x.VariantId).IsRequired();

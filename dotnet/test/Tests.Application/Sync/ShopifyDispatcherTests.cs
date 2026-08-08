@@ -254,7 +254,9 @@ public class ShopifyDispatcherTests : IDisposable
         bool pendingShopifySync = false,
         int failedShopifySyncAttempts = 0,
         bool isActive = true,
-        bool isDeleted = false)
+        bool isDeleted = false,
+        string? desiredSku = null,
+        string? desiredBarcode = null)
     {
         var entity = new ShopifyProductVariantEntity
         {
@@ -272,6 +274,20 @@ public class ShopifyDispatcherTests : IDisposable
             IsDeleted = isDeleted
         };
         _dbContext.ShopifyProductVariants.Add(entity);
+
+        // The dispatcher pushes the desired state, not the mirror, and skips any variant that has
+        // none — a variant no reconcile has reached yet has nothing decided to push. Seeded to the
+        // values the caller asked for, so a test that wants a push to carry particular codes gets
+        // them without having to know about the split.
+        _dbContext.DesiredItemStates.Add(new DesiredItemStateEntity
+        {
+            DesiredItemStateId = Guid.NewGuid(),
+            ShopifyProductVariantId = entity.ShopifyProductVariantId,
+            Sku = desiredSku ?? sku,
+            Barcode = desiredBarcode ?? barcode,
+            Title = entity.DisplayName
+        });
+
         return entity;
     }
 }

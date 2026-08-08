@@ -61,8 +61,11 @@ public class SkuAndBarcodeSyncTests(AppServerTestHost factory) : IAsyncLifetime
             stored.IsActive.ShouldBeFalse();
             // Reconcile mirrored the authoritative SkuLabs values locally and marked the row
             // pending, independent of the failing pushes.
-            stored.Sku.ShouldBe("skulabs-authoritative");
-            stored.Barcode.ShouldBe("skulabs-authoritative-bar");
+            (await db.DesiredItemStates.SingleAsync()).Sku.ShouldBe("skulabs-authoritative");
+        // Shopify rejected every push, so its mirror still holds what it last reported.
+        stored.Sku.ShouldBe("shopify-old");
+            (await db.DesiredItemStates.SingleAsync()).Barcode.ShouldBe("skulabs-authoritative-bar");
+        stored.Barcode.ShouldBe("shopify-old-bar");
             stored.PendingShopifySync.ShouldBeTrue();
 
             var deactivationLog = await db.ShopifyProductVariantLogEvents
@@ -113,6 +116,15 @@ public class SkuAndBarcodeSyncTests(AppServerTestHost factory) : IAsyncLifetime
             Barcode = "shopify-old-bar"
         };
         db.ShopifyProductVariants.Add(variant);
+        // Seeded from the variant's own values, as the migration does. The drift under test is
+        // between this decision and what SkuLabs holds, not between the mirrors.
+        db.DesiredItemStates.Add(new DesiredItemStateEntity
+        {
+            ShopifyProductVariantId = variant.ShopifyProductVariantId,
+            Sku = variant.Sku,
+            Barcode = variant.Barcode,
+            Title = variant.DisplayName
+        });
 
         db.SkulabsItems.Add(new SkulabsItemEntity
         {

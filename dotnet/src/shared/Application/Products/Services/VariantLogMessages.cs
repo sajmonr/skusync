@@ -37,6 +37,13 @@ internal static class VariantLogMessages
     public static string BarcodeUpdated(string oldBarcode, string newBarcode) =>
         $"Barcode changed from '{oldBarcode}' to '{newBarcode}'.";
 
+    /// <summary>Returns a message indicating that the bin location the linked SkuLabs item should
+    /// hold has changed.</summary>
+    /// <param name="oldLocation">The previous location, or empty when there was none.</param>
+    /// <param name="newLocation">The updated location, or empty when the item now has no bin.</param>
+    public static string LocationUpdated(string oldLocation, string newLocation) =>
+        $"Location changed from '{oldLocation}' to '{newLocation}'.";
+
     /// <summary>Returns a message indicating that a SkuLabs item was newly linked to this variant.</summary>
     /// <param name="skulabsItemId">The SkuLabs source item id of the newly linked item.</param>
     public static string SkulabsLinked(string skulabsItemId) =>

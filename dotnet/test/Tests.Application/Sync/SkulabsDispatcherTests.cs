@@ -278,7 +278,8 @@ public class SkulabsDispatcherTests : IDisposable
         bool pendingSkulabsSync = false,
         int failedSkulabsSyncAttempts = 0,
         bool variantIsActive = true,
-        bool variantIsDeleted = false)
+        bool variantIsDeleted = false,
+        string? desiredTitle = null)
     {
         var variant = new ShopifyProductVariantEntity
         {
@@ -294,6 +295,18 @@ public class SkulabsDispatcherTests : IDisposable
             IsDeleted = variantIsDeleted
         };
         _dbContext.ShopifyProductVariants.Add(variant);
+
+        // The push carries the desired title, and the dispatcher skips links whose variant has no
+        // desired state at all. `desiredTitle` defaults to the item's own title so a test that only
+        // cares about mechanics sees no spurious change.
+        _dbContext.DesiredItemStates.Add(new DesiredItemStateEntity
+        {
+            DesiredItemStateId = Guid.NewGuid(),
+            ShopifyProductVariantId = variant.ShopifyProductVariantId,
+            Sku = "SKU",
+            Barcode = "BAR",
+            Title = desiredTitle ?? title
+        });
 
         var item = new SkulabsItemEntity
         {

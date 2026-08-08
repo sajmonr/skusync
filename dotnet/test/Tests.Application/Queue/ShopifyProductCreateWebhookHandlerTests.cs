@@ -12,6 +12,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.FeatureManagement;
 using NSubstitute;
 using Shouldly;
+using Tests.Application.Sync;
 
 namespace Tests.Application.Queue;
 
@@ -104,8 +105,9 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
         await CreateSut().Handle(product);
 
         var entity = await _dbContext.ShopifyProductVariants.SingleAsync();
-        entity.Sku.ShouldBe("BW-TSh-LG");
-        entity.Barcode.ShouldBe("200");
+        var desired = await DesiredFor(200);
+        desired.Sku.ShouldBe("BW-TSh-LG");
+        desired.Barcode.ShouldBe("200");
     }
 
     [Fact]
@@ -300,22 +302,28 @@ public class ShopifyProductCreateWebhookHandlerTests : IDisposable
         await CreateSutWithRealGenerator().Handle(product);
 
         var entity = await _dbContext.ShopifyProductVariants.SingleAsync();
-        entity.Sku.ShouldBe("BW-200-SM-BL");
+        (await DesiredFor(200)).Sku.ShouldBe("BW-200-SM-BL");
     }
 
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 
-    private ShopifyProductCreateWebhookHandler CreateSut() =>
-        new(_dbContext, _logger, _dispatchTrigger, _featureManager, _skuGenerator);
 
-    private ShopifyProductCreateWebhookHandler CreateSutWithRealGenerator()
-    {
-        var skuGenerator = new SkuGenerator(
-            _dbContext, Options.Create(new SkuGeneratorOptions()), NullLogger<SkuGenerator>.Instance);
-        return new(_dbContext, _logger, _dispatchTrigger, _featureManager, skuGenerator);
-    }
+    /// <summary>The decided state for a variant — where SKUs and barcodes now live.</summary>
+    private async Task<DesiredItemStateEntity> DesiredFor(long variantId) =>
+        await _dbContext.DesiredItemStates
+            .SingleAsync(state => state.ShopifyProductVariant!.VariantId == variantId);
+
+    private ShopifyProductCreateWebhookHandler CreateSut() =>
+        new(_dbContext, _logger,
+            MergeTestFactory.CreateReconciler(_dbContext, _skuGenerator),
+            _dispatchTrigger, _featureManager);
+
+    private ShopifyProductCreateWebhookHandler CreateSutWithRealGenerator() =>
+        new(_dbContext, _logger,
+            MergeTestFactory.CreateReconciler(_dbContext),
+            _dispatchTrigger, _featureManager);
 
     private void SeedVariant(long productId, long variantId)
     {

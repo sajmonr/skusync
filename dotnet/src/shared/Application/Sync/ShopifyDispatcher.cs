@@ -49,6 +49,11 @@ public class ShopifyDispatcher(
         var pending = await dbContext.ShopifyProductVariants
             .Where(scope)
             .Where(variant => variant.PendingShopifySync && variant.IsActive && !variant.IsDeleted)
+            .Include(variant => variant.DesiredState)
+            // A variant with no desired state has not been reconciled yet, so there is nothing
+            // decided to push. It cannot be pending either; this guards the ordering rather than a
+            // state we expect to meet.
+            .Where(variant => variant.DesiredState != null)
             .ToListAsync(cancellationToken);
 
         if (pending.Count == 0)
@@ -76,7 +81,9 @@ public class ShopifyDispatcher(
             {
                 var batch = variants
                     .Select(variant => new ShopifyUpdateProductVariant(
-                        variant.GlobalVariantId, variant.Sku, variant.Barcode))
+                        variant.GlobalVariantId,
+                        variant.DesiredState!.Sku,
+                        variant.DesiredState.Barcode))
                     .ToArray();
 
                 logger.LogDebug(
@@ -108,6 +115,12 @@ public class ShopifyDispatcher(
 
             foreach (var variant in variants)
             {
+                // Shopify has accepted these values, so the mirror now holds them. Advancing it here
+                // is what makes the pending flag self-clearing: leaving the mirror stale would keep
+                // the desired-versus-mirror comparison unequal and re-push the same values on every
+                // cycle until the echo webhook happened to arrive.
+                variant.Sku = variant.DesiredState!.Sku;
+                variant.Barcode = variant.DesiredState.Barcode;
                 variant.PendingShopifySync = false;
                 variant.FailedShopifySyncAttempts = 0;
                 variant.UpdatedOnUtc = DateTime.UtcNow;

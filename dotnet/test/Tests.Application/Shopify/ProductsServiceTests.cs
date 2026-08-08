@@ -11,6 +11,7 @@ using Microsoft.Extensions.Options;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Shouldly;
+using Tests.Application.Sync;
 
 namespace Tests.Application.Shopify;
 
@@ -29,6 +30,13 @@ public class ProductsServiceTests : IDisposable
             .Options;
 
         _dbContext = new ApplicationDbContext(options);
+
+        // A default return for every generator call the SUT might make. Without one NSubstitute
+        // hands back null, the merge decides an empty SKU, and tests fail far from the cause.
+        _skuGenerator.Generate(
+                Arg.Any<string>(), Arg.Any<string?>(),
+                Arg.Any<ISet<string>?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult($"GEN-{Guid.NewGuid():N}"[..12]));
     }
 
     public void Dispose()
@@ -154,7 +162,7 @@ public class ProductsServiceTests : IDisposable
 
         var updated = await _dbContext.Set<ShopifyProductVariantEntity>()
             .SingleAsync(v => v.GlobalVariantId == "gid://shopify/ProductVariant/200");
-        updated.Sku.ShouldBe("OLD-SKU");
+        (await DesiredFor(200)).Sku.ShouldBe("OLD-SKU");
     }
 
     [Fact]
@@ -210,7 +218,7 @@ public class ProductsServiceTests : IDisposable
 
         var saved = await _dbContext.Set<ShopifyProductVariantEntity>()
             .SingleAsync(v => v.GlobalVariantId == "gid://shopify/ProductVariant/200");
-        saved.Sku.ShouldBe("BW-TSh-LG");
+        (await DesiredFor(200)).Sku.ShouldBe("BW-TSh-LG");
 
         // SkuSet log event recorded (separate from the VariantCreated event).
         var logMessages = await _dbContext.ShopifyProductVariantLogEvents
@@ -223,7 +231,8 @@ public class ProductsServiceTests : IDisposable
     [Fact]
     public async Task ImportProducts_ShouldGenerateSku_WhenBothExistingAndShopifySkusAreEmpty_OnUpdate()
     {
-        SeedVariant("gid://shopify/ProductVariant/200", displayName: "T-Shirt - Large", sku: "", barcode: "BAR-1");
+        SeedVariant("gid://shopify/ProductVariant/200", displayName: "T-Shirt - Large", sku: "",
+            barcode: "BAR-1", productTitle: "T-Shirt", variantTitle: "Large");
         await _dbContext.SaveChangesAsync();
 
         _skuGenerator.Generate(
@@ -251,7 +260,7 @@ public class ProductsServiceTests : IDisposable
 
         var updated = await _dbContext.Set<ShopifyProductVariantEntity>()
             .SingleAsync(v => v.GlobalVariantId == "gid://shopify/ProductVariant/200");
-        updated.Sku.ShouldBe("BW-TSh-LG");
+        (await DesiredFor(200)).Sku.ShouldBe("BW-TSh-LG");
     }
 
     [Fact]
@@ -283,9 +292,11 @@ public class ProductsServiceTests : IDisposable
         result.IsSuccess.ShouldBeFalse();
         result.Error.ShouldNotBeNullOrWhiteSpace();
 
-        // Nothing should have been persisted.
-        var saved = await _dbContext.Set<ShopifyProductVariantEntity>().CountAsync();
-        saved.ShouldBe(0);
+        // The mirror is committed before anything is decided, so the variant survives a generator
+        // failure — what Shopify holds is a fact, and recording it does not depend on us working
+        // out what it ought to hold. Only the decision is missing, and the next pass makes it.
+        (await _dbContext.Set<ShopifyProductVariantEntity>().CountAsync()).ShouldBe(1);
+        (await _dbContext.DesiredItemStates.CountAsync()).ShouldBe(0);
 
         // The exception is logged at Error level.
         _logger.Entries.ShouldContain(e => e.LogLevel == LogLevel.Error);
@@ -330,11 +341,11 @@ public class ProductsServiceTests : IDisposable
 
         var unabbreviatable = await _dbContext.Set<ShopifyProductVariantEntity>()
             .SingleAsync(v => v.GlobalVariantId == "gid://shopify/ProductVariant/200");
-        unabbreviatable.Sku.ShouldBe("BW-200-SM-BL");
+        (await DesiredFor(unabbreviatable.VariantId)).Sku.ShouldBe("BW-200-SM-BL");
 
         var good = await _dbContext.Set<ShopifyProductVariantEntity>()
             .SingleAsync(v => v.GlobalVariantId == "gid://shopify/ProductVariant/201");
-        good.Sku.ShouldBe("SKU-OK");
+        (await DesiredFor(good.VariantId)).Sku.ShouldBe("SKU-OK");
     }
 
     [Fact]
@@ -359,7 +370,7 @@ public class ProductsServiceTests : IDisposable
 
         var updated = await _dbContext.Set<ShopifyProductVariantEntity>()
             .SingleAsync(v => v.GlobalVariantId == "gid://shopify/ProductVariant/200");
-        updated.Barcode.ShouldBe("OLD-BAR");
+        (await DesiredFor(200)).Barcode.ShouldBe("OLD-BAR");
     }
 
     [Fact]
@@ -771,12 +782,11 @@ public class ProductsServiceTests : IDisposable
 
         await sut.DeduplicateProducts();
 
-        var variants = await _dbContext.Set<ShopifyProductVariantEntity>().ToListAsync();
-        variants.Single(v => v.VariantId == 100).Sku.ShouldBe("100");
-        variants.Single(v => v.VariantId == 200).Sku.ShouldBe("200");
+        (await DesiredFor(100)).Sku.ShouldBe("100");
+        (await DesiredFor(200)).Sku.ShouldBe("200");
         // Barcode was not duplicated — it should remain unchanged
-        variants.Single(v => v.VariantId == 100).Barcode.ShouldBe("BAR-A");
-        variants.Single(v => v.VariantId == 200).Barcode.ShouldBe("BAR-B");
+        (await DesiredFor(100)).Barcode.ShouldBe("BAR-A");
+        (await DesiredFor(200)).Barcode.ShouldBe("BAR-B");
     }
 
     [Fact]
@@ -790,12 +800,11 @@ public class ProductsServiceTests : IDisposable
 
         await sut.DeduplicateProducts();
 
-        var variants = await _dbContext.Set<ShopifyProductVariantEntity>().ToListAsync();
-        variants.Single(v => v.VariantId == 100).Barcode.ShouldBe("100");
-        variants.Single(v => v.VariantId == 200).Barcode.ShouldBe("200");
+        (await DesiredFor(100)).Barcode.ShouldBe("100");
+        (await DesiredFor(200)).Barcode.ShouldBe("200");
         // SKU was not duplicated — it should remain unchanged
-        variants.Single(v => v.VariantId == 100).Sku.ShouldBe("SKU-A");
-        variants.Single(v => v.VariantId == 200).Sku.ShouldBe("SKU-B");
+        (await DesiredFor(100)).Sku.ShouldBe("SKU-A");
+        (await DesiredFor(200)).Sku.ShouldBe("SKU-B");
     }
 
     [Fact]
@@ -809,11 +818,10 @@ public class ProductsServiceTests : IDisposable
 
         await sut.DeduplicateProducts();
 
-        var variants = await _dbContext.Set<ShopifyProductVariantEntity>().ToListAsync();
-        variants.Single(v => v.VariantId == 100).Sku.ShouldBe("100");
-        variants.Single(v => v.VariantId == 200).Sku.ShouldBe("200");
-        variants.Single(v => v.VariantId == 100).Barcode.ShouldBe("100");
-        variants.Single(v => v.VariantId == 200).Barcode.ShouldBe("200");
+        (await DesiredFor(100)).Sku.ShouldBe("100");
+        (await DesiredFor(200)).Sku.ShouldBe("200");
+        (await DesiredFor(100)).Barcode.ShouldBe("100");
+        (await DesiredFor(200)).Barcode.ShouldBe("200");
     }
 
     [Fact]
@@ -937,21 +945,30 @@ public class ProductsServiceTests : IDisposable
     // Dispatch triggering and pending marking — ImportProducts
     // -------------------------------------------------------------------------
 
+    /// <summary>
+    /// Honouring Shopify's own SKU leaves the two sides already in agreement, so there is nothing to
+    /// push and the dispatcher should not be asked to.
+    /// </summary>
     [Fact]
-    public async Task ImportProducts_ShouldDispatchCreatedVariant_WithoutMarkingPending_WhenSkuComesFromShopify()
+    public async Task ImportProducts_ShouldNotDispatchCreatedVariant_WhenItsSkuCameFromShopify()
     {
         _shopifyProductService.GetProducts().Returns(
         [
-            new ShopifyProductVariant("gid://shopify/Product/100", "gid://shopify/ProductVariant/200", "T-Shirt", "SKU-1", "BAR-1")
+            new ShopifyProductVariant(
+                "gid://shopify/Product/100",
+                "gid://shopify/ProductVariant/200",
+                "T-Shirt",
+                Sku: "SHOPIFY-SKU",
+                Barcode: "BAR-1")
         ]);
 
         await CreateSut().ImportProductsFromShopify();
 
         var created = await _dbContext.Set<ShopifyProductVariantEntity>().SingleAsync();
         created.PendingShopifySync.ShouldBeFalse();
-        await _dispatchTrigger.Received(1).TryDispatch(
-            Arg.Is<IReadOnlyCollection<Guid>>(ids =>
-                ids.Count == 1 && ids.Contains(created.ShopifyProductVariantId)),
+        (await DesiredFor(200)).Sku.ShouldBe("SHOPIFY-SKU");
+        await _dispatchTrigger.DidNotReceive().TryDispatch(
+            Arg.Is<IReadOnlyCollection<Guid>>(ids => ids.Count > 0),
             Arg.Any<CancellationToken>());
     }
 
@@ -979,18 +996,26 @@ public class ProductsServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task ImportProducts_ShouldDispatchUpdatedVariant_WhenExistingVariantIsChanged()
+    public async Task ImportProducts_ShouldDispatchUpdatedVariant_WhenItsDecidedSkuDiffersFromShopify()
     {
-        var seeded = SeedVariant("gid://shopify/ProductVariant/200", displayName: "Old Title", sku: "SKU-1", barcode: "BAR-1", variantId: 200);
+        var seeded = SeedVariant("gid://shopify/ProductVariant/200", displayName: "Old Title",
+            sku: "SKU-1", barcode: "BAR-1", variantId: 200);
         await _dbContext.SaveChangesAsync();
 
         _shopifyProductService.GetProducts().Returns(
         [
-            new ShopifyProductVariant("gid://shopify/Product/100", "gid://shopify/ProductVariant/200", "New Title", "SKU-1", "BAR-1")
+            new ShopifyProductVariant(
+                "gid://shopify/Product/100",
+                "gid://shopify/ProductVariant/200",
+                "New Title",
+                Sku: "SHOPIFY-CHANGED-IT",
+                Barcode: "BAR-1")
         ]);
 
         await CreateSut().ImportProductsFromShopify();
 
+        // The decided SKU stands; Shopify drifting away from it is what owes a push.
+        (await DesiredFor(200)).Sku.ShouldBe("SKU-1");
         await _dispatchTrigger.Received(1).TryDispatch(
             Arg.Is<IReadOnlyCollection<Guid>>(ids =>
                 ids.Count == 1 && ids.Contains(seeded.ShopifyProductVariantId)),
@@ -1045,7 +1070,12 @@ public class ProductsServiceTests : IDisposable
         long variantId = 200,
         long productId = 100,
         bool isActive = true,
-        bool isDeleted = false)
+        bool isDeleted = false,
+        bool withDesiredState = true,
+        string? desiredSku = null,
+        string? desiredBarcode = null,
+        string? productTitle = null,
+        string? variantTitle = null)
     {
         var entity = new ShopifyProductVariantEntity
         {
@@ -1055,6 +1085,8 @@ public class ProductsServiceTests : IDisposable
             GlobalVariantId = globalVariantId,
             VariantId = variantId,
             DisplayName = displayName,
+            ProductTitle = productTitle ?? displayName,
+            VariantTitle = variantTitle ?? "",
             Sku = sku,
             Barcode = barcode,
             IsActive = isActive,
@@ -1062,17 +1094,37 @@ public class ProductsServiceTests : IDisposable
         };
 
         _dbContext.Set<ShopifyProductVariantEntity>().Add(entity);
+
+        // Deduplication now works over what we intend to push, so a seeded variant needs a decided
+        // state to be a candidate at all. Defaults mirror the variant's own values, which is what a
+        // reconcile would have produced for a variant already in agreement with Shopify.
+        if (withDesiredState)
+        {
+            _dbContext.DesiredItemStates.Add(new DesiredItemStateEntity
+            {
+                DesiredItemStateId = Guid.NewGuid(),
+                ShopifyProductVariantId = entity.ShopifyProductVariantId,
+                Sku = desiredSku ?? sku,
+                Barcode = desiredBarcode ?? barcode,
+                Title = displayName
+            });
+        }
+
         return entity;
     }
 
-    private ProductsService CreateSut() => new(_shopifyProductService, _dbContext, _logger, _dispatchTrigger, _skuGenerator);
+    /// <summary>The decided state for a variant — where SKUs and barcodes now live.</summary>
+    private async Task<DesiredItemStateEntity> DesiredFor(long variantId) =>
+        await _dbContext.DesiredItemStates
+            .SingleAsync(state => state.ShopifyProductVariant!.VariantId == variantId);
 
-    private ProductsService CreateSutWithRealGenerator()
-    {
-        var skuGenerator = new SkuGenerator(
-            _dbContext, Options.Create(new SkuGeneratorOptions()), NullLogger<SkuGenerator>.Instance);
-        return new(_shopifyProductService, _dbContext, _logger, _dispatchTrigger, skuGenerator);
-    }
+    private ProductsService CreateSut() =>
+        new(_shopifyProductService, _dbContext, _logger,
+            MergeTestFactory.CreateReconciler(_dbContext, _skuGenerator), _dispatchTrigger);
+
+    private ProductsService CreateSutWithRealGenerator() =>
+        new(_shopifyProductService, _dbContext, _logger,
+            MergeTestFactory.CreateReconciler(_dbContext), _dispatchTrigger);
 
     private sealed class TestLogger<T> : ILogger<T>
     {

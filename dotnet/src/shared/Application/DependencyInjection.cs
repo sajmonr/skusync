@@ -5,6 +5,8 @@ using Application.Products.Webhook;
 using Application.Skulabs.Services;
 using Application.Skus;
 using Application.Sync;
+using Application.Sync.Merge;
+using Application.Sync.Merge.Rules;
 using Integration;
 using Integration.Aws.Sqs;
 using Microsoft.Extensions.Configuration;
@@ -39,6 +41,16 @@ public static class DependencyInjection
             builder.Services.AddTransient<ISkulabsItemSyncService, SkulabsItemSyncService>();
             builder.Services.AddTransient<ISkuGenerator, SkuGenerator>();
             builder.Services.AddTransient<IReconciler, Reconciler>();
+
+            // Field authority, one rule per field. Registration order is deliberately not
+            // significant: the chain validates on construction that no two rules claim the same
+            // field, so adding one here cannot quietly change what an existing field resolves to.
+            builder.Services.AddTransient<IMergeRule, SkuMergeRule>();
+            builder.Services.AddTransient<IMergeRule, BarcodeMergeRule>();
+            builder.Services.AddTransient<IMergeRule, TitleMergeRule>();
+            builder.Services.AddTransient<IMergeRule, LocationMergeRule>();
+            builder.Services.AddTransient<MergeRuleChain>();
+
             builder.Services.AddTransient<IShopifyDispatcher, ShopifyDispatcher>();
             builder.Services.AddTransient<ISkulabsDispatcher, SkulabsDispatcher>();
             builder.Services.AddTransient<IShopifyDispatchTrigger, ShopifyDispatchTrigger>();
