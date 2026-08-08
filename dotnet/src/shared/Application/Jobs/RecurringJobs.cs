@@ -98,14 +98,22 @@ public class RecurringJobs(
     /// Drains pending items to SkuLabs. Gated by <see cref="FeatureFlags.SkulabsAutoDispatch"/> —
     /// when disabled, dirty items accumulate as pending until a manual sync pushes them.
     /// </summary>
-    public async Task DispatchSkulabs(CancellationToken cancellationToken = default)
+    public Task DispatchSkulabs(CancellationToken cancellationToken = default) =>
+        DrainSkulabs(cancellationToken);
+
+    /// <summary>
+    /// The same drain, reporting what it found. Separate from <see cref="DispatchSkulabs"/> only
+    /// because Hangfire's recurring-job registration takes an expression returning a plain
+    /// <see cref="Task"/>, which a result-bearing overload cannot satisfy.
+    /// </summary>
+    public async Task<DispatchResult> DrainSkulabs(CancellationToken cancellationToken = default)
     {
         if (!await featureManager.IsEnabledAsync(FeatureFlags.SkulabsAutoDispatch))
         {
             logger.LogDebug(
                 "{Flag} is disabled. SkuLabs dispatch fired but is doing nothing.",
                 FeatureFlags.SkulabsAutoDispatch);
-            return;
+            return DispatchResult.Empty;
         }
 
         var result = await skulabsDispatcher.DispatchAll(cancellationToken);
@@ -116,5 +124,7 @@ public class RecurringJobs(
                 "SkuLabs dispatch: Pending: {Pending}, Pushed: {Pushed}, Failed: {Failed}, RateLimited: {RateLimited}.",
                 result.Pending, result.Pushed, result.Failed, result.RateLimited);
         }
+
+        return result;
     }
 }

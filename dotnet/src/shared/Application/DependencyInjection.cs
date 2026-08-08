@@ -11,6 +11,7 @@ using Integration;
 using Integration.Aws.Sqs;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.FeatureManagement;
 using SharedKernel.Options;
@@ -93,6 +94,13 @@ public static class DependencyInjection
                 ScheduledJobsOptions.SectionKey
             );
             builder.Services.AddHostedService<RecurringJobRegistrar>();
+
+            // The short-tick drain that gets a change out in seconds. The recurring jobs above stay
+            // as the failsafe: everything here is an optimisation over them, so their cadence can be
+            // relaxed but not removed.
+            builder.AddOptionsFromConfiguration<SyncDrainLoopOptions>(SyncDrainLoopOptions.SectionKey);
+            builder.Services.TryAddSingleton(TimeProvider.System);
+            builder.Services.AddHostedService<SyncDrainLoop>();
 
             return builder;
         }
