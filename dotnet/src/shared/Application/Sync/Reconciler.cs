@@ -68,6 +68,10 @@ public class Reconciler(
         var variantsMarked = 0;
         var itemsMarked = 0;
 
+        // SKUs this pass decided, so the collision check below can look at exactly those rather
+        // than re-scanning the catalogue.
+        var decidedSkus = new List<(Guid VariantId, string Sku)>();
+
         foreach (var candidate in candidates)
         {
             var isFirstDecision = candidate.Variant.DesiredState is null;
@@ -77,6 +81,11 @@ public class Reconciler(
                 cancellationToken);
 
             ApplyDecisions(candidate.Variant, desired, result, isFirstDecision);
+
+            if (result.Changed(ItemField.Sku) && desired.Sku.Length > 0)
+            {
+                decidedSkus.Add((candidate.Variant.ShopifyProductVariantId, desired.Sku));
+            }
 
             if (MarkPendingShopify(candidate.Variant, desired))
             {
@@ -103,6 +112,7 @@ public class Reconciler(
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+        await WarnOnSkuCollisions(decidedSkus, cancellationToken);
 
         if (variantsMarked > 0 || itemsMarked > 0)
         {
@@ -113,6 +123,52 @@ public class Reconciler(
         }
 
         return new ReconcileResult(variantsMarked, itemsMarked);
+    }
+
+    /// <summary>
+    /// Reports a decided SKU that some other variant is also going to claim.
+    /// <para>
+    /// Deliberately a warning rather than a rejection. The usual way this arises is a SkuLabs code
+    /// being adopted, and SkuLabs codes are accepted verbatim because they may already be printed on
+    /// a label — refusing one here would only make our records disagree with the warehouse. But two
+    /// variants sharing a SKU is what the create path's force-generation exists to prevent, so a
+    /// collision arriving by another route should not pass silently.
+    /// </para>
+    /// </summary>
+    private async Task WarnOnSkuCollisions(
+        List<(Guid VariantId, string Sku)> decidedSkus,
+        CancellationToken cancellationToken)
+    {
+        if (decidedSkus.Count == 0)
+        {
+            return;
+        }
+
+        var skus = decidedSkus.Select(decided => decided.Sku).ToArray();
+        var holders = await dbContext.DesiredItemStates
+            .Where(state => skus.Contains(state.Sku)
+                            && !state.ShopifyProductVariant!.IsDeleted)
+            .Select(state => new { state.Sku, state.ShopifyProductVariantId })
+            .ToListAsync(cancellationToken);
+
+        foreach (var (variantId, sku) in decidedSkus)
+        {
+            var others = holders
+                .Where(holder => holder.Sku == sku && holder.ShopifyProductVariantId != variantId)
+                .Select(holder => holder.ShopifyProductVariantId)
+                .ToArray();
+
+            if (others.Length == 0)
+            {
+                continue;
+            }
+
+            logger.LogWarning(
+                "Variant {VariantId} now expects SKU '{Sku}', which {OtherCount} other variant(s) "
+                + "also expect ({OtherVariantIds}). Accepted rather than rejected — a SkuLabs code may "
+                + "already be on a label — but the duplicate needs resolving at source.",
+                variantId, sku, others.Length, string.Join(", ", others));
+        }
     }
 
     private MergeContext BuildContext(

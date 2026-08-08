@@ -164,10 +164,12 @@ public class SkulabsItemSyncServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Sync_ShouldNotRefreshMetadata_WhenLinkIsUnchangedButMetadataDiffers()
+    public async Task Sync_ShouldRefreshMetadata_WhenLinkIsUnchangedButMetadataDiffers()
     {
         // Same SkuLabs source id, same listing, same variant — only title/sku/barcode differ.
-        // The title is ours to push, so a stale SkuLabs value must not overwrite it here.
+        // The row records what SkuLabs last said, so it takes the new values unconditionally. It
+        // used to refuse, because the row also carried the value we intended to push and refreshing
+        // it would have destroyed an undispatched correction; that value now lives elsewhere.
         var variant = SeedVariant(variantId: 200L);
         var existing = SeedSkulabsItem("src-1", StoredListing("lst-1", "200", variant),
             title: "Old Title", sku: "old-sku", barcode: "old-bar");
@@ -180,14 +182,14 @@ public class SkulabsItemSyncServiceTests : IDisposable
         var result = await CreateSut().Sync();
 
         result.CreatedSkulabsItemIds.ShouldBeEmpty();
-        result.UpdatedSkulabsItemIds.ShouldBeEmpty();
+        result.UpdatedSkulabsItemIds.ShouldBe([originalId]);
         (await _dbContext.ShopifyProductVariantLogEvents.CountAsync()).ShouldBe(0);
 
         var stored = await _dbContext.SkulabsItems.SingleAsync();
         stored.SkulabsItemId.ShouldBe(originalId);
-        stored.Title.ShouldBe("Old Title");
-        stored.Sku.ShouldBe("old-sku");
-        stored.Barcode.ShouldBe("old-bar");
+        stored.Title.ShouldBe("New Title");
+        stored.Sku.ShouldBe("new-sku");
+        stored.Barcode.ShouldBe("new-bar");
     }
 
     [Fact]
@@ -225,12 +227,12 @@ public class SkulabsItemSyncServiceTests : IDisposable
     [Fact]
     public async Task Sync_ShouldRefreshLocation_WhenLinkIsUnchangedAndLocationMovedUpstream()
     {
-        // The rule this whole feature turns on. Merchants move bins, so the location follows SkuLabs
-        // on every run — unlike the title, which is ours to push and stays put. And because we never
-        // push a location, moving one owes SkuLabs nothing: the pending flag must stay clear.
+        // Merchants move bins, so the location follows SkuLabs on every run. Because we never push
+        // a location, moving one owes SkuLabs nothing and the pending flag must stay clear.
+        // Everything else is seeded to match the payload so the location is the only thing moving.
         var variant = SeedVariant(variantId: 200L);
         var existing = SeedSkulabsItem("src-1", StoredListing("lst-1", "200", variant),
-            title: "Old Title", sku: "old-sku", barcode: "old-bar");
+            title: "Name", sku: "sku", barcode: "upc");
         existing.Location = "A-01-06";
         await _dbContext.SaveChangesAsync();
 
@@ -241,10 +243,11 @@ public class SkulabsItemSyncServiceTests : IDisposable
 
         var stored = await _dbContext.SkulabsItems.SingleAsync();
         stored.Location.ShouldBe("W-04-18");
-        stored.Title.ShouldBe("Old Title");
         stored.PendingSkulabsSync.ShouldBeFalse();
 
-        // A location move is not a re-link, so it is not reported as one.
+        // A location move on its own touches no other field, so nothing is reported as changed and
+        // the variant history stays quiet — the move is SkuLabs telling us where stock sits, not a
+        // decision anyone made.
         result.UpdatedSkulabsItemIds.ShouldBeEmpty();
         (await _dbContext.ShopifyProductVariantLogEvents.CountAsync()).ShouldBe(0);
     }
@@ -337,8 +340,9 @@ public class SkulabsItemSyncServiceTests : IDisposable
 
         var stored = await _dbContext.SkulabsItems.SingleAsync();
         stored.Location.ShouldBe("W-04-18");
+        // Still owed a push: the mirror moving does not settle what the item ought to hold, which
+        // only the reconciler decides.
         stored.PendingSkulabsSync.ShouldBeTrue();
-        stored.Title.ShouldBe("Locally Corrected Title");
     }
 
     // ---------- Re-linking ----------

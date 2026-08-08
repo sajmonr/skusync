@@ -59,10 +59,12 @@ public class SkulabsItemSyncTests(AppServerTestHost factory) : IAsyncLifetime
     }
 
     [Fact]
-    public async Task SkulabsSyncJob_IsNoOp_WhenSameLinkAlreadyExists_EvenIfMetadataDiffers()
+    public async Task SkulabsSyncJob_KeepsTheSameRow_AndRefreshesItsMetadata_WhenTheLinkIsUnchanged()
     {
         // Same SkuLabs source item id, same variant — metadata diverges between DB and API.
-        // Contract: link writes are decided by IDs alone, so this is a no-op.
+        // The link is still decided by ids alone, so the row keeps its identity; the fields are a
+        // record of what SkuLabs last said and are overwritten regardless. They used to be left
+        // alone, because the row also carried the value we intended to push.
         var variantGuid = await SeedVariantAsync(MatchingVariantId);
         var existingItemId = await SeedSkulabsItemAsync(
             variantGuid,
@@ -78,26 +80,26 @@ public class SkulabsItemSyncTests(AppServerTestHost factory) : IAsyncLifetime
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var stored = await db.SkulabsItems.Include(i => i.Listings).SingleAsync();
-        // Same row, untouched — PK preserved, metadata still the original seed values.
+        // Same row — the primary key is preserved — carrying what SkuLabs now reports.
         stored.SkulabsItemId.ShouldBe(existingItemId);
         stored.Listings.Single().ShopifyProductVariantId.ShouldBe(variantGuid);
-        stored.Title.ShouldBe("Old Title");
-        stored.Sku.ShouldBe("old-sku");
-        stored.Barcode.ShouldBe("old-barcode");
-        // The one field that does not follow the link: SkuLabs owns the location, so it lands here
-        // even on an otherwise no-op run.
+        stored.Title.ShouldBe("Yellow Vintage Nature Domino Necklace (Goose (1bird))");
+        stored.Sku.ShouldBe("1 bird");
+        stored.Barcode.ShouldBe("10862241");
         stored.Location.ShouldBe("A-01-06");
 
-        (await db.ShopifyProductVariantLogEvents
-            .CountAsync(l => l.ShopifyProductVariantId == variantGuid)).ShouldBe(0);
+        // And the codes it reports are adopted, because a SkuLabs code may already be on a label.
+        var desired = await db.DesiredItemStates.SingleAsync();
+        desired.Sku.ShouldBe("1 bird");
+        desired.Barcode.ShouldBe("10862241");
     }
 
     [Fact]
     public async Task SkulabsSyncJob_RefreshesLocation_WhenItMovesUpstreamOnAnAlreadyLinkedItem()
     {
-        // Same link, same everything — only the bin moved. The location is SkuLabs' to own, so it is
-        // picked up even though nothing about the link changed, and it leaves the title (ours to
-        // push) and the pending flag alone.
+        // Same link, same everything — only the bin moved. Nothing about the link changed, and the
+        // mirror still picks it up, because the mirror records what SkuLabs said rather than what
+        // the link did.
         var variantGuid = await SeedVariantAsync(MatchingVariantId);
         await SeedSkulabsItemAsync(
             variantGuid,
@@ -115,8 +117,7 @@ public class SkulabsItemSyncTests(AppServerTestHost factory) : IAsyncLifetime
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var stored = await db.SkulabsItems.SingleAsync();
         stored.Location.ShouldBe("A-01-06");
-        stored.Title.ShouldBe("Old Title");
-        stored.PendingSkulabsSync.ShouldBeFalse();
+        (await db.DesiredItemStates.SingleAsync()).Location.ShouldBe("A-01-06");
     }
 
     [Fact]

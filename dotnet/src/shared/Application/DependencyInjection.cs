@@ -90,6 +90,7 @@ public static class DependencyInjection
 
             builder.Services.AddTransient<RecurringJobs>();
             builder.Services.AddTransient<FullSyncOrchestrator>();
+            builder.Services.AddTransient<SingleItemSyncJob>();
             builder.AddOptionsFromConfiguration<ScheduledJobsOptions>(
                 ScheduledJobsOptions.SectionKey
             );

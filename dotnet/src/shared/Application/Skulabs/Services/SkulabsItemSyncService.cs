@@ -124,14 +124,10 @@ public class SkulabsItemSyncService(
             var currentVariantId = ResolvedVariantId(entity.Listings);
             LogLinkTransition(apiItem.SourceItemId, previousVariantId, currentVariantId, previousListingCount, entity);
 
-            // Metadata follows the link, exactly as it did when the syncable and ambiguous tables
-            // were separate: seeded on a new link, refreshed when the link moves, never otherwise.
+            RefreshMetadata(entity, apiItem, accumulator);
+
             if (currentVariantId is not null && currentVariantId != previousVariantId)
             {
-                entity.Title = apiItem.Name;
-                entity.Sku = apiItem.Sku;
-                entity.Barcode = apiItem.Upc;
-                accumulator.Updated.Add(entity.SkulabsItemId);
                 logger.LogDebug(
                     "Re-linked SkuLabs item {SkulabsItemId}: variant {OldVariantGuid} → {NewVariantGuid}.",
                     apiItem.SourceItemId, previousVariantId, currentVariantId);
@@ -192,6 +188,68 @@ public class SkulabsItemSyncService(
     /// we already hold stands. Turning the feature off must not erase locations it previously synced.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Copies the item's fields from the payload, unconditionally.
+    /// <para>
+    /// This used to be conditional — seeded on a new link, refreshed when the link moved, never
+    /// otherwise — because the row doubled as the value we intended to push, and refreshing it would
+    /// have destroyed a correction not yet dispatched. Now that decisions live in the desired state,
+    /// the row is only a record of what SkuLabs last said, and keeping it stale would have the
+    /// reconciler comparing against yesterday's answer.
+    /// </para>
+    /// </summary>
+    private void RefreshMetadata(
+        SkulabsItemEntity entity,
+        SkulabsApiItem apiItem,
+        ReconciliationAccumulator accumulator)
+    {
+        WarnIfCodeWasCleared(entity, apiItem);
+
+        if (string.Equals(entity.Title, apiItem.Name, StringComparison.Ordinal)
+            && string.Equals(entity.Sku, apiItem.Sku, StringComparison.Ordinal)
+            && string.Equals(entity.Barcode, apiItem.Upc, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        entity.Title = apiItem.Name;
+        entity.Sku = apiItem.Sku;
+        entity.Barcode = apiItem.Upc;
+        accumulator.Updated.Add(entity.SkulabsItemId);
+    }
+
+    /// <summary>
+    /// Reports a code disappearing from an item that previously had one.
+    /// <para>
+    /// Worth its own warning because nothing else would ever mention it. A blank SkuLabs code is
+    /// treated as "none on record" rather than as an instruction, so it propagates nowhere and
+    /// produces no drift, no pending row and no audit event — the system stays perfectly quiet while
+    /// stock on a shelf carries a label whose code we no longer hold. The likeliest cause is a write
+    /// of ours clearing a field we omitted, which is exactly the failure mode we cannot otherwise
+    /// see, and the warehouse would find out before we did.
+    /// </para>
+    /// </summary>
+    private void WarnIfCodeWasCleared(SkulabsItemEntity entity, SkulabsApiItem apiItem)
+    {
+        if (entity.Sku.Length > 0 && apiItem.Sku.Length == 0)
+        {
+            logger.LogWarning(
+                "SkuLabs item {SkulabsItemId} no longer reports a SKU; it previously held '{PreviousSku}'. "
+                + "Blank values are never authoritative, so this will not propagate — but stock may be "
+                + "labelled with the old code.",
+                apiItem.SourceItemId, entity.Sku);
+        }
+
+        if (entity.Barcode.Length > 0 && apiItem.Upc.Length == 0)
+        {
+            logger.LogWarning(
+                "SkuLabs item {SkulabsItemId} no longer reports a barcode; it previously held "
+                + "'{PreviousBarcode}'. Blank values are never authoritative, so this will not "
+                + "propagate — but stock may be labelled with the old code.",
+                apiItem.SourceItemId, entity.Barcode);
+        }
+    }
+
     private void RefreshLocation(SkulabsItemEntity entity, SkulabsApiItem apiItem)
     {
         if (apiItem.Location is null || entity.Location == apiItem.Location)

@@ -1,21 +1,25 @@
-using Application.Sync;
+using Application.Jobs;
 using FastEndpoints;
-using Microsoft.AspNetCore.Http;
+using Hangfire;
 
 namespace Web.Api.Features.ItemSync.TriggerItemSync;
 
 /// <summary>
-/// Manually syncs a single variant on demand: reconciles its linked SkuLabs pair, then dispatches
-/// whatever is pending on both sides — synchronously, in this request. Manual triggers bypass the
-/// <c>ShopifyAutoDispatch</c>/<c>SkulabsAutoDispatch</c> flags (the point of the button is to push
-/// one item even while automatic dispatch is off); the dispatchers' <c>ShopifyWriteBack</c> /
-/// <c>SkulabsWriteBack</c> kill switches still apply, so with a kill switch off the item stays
-/// pending rather than pushed.
+/// Manually syncs a single variant on demand by enqueueing the work for the processing host, and
+/// returns the job id so the caller can poll <c>jobs/{id}</c> for its outcome.
+/// <para>
+/// Enqueued rather than run in the request because the SkuLabs quota is <em>per account</em>: a push
+/// made from here spends the same allowance as one made by the background worker, but escapes the
+/// drain loop's pacing and is invisible to it. Keeping every SkuLabs request inside one host is what
+/// makes that pacing mean anything.
+/// </para>
+/// <para>
+/// Manual syncs still bypass the <c>ShopifyAutoDispatch</c>/<c>SkulabsAutoDispatch</c> flags — the
+/// point of the button is to push one item even while the automatic cadence is off — and the
+/// <c>ShopifyWriteBack</c> / <c>SkulabsWriteBack</c> kill switches still apply.
+/// </para>
 /// </summary>
-public class TriggerItemSyncEndpoint(
-    IReconciler reconciler,
-    IShopifyDispatcher shopifyDispatcher,
-    ISkulabsDispatcher skulabsDispatcher)
+public class TriggerItemSyncEndpoint(IBackgroundJobClient jobClient)
     : EndpointWithoutRequest<TriggerItemSyncResponse>
 {
     public override void Configure()
@@ -26,8 +30,8 @@ public class TriggerItemSyncEndpoint(
         {
             summary.Summary = "Manually sync a single item";
             summary.Description =
-                "Reconciles one variant against its linked SkuLabs item and dispatches the pending "
-                + "changes to Shopify and SkuLabs immediately, bypassing the automatic-dispatch flags. "
+                "Enqueues a reconcile-and-dispatch for one variant on the processing host and returns "
+                + "the job id; poll jobs/{id} for the outcome. Bypasses the automatic-dispatch flags. "
                 + "The ShopifyWriteBack / SkulabsWriteBack kill switches still apply. "
                 + "Rate limited to one request per 30 seconds per client.";
         });
@@ -36,35 +40,13 @@ public class TriggerItemSyncEndpoint(
     public override async Task HandleAsync(CancellationToken cancellationToken)
     {
         var variantId = Route<Guid>("id", isRequired: true);
-        Guid[] scope = [variantId];
 
-        await reconciler.ReconcileVariants(scope, cancellationToken: cancellationToken);
-        var shopify = await shopifyDispatcher.DispatchVariants(scope, cancellationToken);
-        var skulabs = await skulabsDispatcher.DispatchVariants(scope, cancellationToken);
+        var jobId = jobClient.Enqueue<SingleItemSyncJob>(job =>
+            job.Run(variantId, CancellationToken.None));
 
-        if (skulabs.RateLimited)
-        {
-            HttpContext.Response.Headers.RetryAfter =
-                ((int)Math.Ceiling(skulabs.RetryAfter!.Value.TotalSeconds)).ToString();
-            await Send.ResponseAsync(
-                new TriggerItemSyncResponse(shopify.Pushed, shopify.Failed, SkulabsPushed: 0, SkulabsFailed: 1),
-                StatusCodes.Status429TooManyRequests,
-                cancellationToken);
-            return;
-        }
-
-        await Send.OkAsync(
-            new TriggerItemSyncResponse(shopify.Pushed, shopify.Failed, skulabs.Pushed, skulabs.Failed),
-            cancellationToken);
+        await Send.OkAsync(new TriggerItemSyncResponse(jobId), cancellationToken);
     }
 }
 
-/// <param name="ShopifyPushed">Variants written to Shopify (0 or 1).</param>
-/// <param name="ShopifyFailed">Shopify writes that failed (0 or 1).</param>
-/// <param name="SkulabsPushed">SkuLabs items written (0 or 1).</param>
-/// <param name="SkulabsFailed">SkuLabs writes that failed (0 or 1).</param>
-public readonly record struct TriggerItemSyncResponse(
-    int ShopifyPushed,
-    int ShopifyFailed,
-    int SkulabsPushed,
-    int SkulabsFailed);
+/// <param name="JobId">Hangfire job id; poll <c>jobs/{id}</c> for its state.</param>
+public readonly record struct TriggerItemSyncResponse(string JobId);
