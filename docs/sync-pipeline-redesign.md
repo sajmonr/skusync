@@ -4,11 +4,11 @@
 > discussion (2026-08-07, revised 2026-08-08) so work can start cold from this file. Nothing
 > here is implemented yet; `docs/architecture.md` describes the current system.
 >
-> **2026-08-08 revision** — the original open questions are largely settled: §4.1 gains the
-> title and location rulings, §4.4 covers location as the second pushable field, §5.1 records
-> the SkuLabs rate budget as the dominant constraint (the *pacing mechanism* is explicitly still
-> undecided), §5.2 records that SkuLabs webhooks do not fire, and §7 is now a resolution log
-> rather than a question list.
+> **2026-08-08 revision** — the original open questions are settled: §4.1 gains the title and
+> location rulings, §4.4 covers location as the second pushable field, §5.1 records the **measured**
+> SkuLabs rate limit (104/hour, per account) with the pacing decision in §5.1.1 and a live bug in
+> the reactive path in §5.1.2, §5.2 records that SkuLabs webhooks do not fire, and §7 is now a
+> resolution log rather than a question list.
 
 ## 1. Context and motivation
 
@@ -216,8 +216,10 @@ Target flow:
 1. Webhook arrives → ingest pure-copies into the mirror (if different)
 2. **Inline reconcile** for the touched scope (pure local computation, milliseconds — do NOT
    make reconcile an async event) → merge rules write desired; dirty falls out
-3. **Drain loop** — a `BackgroundService` with `PeriodicTimer` in AppServer, ~15s cadence,
-   drains dirty rows batched per target. Meets the upcoming ~30–60s requirement with margin.
+3. **Drain loop** — a `BackgroundService` with `PeriodicTimer` in AppServer, ~10–15s tick,
+   drains dirty rows batched per target. Shopify pushes on every tick that finds work; SkuLabs
+   pushes are additionally gated by the minimum push interval of §5.1.1, since only SkuLabs has
+   a budget worth respecting.
 4. **Inline immediate scoped dispatch stays** for SKU origination (seconds path — the naming
    race of §4.2 depends on it).
 5. Scheduled dispatch crons relax to ~10 min pure failsafe (or fold into the loop entirely);
@@ -238,10 +240,33 @@ budget allows; we do not build "title is cosmetic so it can wait" logic. What ge
 the *cadence of the inbound and outbound loops*, not which field rides which loop.
 
 Shopify is not a problem — webhooks inbound, a generous limit outbound. **SkuLabs is, because
-ingest and outbound compete for one tight budget.** Working figure: **~45 requests/hour,
-UNCONFIRMED** — confirm with SkuLabs, and ask three things: is it per-key or per-account, is it
-uniform across endpoints, and can it be raised. If `item/get` and `item/bulk_upsert` have
-separate budgets, ingest and outbound do not compete and most of this section is moot.
+ingest and outbound compete for one budget.**
+
+**Measured 2026-08-08** by driving `item/get` at 1 req/s until it broke (88 succeeded, the 89th
+returned 429). The 429 body is precise:
+
+```json
+"data": { "key": "rate-limit-2:<account_id>:basic_2025:api-2500-per-day",
+          "interval_seconds": 3600, "limit": 104, "remaining": "0",
+          "wait_seconds": 1508, "reason": "your billing plan basic_2025" }
+```
+
+| Property | Value |
+|---|---|
+| Limit | **104 requests / hour** (the earlier ~45 working figure was wrong) |
+| Scope | **Per account** — the key embeds the `account_id` claim, with no key or endpoint component |
+| Endpoints | **One shared pool** for `item/get` and `item/bulk_upsert` alike |
+| Also capped | `api-2500-per-day` — 104 × 24 ≈ 2496, so the hourly figure is the daily cap amortised |
+| Raisable | Yes — it is a billing-plan lever (`basic_2025`), not a technical ceiling |
+
+Two things follow from "per account" that are easy to miss: every host shares the pool, so
+`TriggerItemSyncEndpoint` in Web.Api spends the same budget as AppServer; and **SkuLabs' own UI
+and any other consumer spend it too**. Observed baseline during the probe was **~16 requests/hour
+already consumed** before we started — against the 6/hour the poll alone accounts for.
+
+Inferred, not documented: `wait_seconds` of 1508 is well short of both a full hour and
+"3600 minus elapsed", which suggests a **sliding** window where capacity returns gradually rather
+than resetting on the hour.
 
 Cost model (verified against the code):
 
@@ -263,25 +288,65 @@ A bulk import is nearly free; a steady trickle is the worst case. Any throttling
 many items are dirty we must fall back to the periodic sync" is backwards — a large batch is the
 cheap case.)
 
-Order-of-magnitude consequence, if the ~45/hour figure holds: a 10-minute ingest cadence costs 6,
-leaving ~39 for outbound — roughly **one push per 90s sustained**. The ~30–60s target would then
-not be achievable as a *sustained* guarantee, though the common case (an isolated edit, budget
-in hand) could still be fast. At ~200/hour the sustained interval drops to ~18s and the target
-is met comfortably, which is why **confirming — and if possible raising — the limit is the
-highest-leverage unknown on this workstream**.
+Budget at 104/hour:
 
-What the existing code does today: `IRateLimitService` / `SkulabsRateLimitHandler` handle 429s
-*reactively* (record a cooldown, defer), and `RateLimitedException` leaves rows pending with
-counters untouched. There is no *proactive* budgeting — nothing decides in advance whether a
-request is affordable, and nothing arbitrates between ingest and outbound.
+| | Requests/hour | Sustained outbound interval |
+|---|---|---|
+| Ingest at the 10-minute poll | 6 | — |
+| Outbound remainder | 98 | ~37s |
+| Less the ~16/hour observed baseline | ~82 | ~44s |
 
-> **UNDECIDED — how to pace the two loops against a shared budget.** Options discussed but not
-> settled: a shared proactive budget/token-bucket both loops draw from; a reservation floor so
-> ingest cannot be starved by outbound; decoupling tick frequency from spend frequency so
-> detection stays fast while spending stays paced. Ingest starvation is the risk worth weighing —
-> it carries the §4.1 materialized values, so stale ingest means pushing outdated sku/barcode at
-> Shopify, whereas outbound lag is only a UX cost. **Settle this before the drain-loop work in
-> §6 is scoped**; the cadence numbers in §5 above are provisional until then.
+**The ~30–60s target is achievable on the current plan**, without a plan upgrade.
+
+### 5.1.1 DECIDED: a minimum push interval, not a budget service
+
+A proactive shared-budget service (`ISkulabsApiBudget` token bucket, ingest reservation, etc.)
+was considered and **rejected**. The reason is that it cannot work accurately here:
+
+- The limit is **per account** and shared with consumers we neither control nor instrument
+  (Web.Api, the SkuLabs UI, humans). A counter in AppServer models a pool it only partly sees —
+  the ~16/hour baseline is exactly the spend it would have missed.
+- There are **no rate-limit headers on 200 responses**, so a local counter can never reconcile
+  against the truth. It would drift, and drift either way: too conservative and it throttles for
+  spend that never happened, too loose and it hits 429 regardless.
+- To span both hosts it would need to live in Postgres rather than in-memory
+  (`InMemoryRateLimitService` is per-process), survive restarts, and model the sliding window.
+  Considerable apparatus to approximate a number we can simply stay under.
+
+**Instead: one configurable minimum interval between SkuLabs pushes.** The drain loop still ticks
+every ~10s (a cheap indexed DB query, no API call) but only pushes when ≥ N seconds have elapsed
+since the *last push*. At N = 45s that is ≤80 requests/hour from dispatch, which with the ~16
+baseline sits comfortably inside 104. One config value, one in-memory timestamp, no shared state
+— and only AppServer runs the loop, so there is nothing to coordinate.
+
+This keeps the property that mattered: after a quiet period the interval has already elapsed, so
+an isolated location edit goes out on the very next tick (~10s), while sustained churn paces to N
+and coalesces into larger batches — free, since `bulk_upsert` does not care how many items it
+carries. Effectively a token bucket of size 1, without the accounting.
+
+Ingest needs nothing new: a 10-minute cron is already its own rate limiter at 6/hour.
+
+### 5.1.2 The reactive path carries the load — and is currently broken
+
+With no proactive budget, correct 429 handling *is* the safety net. `SkulabsRateLimitHandler`
+records a cooldown and `RateLimitedException` leaves rows pending with counters untouched, which
+is right. But the probe exposed a live bug:
+
+**The 429 carries no `Retry-After` header** — the wait is only in the body at
+`error.data.wait_seconds`. `ResolveRetryAfter` reads only `response.Headers.RetryAfter`, finds
+nothing, and falls back to `InMemoryRateLimitService.DefaultCooldown` = **5 minutes**, against a
+real wait of **1508s (~25 min)**. So on every genuine rate limit we cool down, resume, get 429'd
+again, and repeat for the whole window — and since the payload carries an `attempt` counter,
+those rejected calls plausibly count against the quota, extending our own lockout. See §6 #10.
+
+Correctness never depends on avoiding 429s — rows stay pending and the next cycle drains a bigger
+batch — but the thrashing is real and wasteful.
+
+**Cooldown scope — decided: leave it shared.** The cooldown is recorded under a single
+`RateLimitKey = "skulabs"`, so a 429 short-circuits ingest and outbound alike, turning a
+10-minute poll into ~35 minutes worst case. Splitting the key was considered and rejected: if the
+account is out of budget it is out for everyone, and splitting does not create budget that is not
+there.
 
 ### 5.2 SkuLabs webhooks: documented, but not working
 
@@ -344,13 +409,24 @@ Quick wins, independent of the redesign (can land first, any order):
    warehouse. **Prerequisite for the location push (§4.4).**
 7. **Parse the `bulk_upsert` 200 body**; treat `success != true` as a batch failure routed into
    the existing `RecordFailedAttempt` path.
-8. **Use `user_error` for retry decisions** — `SkulabsErrorPayload.UserError` is already parsed
-   but only logged. Per the spec it means "caused by user input", i.e. retrying identical input
-   cannot help: `true` → exclude immediately with the audit event, `false` → retry as today.
-   Currently a malformed item burns three identical retries first.
+8. **Use `user_error` for retry decisions — but only on non-429 4xx.** `SkulabsErrorPayload.
+   UserError` is already parsed and only logged. Per the spec it means "caused by user input",
+   i.e. retrying identical input cannot help, so `true` → exclude immediately with the audit
+   event rather than burning three attempts. **Critical caveat: the 429 body also carries
+   `user_error: true`**, and rate limiting must always be retried. Handle 429 first, exactly as
+   today, and consult `user_error` only for the remaining 4xx. The observed 403
+   (`AuthErrorPassive`, missing scope) is the case this is actually for — permanently
+   unretryable, currently worth three wasted attempts.
 9. **Fix the SkuLabs mock**: `mocks/skulabs/mappings/item-bulk-upsert.json` returns
    `{"items": []}`, which is invented — the real response is `{"success": true}`. Add a 400
    `{error: {...}}` stub too; nothing currently exercises the error path against a realistic body.
+   The rate-limit example in `mocks/skulabs/README.md` is also misleading — it stubs a 429 with a
+   `Retry-After` header, which the real API does not send (§5.1.2). Make it match reality so the
+   mock stops validating a code path that cannot fire in production.
+10. **Parse `error.data.wait_seconds` on 429** (§5.1.2) — the highest-value item on this list.
+    Today every real rate limit thrashes on a 5-minute default against a ~25-minute actual wait.
+    `SkulabsRateLimitHandler.ResolveRetryAfter` needs a body-based fallback when the header is
+    absent, which for this API is always.
 
 Redesign PR chain:
 
@@ -361,7 +437,8 @@ Redesign PR chain:
    move `DisplayName` composition into the merge.
 3. Land `IMergeRule` on the single merge point (incl. generation-as-rule with provenance-scoped
    chains per §4.3).
-4. Drain loop + cadence relaxation; keep inline immediate dispatch for SKU origination.
+4. Drain loop + the SkuLabs minimum push interval (§5.1.1) + cadence relaxation; keep inline
+   immediate dispatch for SKU origination.
 5. Rewrite `docs/architecture.md` (state model, invariant 3, and the ingest-exception
    paragraph all change).
 
@@ -400,16 +477,22 @@ the selection to `productVariants { id sku barcode }` is a one-line change in co
 fast as the budget allows. The real question turned out not to be latency but the shared SkuLabs
 rate budget (§5.1).
 
+**Q6 — what is the SkuLabs rate limit? RESOLVED by measurement: 104/hour, per account, one pool
+across endpoints, raisable via billing plan** (§5.1). Consequences: the ~30–60s target is
+achievable without a plan upgrade; a proactive budget service was rejected in favour of a minimum
+push interval (§5.1.1); and the reactive 429 path was found broken (§5.1.2).
+
 ### Still open
 
-1. **Confirm the SkuLabs rate limit** — the ~45/hour working figure is unverified. Per-key or
-   per-account? Uniform across endpoints? Can it be raised? Highest-leverage unknown here.
-2. **Q2 above** — omitted-field semantics in `bulk_upsert`.
-3. **What does "clear the location" send outbound** (§4.4), given ingest's `null` vs `""`
+1. **Q2 above** — omitted-field semantics in `bulk_upsert`. Now the most load-bearing unknown,
+   because the location push changes the payload shape.
+2. **What does "clear the location" send outbound** (§4.4), given ingest's `null` vs `""`
    distinction.
-4. **Does `bulk_upsert` ever return 200 with `success: false`**, and does it identify the failing
+3. **Does `bulk_upsert` ever return 200 with `success: false`**, and does it identify the failing
    item? If a bad item can fail a whole batch, the batch-bisection knob listed as hypothetical in
    `docs/architecture.md` stops being hypothetical.
+4. **Pick N for the minimum push interval** (§5.1.1). 45s fits the measured budget with headroom;
+   confirm against real change volume once location editing is live.
 5. **SkuLabs webhooks** (§5.2) — parked as a separate spike, not a dependency.
 
 ## 8. Key files
