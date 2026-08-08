@@ -1,8 +1,14 @@
 # SkuSync Sync-Pipeline Redesign — Design Notes
 
 > Companion document for the "Sync pipeline redesign" GitHub issue. Captures the full design
-> discussion (2026-08-07) so work can start cold from this file. Nothing here is implemented
-> yet; `docs/architecture.md` describes the current system.
+> discussion (2026-08-07, revised 2026-08-08) so work can start cold from this file. Nothing
+> here is implemented yet; `docs/architecture.md` describes the current system.
+>
+> **2026-08-08 revision** — the original open questions are largely settled: §4.1 gains the
+> title and location rulings, §4.4 covers location as the second pushable field, §5.1 records
+> the SkuLabs rate budget as the dominant constraint (the *pacing mechanism* is explicitly still
+> undecided), §5.2 records that SkuLabs webhooks do not fire, and §7 is now a resolution log
+> rather than a question list.
 
 ## 1. Context and motivation
 
@@ -51,9 +57,12 @@ Key decisions:
   - Shopify: `productVariantsBulkUpdate` is GraphQL — select the resulting variant state in the
     mutation response and write the mirror from it. The echo `products/update` webhook arrives
     seconds later and re-ingests as a confirming no-op (pure-copy ingest makes the echo safe).
-  - SkuLabs: the `bulk_upsert` response body is currently discarded (`SkulabsItemClient` checks
-    status only). If the response echoes item state, use it; if it is ack-only, write-what-you-
-    sent as a provisional observation and let the 10-min item sync confirm.
+  - SkuLabs: **ack-only, confirmed** — `bulk_upsert` returns `{"success": true}` and nothing
+    else (§7 Q1). So the mirror write is necessarily *provisional write-what-you-sent*, with the
+    10-min item sync as the confirming observation. This is the one place the "observations
+    only" rule is knowingly bent, and it is bent narrowly: we only ever push `name` and
+    (soon) `location`, so sku/barcode in the SkuLabs mirror stay exclusively ingest-written and
+    §4.1's observe-only guarantee holds structurally.
   - **The mirror write on success is not optional:** without it, a pushed row still computes as
     dirty until the next observation (up to 10 min for SkuLabs) and the drain loop re-pushes it
     every cycle — burning the SkuLabs rate budget (~40 redundant calls per item).
@@ -114,15 +123,18 @@ sku/barcode values. Once a code is set in SkuLabs it may be on physical labels, 
   sku/barcode from Shopify; if blank it **generates random values**. It **never updates its own
   sku/barcode afterward** (only a human operator can).
 
+**Titles and locations are NOT materialized** — they are system-reference values only, never
+relied on by a picker holding paper. That is the whole reason they are safe to overwrite while
+sku/barcode are not: same external system, opposite treatment, and the distinction is invisible
+from the code. Materialization, not "which system owns it", is the criterion.
+
 Field × direction matrix (every field is strictly one-directional):
 
-| Field | We push to Shopify | We push to SkuLabs | SkuLabs is |
-|---|---|---|---|
-| sku / barcode | yes | **never** | observe-only source |
-| title | never | yes | write target |
-
-*(Open question: are titles printed on labels too? If titles must freeze once tagged, the title
-write-back needs the same treatment and SkuLabs becomes entirely read-only.)*
+| Field | We push to Shopify | We push to SkuLabs | SkuLabs is | Materialized |
+|---|---|---|---|---|
+| sku / barcode | yes | **never** | observe-only source | **yes — printed labels** |
+| title | never | yes | write target | no |
+| location | never | yes *(new — see §4.4)* | write target | no |
 
 ### 4.2 SKU generation is a *bid* in a naming race
 
@@ -171,6 +183,27 @@ Consequences discussed:
   that the merchant's `ABC` was discarded or why. Add a log message ("replaced supplied SKU
   `ABC` per duplicate-prevention policy") for the "where did my SKU go?" support question.
 
+### 4.4 Location — the second pushable field (the driver for this work)
+
+`SkulabsItemEntity.Location` landed in #102 (`05c7f0d`) as **ingest-only**: the item's bin in the
+configured warehouse, mirrored from `alias_locations`. The upcoming functionality makes it
+**editable from Shopify**, which turns it into the second field we push to SkuLabs and is the
+reason the latency question in §5 exists at all.
+
+Consequences:
+
+- `SkulabsItemUpdateWithId(Id, Name)` and the `{_id, name}` wire body must both grow a location
+  member. **This is the first time the `bulk_upsert` payload shape has ever changed**, which is
+  exactly when an omitted-field-blanks-the-value bug would bite — see §7 Q2, still an unverified
+  assumption. Suggested mitigation: land the blank-transition detector (§6 #6) first.
+- Ingest already distinguishes three states (`null` = no warehouse configured so we never asked;
+  `""` = asked, item has no bin; a value). Outbound needs the same care so "this item has no
+  bin" and "we don't know" cannot collapse into the same wire value. **Decide explicitly what
+  "clear the location" sends.**
+- Nothing parses or validates a location — SkuLabs owns the format and we mirror it verbatim,
+  including real-world noise (`A-01-6`, `c-12-03`, `AA-02-11`). Editing from Shopify should not
+  introduce validation that the ingest side does not apply.
+
 ## 5. Dispatch and latency design
 
 Decision: **no message broker** (RabbitMQ stays removed — the `015e134` rationale still holds:
@@ -198,10 +231,83 @@ needs are all served by the dirty-state design itself; the loop is a queue consu
 scheduled job. If tolerance were ≥ ~60s, a plain 1-minute Hangfire recurring job would be
 correct and no loop should exist.
 
-Rate limits: the drain loop coalesces naturally — a burst of 50 changes in 10s becomes one
-`bulk_upsert`, not 50 calls. Existing `RateLimitedException` handling (rows stay pending,
-counters untouched) composes unchanged: a rate-limited cycle just means the next cycle drains
-a bigger batch.
+### 5.1 The SkuLabs rate budget is the dominant constraint
+
+**No per-field cadence differentiation.** All fields are pushed and ingested as fast as the
+budget allows; we do not build "title is cosmetic so it can wait" logic. What gets controlled is
+the *cadence of the inbound and outbound loops*, not which field rides which loop.
+
+Shopify is not a problem — webhooks inbound, a generous limit outbound. **SkuLabs is, because
+ingest and outbound compete for one tight budget.** Working figure: **~45 requests/hour,
+UNCONFIRMED** — confirm with SkuLabs, and ask three things: is it per-key or per-account, is it
+uniform across endpoints, and can it be raised. If `item/get` and `item/bulk_upsert` have
+separate budgets, ingest and outbound do not compete and most of this section is moot.
+
+Cost model (verified against the code):
+
+- `GetAllItems` does **not** paginate — one `GET item/get?fields=…` returns the whole array.
+  One request per ingest pass, regardless of catalogue size.
+- `bulk_upsert` sends the entire pending set in **one** request. 1 dirty item and 500 dirty
+  items cost exactly the same.
+
+**Therefore volume is free and temporal spread is what costs.** This inverts the intuition and
+must not be forgotten:
+
+| Change pattern | Requests/hour |
+|---|---|
+| 500 changes arriving together | 1 |
+| 1 change every 10s, sustained | 360 — 8× over budget |
+
+A bulk import is nearly free; a steady trickle is the worst case. Any throttling keyed on
+*number of dirty rows* would optimise the wrong variable. (Corollary: the intuition that "if too
+many items are dirty we must fall back to the periodic sync" is backwards — a large batch is the
+cheap case.)
+
+Order-of-magnitude consequence, if the ~45/hour figure holds: a 10-minute ingest cadence costs 6,
+leaving ~39 for outbound — roughly **one push per 90s sustained**. The ~30–60s target would then
+not be achievable as a *sustained* guarantee, though the common case (an isolated edit, budget
+in hand) could still be fast. At ~200/hour the sustained interval drops to ~18s and the target
+is met comfortably, which is why **confirming — and if possible raising — the limit is the
+highest-leverage unknown on this workstream**.
+
+What the existing code does today: `IRateLimitService` / `SkulabsRateLimitHandler` handle 429s
+*reactively* (record a cooldown, defer), and `RateLimitedException` leaves rows pending with
+counters untouched. There is no *proactive* budgeting — nothing decides in advance whether a
+request is affordable, and nothing arbitrates between ingest and outbound.
+
+> **UNDECIDED — how to pace the two loops against a shared budget.** Options discussed but not
+> settled: a shared proactive budget/token-bucket both loops draw from; a reservation floor so
+> ingest cannot be starved by outbound; decoupling tick frequency from spend frequency so
+> detection stays fast while spending stays paced. Ingest starvation is the risk worth weighing —
+> it carries the §4.1 materialized values, so stale ingest means pushing outdated sku/barcode at
+> Shopify, whereas outbound lag is only a UX cost. **Settle this before the drain-loop work in
+> §6 is scoped**; the cadence numbers in §5 above are provisional until then.
+
+### 5.2 SkuLabs webhooks: documented, but not working
+
+SkuLabs exposes `webhook/add-handler` and `webhook/remove-handler`, with event patterns that
+include `item.updated` and `item.inventory`. This contradicts the claim in `docs/architecture.md`
+that SkuLabs gives us no webhooks — but only on paper.
+
+**Tested 2026-08-08 and it did not fire.** A handler was registered against a public ngrok
+endpoint and multiple items were edited; ngrok's tunnel-level request journal recorded zero
+inbound connections (i.e. SkuLabs never opened one — not a listener, routing, or response-format
+problem). Notes for anyone retrying:
+
+- The documented event names are prose ("common patterns: …"), not an enum — `item.update` vs
+  `item.updated` is unverified.
+- There is **no list-handlers endpoint**, only add and remove (by `_id`), so a registration
+  cannot be confirmed after the fact except by whatever `add-handler` returned.
+- Untested discriminator: register a *different* event (e.g. `item.inventory`) on a distinct
+  path. If that fires and `item.updated` does not, it is a per-event problem; if neither fires,
+  it is account- or scope-level (the API preamble notes routes vary between `platformApi`,
+  `platformGeneric`, and `platformUser` scopes, and we authenticate with an API key).
+
+**Working assumption: the 10-minute poll remains the only reliable inbound signal.** If webhooks
+are ever made to work they slot into Ingest as one more trigger — no structural change to this
+design — and would shrink the §4.2 naming-race window from ~12 minutes to seconds. Treat as a
+separate spike, not a dependency. `docs/architecture.md` needs a nuanced correction here: not
+"SkuLabs has no webhooks" but "SkuLabs documents webhooks; they did not fire when tested".
 
 Scheduler decision: **keep Hangfire, do not reintroduce Quartz.** What survives the redesign —
 daily import, 10-min item sync (the only SkuLabs inbound signal; no webhooks), nightly
@@ -231,7 +337,20 @@ Quick wins, independent of the redesign (can land first, any order):
 4. Audit event for the discarded merchant SKU on force-generate.
 5. Docs: record §4.1/§4.3 rationale in `docs/architecture.md`'s decision log + why-comments at
    the generation sites; remove the stale "#91 target architecture" banner (it landed:
-   `b6a44fc`, `f22fc57`, `015e134`).
+   `b6a44fc`, `f22fc57`, `015e134`); correct the "no SkuLabs webhooks" premise per §5.2.
+6. **Blank-transition detector** — log when a linked item's sku/barcode goes non-blank → blank
+   between ingest passes. Today such a wipe would be *silent*: the reconciler treats blank as
+   "not a claim", so it propagates nowhere and logs nothing, and we would only learn from the
+   warehouse. **Prerequisite for the location push (§4.4).**
+7. **Parse the `bulk_upsert` 200 body**; treat `success != true` as a batch failure routed into
+   the existing `RecordFailedAttempt` path.
+8. **Use `user_error` for retry decisions** — `SkulabsErrorPayload.UserError` is already parsed
+   but only logged. Per the spec it means "caused by user input", i.e. retrying identical input
+   cannot help: `true` → exclude immediately with the audit event, `false` → retry as today.
+   Currently a malformed item burns three identical retries first.
+9. **Fix the SkuLabs mock**: `mocks/skulabs/mappings/item-bulk-upsert.json` returns
+   `{"items": []}`, which is invented — the real response is `{"success": true}`. Add a 400
+   `{error: {...}}` stub too; nothing currently exercises the error path against a realistic body.
 
 Redesign PR chain:
 
@@ -251,18 +370,47 @@ mechanism** — exactly the harness that lets the mechanism be swapped underneat
 (Testcontainers Postgres + WireMock SkuLabs mock, `Substitute.For<IShopifyGraphQlService>`)
 should carry the refactor.
 
-## 7. Open questions
+## 7. Resolution log (was: open questions)
 
-1. Does the SkuLabs `bulk_upsert` response echo the resulting item state, or is it ack-only?
-   (Decides the mirror-write source; fallback = provisional write-what-you-sent + 10-min
-   confirm.)
-2. Are titles printed on labels / must they freeze once tagged? (Decides whether title
-   write-back to SkuLabs survives; currently assumed it survives.)
-3. What does an omitted field do in `bulk_upsert` — leave the value alone or blank it?
-   (Must confirm a title-only push can never blank an existing SkuLabs sku.)
-4. Shopify `productVariantsBulkUpdate` response selection — confirm the mutation can return
-   the resulting variant fields needed for the mirror write.
-5. Exact latency requirement of the upcoming near-real-time feature (30–60s assumed).
+**Q1 — does `bulk_upsert` echo item state? RESOLVED: no, ack-only.** Returns `{"success": true}`
+(required boolean). All documented failures are non-2xx carrying `{error: {…}}`, so
+`EnsureSuccessStatusCode()` does cover the documented paths — but since `success` is a boolean
+rather than a constant, and the docs are vague on when it goes false, parse it anyway (§6 #7).
+`SkulabsErrorPayload` already matches the spec field-for-field; only the cosmetic `type` and
+`display` hints are unmapped. Config verified: the endpoint pins `servers: api.skulabs.com`,
+which is what Production and Staging use.
+
+**Q2 — does omitting a field in `bulk_upsert` blank it? UNRESOLVED, and now load-bearing.** The
+OpenAPI request schema declares the item object as `properties: {}` — it documents nothing. Our
+only evidence is indirect: production has pushed title-only bodies for months and warehouse
+scanning still works. Note *why* that evidence comes from the warehouse and not from us — a wipe
+would be silent locally (§6 #6). The location push (§4.4) changes the payload shape for the
+first time, so land the detector first.
+
+**Q3 — are titles materialized? RESOLVED: no.** Titles are system-reference only. Title
+write-back survives, `SkulabsDispatcher` and `PendingSkulabsSync` stay, matrix unchanged (§4.1).
+
+**Q4 — can the Shopify mutation return variant state for the mirror write? RESOLVED: yes.**
+`ShopifyProductService` currently selects only `userErrors { field message }`;
+`productVariantsBulkUpdate` returns `product` / `productVariants` / `userErrors`, so extending
+the selection to `productVariants { id sku barcode }` is a one-line change in code we own.
+
+**Q5 — what is the near-real-time functionality? RESOLVED: editing `location` from Shopify**
+(§4.4). Direction is **outbound**. No per-field cadence differentiation — everything moves as
+fast as the budget allows. The real question turned out not to be latency but the shared SkuLabs
+rate budget (§5.1).
+
+### Still open
+
+1. **Confirm the SkuLabs rate limit** — the ~45/hour working figure is unverified. Per-key or
+   per-account? Uniform across endpoints? Can it be raised? Highest-leverage unknown here.
+2. **Q2 above** — omitted-field semantics in `bulk_upsert`.
+3. **What does "clear the location" send outbound** (§4.4), given ingest's `null` vs `""`
+   distinction.
+4. **Does `bulk_upsert` ever return 200 with `success: false`**, and does it identify the failing
+   item? If a bad item can fail a whole batch, the batch-bisection knob listed as hypothetical in
+   `docs/architecture.md` stops being hypothetical.
+5. **SkuLabs webhooks** (§5.2) — parked as a separate spike, not a dependency.
 
 ## 8. Key files
 
@@ -273,6 +421,9 @@ should carry the refactor.
 | Dispatch | `Sync/ShopifyDispatcher.cs`, `Sync/SkulabsDispatcher.cs`, `Sync/ShopifyDispatchTrigger.cs` |
 | Ingest — Shopify | `Products/Webhook/ShopifyProductCreateWebhookHandler.cs`, `ShopifyProductUpdateWebhookHandler.cs`, `Products/Services/ProductsService.cs` (`ResolveSkuForNewVariant`) |
 | Ingest — SkuLabs | `Skulabs/Services/SkulabsItemSyncService.cs` |
-| SkuLabs client | `dotnet/src/shared/Integration/Skulabs/Items/SkulabsItemClient.cs` (`UpdateItems`, `BulkUpsertItem`) |
+| SkuLabs client | `dotnet/src/shared/Integration/Skulabs/Items/SkulabsItemClient.cs` (`GetAllItems`, `UpdateItems`, `BulkUpsertItem`), `SkulabsItemUpdateWithId.cs`, `SkulabsErrorResponse.cs` |
+| Rate limiting | `Integration/RateLimiting/*` (`IRateLimitService`, `RateLimitedException`), `Skulabs/Items/SkulabsRateLimitHandler.cs`, `SkulabsResiliencePipeline.cs` — reactive 429 handling only; see §5.1 |
+| Location | `Infrastructure/Database/Entities/SkulabsItemEntity.cs` (`Location`), `Integration/Skulabs/Items/SkulabsApiItem.cs`, `SkulabsItemResponse.cs` (`alias_locations`), `Skulabs/Options/SkulabsApiOptions.cs` (`WarehouseId`) |
+| SkuLabs mock | `mocks/skulabs/mappings/*.json`, `mocks/skulabs/__files/skulabs-items.json`, `mocks/skulabs/README.md` |
 | Web.Api | `Features/ItemSync/TriggerItemSync/TriggerItemSyncEndpoint.cs`, `Features/ProductSync/TriggerProductSyncEndpoint.cs`, `Features/Jobs/GetJobStatusEndpoint.cs` |
 | Docs | `docs/architecture.md` |
