@@ -4,6 +4,11 @@
 > discussion (2026-08-07, revised 2026-08-08) so work can start cold from this file. Nothing
 > here is implemented yet; `docs/architecture.md` describes the current system.
 >
+> **Status: implemented.** The design below landed on this branch; `docs/architecture.md` now
+> describes the system as built and is the document to read first. This one is kept for the
+> reasoning — why each rule goes the way it does, what was measured, and what was rejected — which
+> the architecture doc summarises rather than argues. Section 7 records what remains open.
+>
 > **2026-08-08 revision** — the original open questions are settled: §4.1 gains the title and
 > location rulings, §4.4 covers location as the second pushable field, §5.1 records the **measured**
 > SkuLabs rate limit (104/hour, per account) with the pacing decision in §5.1.1 and a live bug in

@@ -5,6 +5,13 @@ namespace Application.Skus;
 /// guaranteeing uniqueness across the local database (and within the in-progress batch
 /// supplied via <paramref name="reservedInBatch"/>) by appending a numeric suffix when
 /// the base SKU would otherwise collide.
+/// <para>
+/// Uniqueness here is local and momentary. It is <em>not</em> what ultimately decides a variant's
+/// SKU: a linked SkuLabs item outranks anything generated, because its codes may already be printed
+/// on labels attached to stock. Generation is a bid to get a structured code into Shopify before
+/// SkuLabs' own sync copies whatever is there and freezes it — see the merge rules in
+/// <c>Application/Sync/Merge/Rules</c> and <c>docs/architecture.md</c>.
+/// </para>
 /// </summary>
 public interface ISkuGenerator
 {
